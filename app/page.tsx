@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function HomePage() {
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -60,6 +62,13 @@ export default function HomePage() {
             les conversations, savoir qui relancer et éviter de perdre du temps
             avec les mauvaises personnes.
           </p>
+
+          <Link
+            href="/prospects"
+            className="mt-6 inline-flex rounded-full bg-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
+          >
+            Ouvrir les prospects
+          </Link>
         </section>
       </section>
     </main>
