@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createProspectId,
   loadProspects,
@@ -351,6 +351,7 @@ function generateProspectMessage(
 export default function ProspectsPage () {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [isFormVisible, setIsFormVisible] = useState(false);
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const [formState, setFormState] = useState<ProspectFormState>(initialFormState);
   const [activeConversationProspectId, setActiveConversationProspectId] = useState<string | null>(null);
   const [conversationFormState, setConversationFormState] = useState<ConversationFormState>(
@@ -370,6 +371,8 @@ export default function ProspectsPage () {
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [prospectFilters, setProspectFilters] = useState<ProspectFilters>(initialProspectFilters);
+  const [backupMessage, setBackupMessage] = useState("");
+  const [isBackupError, setIsBackupError] = useState(false);
 
   useEffect(() => {
     const storedProspects = loadProspects();
@@ -834,6 +837,97 @@ export default function ProspectsPage () {
     }));
   }
 
+  function handleExportProspects() {
+    const today = new Date().toISOString().slice(0, 10);
+    const backupJson = JSON.stringify(prospects, null, 2);
+    const backupBlob = new Blob([backupJson], { type: "application/json" });
+    const backupUrl = URL.createObjectURL(backupBlob);
+    const downloadLink = document.createElement("a");
+
+    downloadLink.href = backupUrl;
+    downloadLink.download = `travel-prospect-crm-backup-${today}.json`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+    URL.revokeObjectURL(backupUrl);
+    setBackupMessage("");
+    setIsBackupError(false);
+  }
+
+  function resetImportFileInput() {
+    if (importFileInputRef.current) {
+      importFileInputRef.current.value = "";
+    }
+  }
+
+  function showInvalidImportMessage() {
+    setBackupMessage("Fichier invalide. Import impossible.");
+    setIsBackupError(true);
+  }
+
+  function handleImportProspects(event: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFile = event.target.files?.[0];
+
+    if (!selectedFile) {
+      return;
+    }
+
+    if (!selectedFile.name.toLowerCase().endsWith(".json")) {
+      showInvalidImportMessage();
+      resetImportFileInput();
+      return;
+    }
+
+    const fileReader = new FileReader();
+
+    fileReader.onload = () => {
+      try {
+        const parsedBackup = JSON.parse(String(fileReader.result));
+
+        if (!Array.isArray(parsedBackup)) {
+          showInvalidImportMessage();
+          resetImportFileInput();
+          return;
+        }
+
+        const confirmed = window.confirm(
+          "Importer cette sauvegarde ? Les prospects actuels seront remplacés.",
+        );
+
+        if (!confirmed) {
+          resetImportFileInput();
+          return;
+        }
+
+        const importedProspects = parsedBackup as Prospect[];
+
+        saveProspects(importedProspects);
+        setProspects(importedProspects);
+        setActiveConversationProspectId(null);
+        setConversationFormState(initialConversationFormState);
+        setActiveQualificationProspectId(null);
+        setQualificationFormState(initialQualificationFormState);
+        setActiveFullProspectId(null);
+        setFullProspectFormState(initialFullProspectFormState);
+        setActiveMessageAssistantProspectId(null);
+        setMessageAssistantState(initialMessageAssistantState);
+        setBackupMessage("Sauvegarde importée avec succès.");
+        setIsBackupError(false);
+        resetImportFileInput();
+      } catch {
+        showInvalidImportMessage();
+        resetImportFileInput();
+      }
+    };
+
+    fileReader.onerror = () => {
+      showInvalidImportMessage();
+      resetImportFileInput();
+    };
+
+    fileReader.readAsText(selectedFile);
+  }
+
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const todayDate = new Date().toISOString().slice(0, 10);
   const followUpProspects = prospects
@@ -913,6 +1007,48 @@ export default function ProspectsPage () {
             {isFormVisible ? "Masquer le formulaire" : "Ajouter un prospect"}
           </button>
         </header>
+
+        <section className="mb-8 rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                Sauvegarde des données
+              </p>
+              <p className="mt-2 text-sm text-slate-300">
+                Pense à exporter régulièrement tes données tant que l’application fonctionne en stockage local.
+              </p>
+              {backupMessage ? (
+                <p
+                  className={`mt-2 text-sm font-medium ${
+                    isBackupError ? "text-red-300" : "text-emerald-300"
+                  }`}
+                >
+                  {backupMessage}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                type="button"
+                onClick={handleExportProspects}
+              >
+                Exporter les prospects
+              </button>
+              <label className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5">
+                Importer une sauvegarde
+                <input
+                  ref={importFileInputRef}
+                  accept=".json,application/json"
+                  className="hidden"
+                  type="file"
+                  onChange={handleImportProspects}
+                />
+              </label>
+            </div>
+          </div>
+        </section>
 
         {isFormVisible ? (
           <form
