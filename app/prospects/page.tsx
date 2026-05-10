@@ -72,6 +72,11 @@ type QualificationFormState = {
   messagesCount: string;
 };
 
+type FullProspectFormState = ProspectFormState & {
+  status: Prospect["status"];
+  nextActionDate: string;
+};
+
 type FilterValue<T extends string> = "Tous" | T;
 
 type ProspectFilters = {
@@ -200,6 +205,12 @@ const initialQualificationFormState: QualificationFormState = {
   messagesCount: "0",
 };
 
+const initialFullProspectFormState: FullProspectFormState = {
+  ...initialFormState,
+  status: PROSPECT_STATUSES[0],
+  nextActionDate: "",
+};
+
 const initialProspectFilters: ProspectFilters = {
   platform: "Tous",
   status: "Tous",
@@ -231,6 +242,10 @@ export default function ProspectsPage () {
   const [activeQualificationProspectId, setActiveQualificationProspectId] = useState<string | null>(null);
   const [qualificationFormState, setQualificationFormState] = useState<QualificationFormState>(
     initialQualificationFormState,
+  );
+  const [activeFullProspectId, setActiveFullProspectId] = useState<string | null>(null);
+  const [fullProspectFormState, setFullProspectFormState] = useState<FullProspectFormState>(
+    initialFullProspectFormState,
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [prospectFilters, setProspectFilters] = useState<ProspectFilters>(initialProspectFilters);
@@ -265,6 +280,16 @@ export default function ProspectsPage () {
     value: QualificationFormState[Field],
   ) {
     setQualificationFormState((currentFormState) => ({
+      ...currentFormState,
+      [field]: value,
+    }));
+  }
+
+  function updateFullProspectFormField<Field extends keyof FullProspectFormState>(
+    field: Field,
+    value: FullProspectFormState[Field],
+  ) {
+    setFullProspectFormState((currentFormState) => ({
       ...currentFormState,
       [field]: value,
     }));
@@ -322,6 +347,58 @@ export default function ProspectsPage () {
       interactionsCount: String(interactionStats.interactionsCount),
       likesCount: String(interactionStats.likesCount),
       messagesCount: String(interactionStats.messagesCount),
+    });
+  }
+
+  function toggleFullProspectForm(prospect: Prospect) {
+    if (activeFullProspectId === prospect.id) {
+      setActiveFullProspectId(null);
+      setFullProspectFormState(initialFullProspectFormState);
+      return;
+    }
+
+    const interactionStats = prospect.interactionStats ?? {
+      followerSinceDate: "",
+      commentsCount: 0,
+      interactionsCount: 0,
+      likesCount: 0,
+      messagesCount: 0,
+    };
+
+    setActiveFullProspectId(prospect.id);
+    setFullProspectFormState({
+      firstName: prospect.firstName,
+      lastName: prospect.lastName,
+      displayName: prospect.displayName,
+      jobTitle: prospect.jobTitle,
+      businessArea: prospect.businessArea,
+      mainPlatform: prospect.mainPlatform,
+      profileUrl: prospect.profileUrl,
+      category: prospect.category,
+      status: prospect.status,
+      temperature: prospect.temperature,
+      colorType: prospect.colorType,
+      city: prospect.city,
+      region: prospect.region,
+      country: prospect.country,
+      phone: prospect.phone,
+      whatsapp: prospect.whatsapp,
+      email: prospect.email,
+      facebookUrl: prospect.socialLinks.facebook,
+      instagramUrl: prospect.socialLinks.instagram,
+      linkedinUrl: prospect.socialLinks.linkedin,
+      tiktokUrl: prospect.socialLinks.tiktok,
+      youtubeUrl: prospect.socialLinks.youtube,
+      otherUrl: prospect.socialLinks.other,
+      isFollower: prospect.isFollower,
+      hasSentMessage: prospect.hasSentMessage,
+      followerSinceDate: interactionStats.followerSinceDate,
+      commentsCount: String(interactionStats.commentsCount),
+      interactionsCount: String(interactionStats.interactionsCount),
+      likesCount: String(interactionStats.likesCount),
+      messagesCount: String(interactionStats.messagesCount),
+      nextActionDate: prospect.nextActionDate,
+      notes: prospect.notes,
     });
   }
 
@@ -471,6 +548,101 @@ export default function ProspectsPage () {
     setProspects(updatedProspects);
     setActiveQualificationProspectId(null);
     setQualificationFormState(initialQualificationFormState);
+  }
+
+  function handleFullProspectSubmit(
+    prospectId: string,
+    event: React.FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    const commentsCount = Number(fullProspectFormState.commentsCount);
+    const interactionsCount = Number(fullProspectFormState.interactionsCount);
+    const likesCount = Number(fullProspectFormState.likesCount);
+    const messagesCount = Number(fullProspectFormState.messagesCount);
+    const updatedProspects = prospects.map((prospect) => {
+      if (prospect.id !== prospectId) {
+        return prospect;
+      }
+
+      const updatedProspect: Prospect = {
+        ...prospect,
+        firstName: fullProspectFormState.firstName.trim(),
+        lastName: fullProspectFormState.lastName.trim(),
+        displayName: fullProspectFormState.displayName.trim(),
+        jobTitle: fullProspectFormState.jobTitle.trim(),
+        businessArea: fullProspectFormState.businessArea.trim(),
+        city: fullProspectFormState.city.trim(),
+        region: fullProspectFormState.region.trim(),
+        country: fullProspectFormState.country.trim(),
+        phone: fullProspectFormState.phone.trim(),
+        whatsapp: fullProspectFormState.whatsapp.trim(),
+        email: fullProspectFormState.email.trim(),
+        mainPlatform: fullProspectFormState.mainPlatform,
+        profileUrl: fullProspectFormState.profileUrl.trim(),
+        socialLinks: {
+          facebook: fullProspectFormState.facebookUrl.trim(),
+          instagram: fullProspectFormState.instagramUrl.trim(),
+          linkedin: fullProspectFormState.linkedinUrl.trim(),
+          tiktok: fullProspectFormState.tiktokUrl.trim(),
+          youtube: fullProspectFormState.youtubeUrl.trim(),
+          other: fullProspectFormState.otherUrl.trim(),
+        },
+        category: fullProspectFormState.category,
+        status: fullProspectFormState.status,
+        temperature: fullProspectFormState.temperature,
+        colorType: fullProspectFormState.colorType,
+        isFollower: fullProspectFormState.isFollower,
+        hasSentMessage: fullProspectFormState.hasSentMessage,
+        interactionStats: {
+          followerSinceDate: fullProspectFormState.followerSinceDate,
+          commentsCount: Number.isNaN(commentsCount) ? 0 : commentsCount,
+          interactionsCount: Number.isNaN(interactionsCount) ? 0 : interactionsCount,
+          likesCount: Number.isNaN(likesCount) ? 0 : likesCount,
+          messagesCount: Number.isNaN(messagesCount) ? 0 : messagesCount,
+        },
+        nextActionDate: fullProspectFormState.nextActionDate,
+        notes: fullProspectFormState.notes.trim(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      return {
+        ...updatedProspect,
+        score: calculateProspectScore(updatedProspect),
+      };
+    });
+
+    saveProspects(updatedProspects);
+    setProspects(updatedProspects);
+    setActiveFullProspectId(null);
+    setFullProspectFormState(initialFullProspectFormState);
+  }
+
+  function handleDeleteProspect(prospectId: string) {
+    const confirmed = window.confirm("Supprimer ce prospect ? Cette action est définitive.");
+
+    if (!confirmed) {
+      return;
+    }
+
+    const updatedProspects = prospects.filter((prospect) => prospect.id !== prospectId);
+    saveProspects(updatedProspects);
+    setProspects(updatedProspects);
+
+    if (activeConversationProspectId === prospectId) {
+      setActiveConversationProspectId(null);
+      setConversationFormState(initialConversationFormState);
+    }
+
+    if (activeQualificationProspectId === prospectId) {
+      setActiveQualificationProspectId(null);
+      setQualificationFormState(initialQualificationFormState);
+    }
+
+    if (activeFullProspectId === prospectId) {
+      setActiveFullProspectId(null);
+      setFullProspectFormState(initialFullProspectFormState);
+    }
   }
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
@@ -1152,6 +1324,7 @@ export default function ProspectsPage () {
                     : null;
                 const isConversationFormVisible = activeConversationProspectId === prospect.id;
                 const isQualificationFormVisible = activeQualificationProspectId === prospect.id;
+                const isFullProspectFormVisible = activeFullProspectId === prospect.id;
                 const priorityLabel =
                   prospect.score >= 75
                     ? "Priorité haute"
@@ -1180,6 +1353,230 @@ export default function ProspectsPage () {
                         {prospect.mainPlatform}
                       </span>
                     </div>
+
+                    <div className="mb-4 flex flex-wrap gap-2">
+                      <button
+                        className="rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                        type="button"
+                        onClick={() => toggleFullProspectForm(prospect)}
+                      >
+                        {isFullProspectFormVisible ? "Masquer la fiche complète" : "Voir / modifier la fiche complète"}
+                      </button>
+                      <button
+                        className="rounded-full border border-red-400/40 bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-200 transition hover:bg-red-500/20"
+                        type="button"
+                        onClick={() => handleDeleteProspect(prospect.id)}
+                      >
+                        Supprimer le prospect
+                      </button>
+                    </div>
+
+                    {isFullProspectFormVisible ? (
+                      <form
+                        className="mb-4 grid gap-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4"
+                        onSubmit={(event) => handleFullProspectSubmit(prospect.id, event)}
+                      >
+                        <fieldset className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                          <legend className="px-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                            Identité
+                          </legend>
+                          <div className="mt-3 grid gap-3 md:grid-cols-2">
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Prénom
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.firstName} onChange={(event) => updateFullProspectFormField("firstName", event.target.value)} />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Nom
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.lastName} onChange={(event) => updateFullProspectFormField("lastName", event.target.value)} />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Nom affiché / pseudo
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.displayName} onChange={(event) => updateFullProspectFormField("displayName", event.target.value)} />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Métier / poste
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.jobTitle} onChange={(event) => updateFullProspectFormField("jobTitle", event.target.value)} />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Domaine / activité
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.businessArea} onChange={(event) => updateFullProspectFormField("businessArea", event.target.value)} />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Ville
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.city} onChange={(event) => updateFullProspectFormField("city", event.target.value)} />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Région
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.region} onChange={(event) => updateFullProspectFormField("region", event.target.value)} />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Pays
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.country} onChange={(event) => updateFullProspectFormField("country", event.target.value)} />
+                            </label>
+                          </div>
+                        </fieldset>
+
+                        <fieldset className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                          <legend className="px-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                            Coordonnées
+                          </legend>
+                          <div className="mt-3 grid gap-3 md:grid-cols-3">
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Téléphone
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.phone} onChange={(event) => updateFullProspectFormField("phone", event.target.value)} type="tel" />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              WhatsApp
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.whatsapp} onChange={(event) => updateFullProspectFormField("whatsapp", event.target.value)} type="tel" />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Email
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.email} onChange={(event) => updateFullProspectFormField("email", event.target.value)} type="email" />
+                            </label>
+                          </div>
+                        </fieldset>
+
+                        <fieldset className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                          <legend className="px-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                            Réseaux sociaux
+                          </legend>
+                          <div className="mt-3 grid gap-3 md:grid-cols-2">
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Plateforme principale
+                              <select className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.mainPlatform} onChange={(event) => updateFullProspectFormField("mainPlatform", event.target.value as Prospect["mainPlatform"])}>
+                                {SOCIAL_PLATFORMS.map((platform) => <option key={platform} value={platform}>{platform}</option>)}
+                              </select>
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Lien principal du profil
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.profileUrl} onChange={(event) => updateFullProspectFormField("profileUrl", event.target.value)} type="url" />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Lien Facebook
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.facebookUrl} onChange={(event) => updateFullProspectFormField("facebookUrl", event.target.value)} type="url" />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Lien Instagram
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.instagramUrl} onChange={(event) => updateFullProspectFormField("instagramUrl", event.target.value)} type="url" />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Lien LinkedIn
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.linkedinUrl} onChange={(event) => updateFullProspectFormField("linkedinUrl", event.target.value)} type="url" />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Lien TikTok
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.tiktokUrl} onChange={(event) => updateFullProspectFormField("tiktokUrl", event.target.value)} type="url" />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Lien YouTube
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.youtubeUrl} onChange={(event) => updateFullProspectFormField("youtubeUrl", event.target.value)} type="url" />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Autre lien
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.otherUrl} onChange={(event) => updateFullProspectFormField("otherUrl", event.target.value)} type="url" />
+                            </label>
+                          </div>
+                        </fieldset>
+
+                        <fieldset className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                          <legend className="px-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                            Qualification
+                          </legend>
+                          <div className="mt-3 grid gap-3 md:grid-cols-2">
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Statut
+                              <select className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.status} onChange={(event) => updateFullProspectFormField("status", event.target.value as Prospect["status"])}>
+                                {PROSPECT_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+                              </select>
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Catégorie
+                              <select className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.category} onChange={(event) => updateFullProspectFormField("category", event.target.value as Prospect["category"])}>
+                                {PROSPECT_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                              </select>
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Température / marché
+                              <select className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.temperature} onChange={(event) => updateFullProspectFormField("temperature", event.target.value as Prospect["temperature"])}>
+                                {PROSPECT_TEMPERATURES.map((temperature) => <option key={temperature} value={temperature}>{temperature}</option>)}
+                              </select>
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Type couleur
+                              <select className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.colorType} onChange={(event) => updateFullProspectFormField("colorType", event.target.value as Prospect["colorType"])}>
+                                {PROSPECT_COLOR_TYPES.map((colorType) => <option key={colorType} value={colorType}>{colorType}</option>)}
+                              </select>
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300 md:col-span-2">
+                              Prochaine relance
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.nextActionDate} onChange={(event) => updateFullProspectFormField("nextActionDate", event.target.value)} type="date" />
+                            </label>
+                          </div>
+                        </fieldset>
+
+                        <fieldset className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                          <legend className="px-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                            Activité et interactions
+                          </legend>
+                          <div className="mt-3 grid gap-3 md:grid-cols-2">
+                            <label className="flex items-center gap-3 text-xs text-slate-300">
+                              <input checked={fullProspectFormState.isFollower} className="h-4 w-4 accent-emerald-400" onChange={(event) => updateFullProspectFormField("isFollower", event.target.checked)} type="checkbox" />
+                              Follower oui/non
+                            </label>
+                            <label className="flex items-center gap-3 text-xs text-slate-300">
+                              <input checked={fullProspectFormState.hasSentMessage} className="h-4 w-4 accent-emerald-400" onChange={(event) => updateFullProspectFormField("hasSentMessage", event.target.checked)} type="checkbox" />
+                              Message reçu oui/non
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300 md:col-span-2">
+                              Date d'inscription / follow
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.followerSinceDate} onChange={(event) => updateFullProspectFormField("followerSinceDate", event.target.value)} type="date" />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Nombre de commentaires
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" min="0" value={fullProspectFormState.commentsCount} onChange={(event) => updateFullProspectFormField("commentsCount", event.target.value)} type="number" />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Nombre d'interactions
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" min="0" value={fullProspectFormState.interactionsCount} onChange={(event) => updateFullProspectFormField("interactionsCount", event.target.value)} type="number" />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Nombre de likes / cœurs
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" min="0" value={fullProspectFormState.likesCount} onChange={(event) => updateFullProspectFormField("likesCount", event.target.value)} type="number" />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Nombre de messages
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" min="0" value={fullProspectFormState.messagesCount} onChange={(event) => updateFullProspectFormField("messagesCount", event.target.value)} type="number" />
+                            </label>
+                          </div>
+                        </fieldset>
+
+                        <fieldset className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                          <legend className="px-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                            Notes
+                          </legend>
+                          <label className="mt-3 grid gap-1 text-xs text-slate-300">
+                            Notes
+                            <textarea className="min-h-24 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400" value={fullProspectFormState.notes} onChange={(event) => updateFullProspectFormField("notes", event.target.value)} />
+                          </label>
+                        </fieldset>
+
+                        <div className="flex flex-wrap gap-2">
+                          <button className="rounded-full bg-emerald-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300" type="submit">
+                            Enregistrer la fiche
+                          </button>
+                          <button
+                            className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                            type="button"
+                            onClick={() => {
+                              setActiveFullProspectId(null);
+                              setFullProspectFormState(initialFullProspectFormState);
+                            }}
+                          >
+                            Annuler
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
 
                     <div className="grid gap-3 text-sm text-slate-300">
                       <div className="rounded-2xl bg-white/5 p-3">
