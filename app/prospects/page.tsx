@@ -870,6 +870,38 @@ export default function ProspectsPage () {
     setProspects(updatedProspects);
   }
 
+  function updateProspectStatus(prospectId: string, nextStatus: Prospect["status"]) {
+    const updatedProspects = prospects.map((prospect) => {
+      if (prospect.id !== prospectId) {
+        return prospect;
+      }
+
+      const updatedProspect: Prospect = {
+        ...prospect,
+        status: nextStatus,
+        updatedAt: new Date().toISOString(),
+      };
+
+      return {
+        ...updatedProspect,
+        score: calculateProspectScore(updatedProspect),
+      };
+    });
+
+    saveProspects(updatedProspects);
+    setProspects(updatedProspects);
+  }
+
+  function handleMoveProspectToNextStatus(prospect: Prospect) {
+    const currentStatusIndex = PROSPECT_STATUSES.indexOf(prospect.status);
+
+    if (currentStatusIndex < 0 || currentStatusIndex >= PROSPECT_STATUSES.length - 1) {
+      return;
+    }
+
+    updateProspectStatus(prospect.id, PROSPECT_STATUSES[currentStatusIndex + 1]);
+  }
+
   function handleGenerateProspectMessage(prospect: Prospect) {
     setMessageAssistantState((currentState) => ({
       ...currentState,
@@ -1996,6 +2028,40 @@ export default function ProspectsPage () {
                                     ))}
                                   </div>
                                 ) : null}
+
+                                <div className="mt-4 grid gap-2">
+                                  <label className="grid gap-1 text-xs text-slate-300">
+                                    Changer le statut
+                                    <select
+                                      className="min-h-10 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                      value={prospect.status}
+                                      onChange={(event) =>
+                                        updateProspectStatus(
+                                          prospect.id,
+                                          event.target.value as Prospect["status"],
+                                        )
+                                      }
+                                    >
+                                      {PROSPECT_STATUSES.map((statusOption) => (
+                                        <option key={statusOption} value={statusOption}>
+                                          {statusOption}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+
+                                  <button
+                                    className="min-h-10 w-full rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+                                    type="button"
+                                    disabled={
+                                      PROSPECT_STATUSES.indexOf(prospect.status) ===
+                                      PROSPECT_STATUSES.length - 1
+                                    }
+                                    onClick={() => handleMoveProspectToNextStatus(prospect)}
+                                  >
+                                    Statut suivant
+                                  </button>
+                                </div>
 
                                 <button
                                   className="mt-4 min-h-10 w-full rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
