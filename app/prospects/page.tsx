@@ -61,7 +61,6 @@ type QualificationFormState = {
   category: Prospect["category"];
   temperature: Prospect["temperature"];
   colorType: Prospect["colorType"];
-  score: string;
   nextActionDate: string;
   notes: string;
   isFollower: boolean;
@@ -82,6 +81,68 @@ type ProspectFilters = {
   temperature: FilterValue<Prospect["temperature"]>;
   colorType: FilterValue<Prospect["colorType"]>;
 };
+
+function calculateProspectScore(prospect: Prospect) {
+  const interactionStats = prospect.interactionStats ?? {
+    followerSinceDate: "",
+    commentsCount: 0,
+    interactionsCount: 0,
+    likesCount: 0,
+    messagesCount: 0,
+  };
+  let score = 0;
+
+  if (prospect.isFollower) {
+    score += 10;
+  }
+
+  if (prospect.hasSentMessage) {
+    score += 15;
+  }
+
+  score += Math.min(interactionStats.commentsCount * 3, 15);
+  score += Math.min(interactionStats.interactionsCount * 2, 20);
+  score += Math.min(interactionStats.likesCount, 10);
+  score += Math.min(interactionStats.messagesCount * 5, 20);
+
+  if (prospect.temperature === "Tiède") {
+    score += 10;
+  }
+
+  if (prospect.temperature === "Chaud") {
+    score += 20;
+  }
+
+  if (prospect.status === "Conversation ouverte") {
+    score += 10;
+  }
+
+  if (prospect.status === "Intérêt voyage détecté") {
+    score += 15;
+  }
+
+  if (prospect.status === "Présentation proposée") {
+    score += 20;
+  }
+
+  if (prospect.status === "Présentation faite") {
+    score += 25;
+  }
+
+  if (prospect.status === "Intéressé") {
+    score += 30;
+  }
+
+  if (prospect.status === "Client" || prospect.status === "Partenaire") {
+    score += 35;
+  }
+
+  if (prospect.tags.includes("À éviter")) {
+    score -= 30;
+  }
+
+  return Math.min(Math.max(score, 0), 100);
+}
 
 const initialFormState: ProspectFormState = {
   firstName: "",
@@ -128,7 +189,6 @@ const initialQualificationFormState: QualificationFormState = {
   category: PROSPECT_CATEGORIES[0],
   temperature: PROSPECT_TEMPERATURES[0],
   colorType: PROSPECT_COLOR_TYPES[0],
-  score: "0",
   nextActionDate: "",
   notes: "",
   isFollower: false,
@@ -253,7 +313,6 @@ export default function ProspectsPage () {
       category: prospect.category,
       temperature: prospect.temperature,
       colorType: prospect.colorType,
-      score: String(prospect.score),
       nextActionDate: prospect.nextActionDate,
       notes: prospect.notes,
       isFollower: prospect.isFollower,
@@ -274,7 +333,7 @@ export default function ProspectsPage () {
     const interactionsCount = Number(formState.interactionsCount);
     const likesCount = Number(formState.likesCount);
     const messagesCount = Number(formState.messagesCount);
-    const newProspect: Prospect = {
+    const newProspectBase: Prospect = {
       id: createProspectId(),
       firstName: formState.firstName.trim(),
       lastName: formState.lastName.trim(),
@@ -318,6 +377,10 @@ export default function ProspectsPage () {
       notes: formState.notes.trim(),
       createdAt: now,
       updatedAt: now,
+    };
+    const newProspect: Prospect = {
+      ...newProspectBase,
+      score: calculateProspectScore(newProspectBase),
     };
 
     const updatedProspects = [newProspect, ...prospects];
@@ -369,7 +432,6 @@ export default function ProspectsPage () {
   ) {
     event.preventDefault();
 
-    const score = Number(qualificationFormState.score);
     const commentsCount = Number(qualificationFormState.commentsCount);
     const interactionsCount = Number(qualificationFormState.interactionsCount);
     const likesCount = Number(qualificationFormState.likesCount);
@@ -379,13 +441,12 @@ export default function ProspectsPage () {
         return prospect;
       }
 
-      return {
+      const updatedProspect: Prospect = {
         ...prospect,
         status: qualificationFormState.status,
         category: qualificationFormState.category,
         temperature: qualificationFormState.temperature,
         colorType: qualificationFormState.colorType,
-        score: Number.isNaN(score) ? 0 : score,
         nextActionDate: qualificationFormState.nextActionDate,
         notes: qualificationFormState.notes.trim(),
         isFollower: qualificationFormState.isFollower,
@@ -398,6 +459,11 @@ export default function ProspectsPage () {
           messagesCount: Number.isNaN(messagesCount) ? 0 : messagesCount,
         },
         updatedAt: new Date().toISOString(),
+      };
+
+      return {
+        ...updatedProspect,
+        score: calculateProspectScore(updatedProspect),
       };
     });
 
@@ -1086,6 +1152,12 @@ export default function ProspectsPage () {
                     : null;
                 const isConversationFormVisible = activeConversationProspectId === prospect.id;
                 const isQualificationFormVisible = activeQualificationProspectId === prospect.id;
+                const priorityLabel =
+                  prospect.score >= 75
+                    ? "Priorité haute"
+                    : prospect.score >= 40
+                      ? "Priorité moyenne"
+                      : "Priorité basse";
 
                 return (
                   <article
@@ -1129,7 +1201,6 @@ export default function ProspectsPage () {
                           <p><span className="text-slate-500">Catégorie :</span> <span className="font-medium text-white">{prospect.category}</span></p>
                           <p><span className="text-slate-500">Température :</span> <span className="font-medium text-white">{prospect.temperature}</span></p>
                           <p><span className="text-slate-500">Type couleur :</span> <span className="font-medium text-white">{prospect.colorType}</span></p>
-                          <p><span className="text-slate-500">Score :</span> <span className="font-medium text-white">{prospect.score}</span></p>
                           {prospect.nextActionDate ? (
                             <p><span className="text-slate-500">Prochaine relance :</span> <span className="font-medium text-white">{prospect.nextActionDate}</span></p>
                           ) : null}
@@ -1210,16 +1281,6 @@ export default function ProspectsPage () {
                                     </option>
                                   ))}
                                 </select>
-                              </label>
-
-                              <label className="grid gap-1 text-xs text-slate-300">
-                                Score
-                                <input
-                                  className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
-                                  value={qualificationFormState.score}
-                                  onChange={(event) => updateQualificationFormField("score", event.target.value)}
-                                  type="number"
-                                />
                               </label>
                             </div>
 
@@ -1353,6 +1414,17 @@ export default function ProspectsPage () {
                             </div>
                           </form>
                         ) : null}
+                      </div>
+                      <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.2em] text-emerald-300">Score automatique</p>
+                            <p className="mt-1 text-3xl font-bold text-white">{prospect.score}</p>
+                          </div>
+                          <span className="rounded-full border border-emerald-400/30 px-3 py-1 text-xs font-semibold text-emerald-200">
+                            {priorityLabel}
+                          </span>
+                        </div>
                       </div>
                       <div className="rounded-2xl bg-white/5 p-3">
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Activité</p>
