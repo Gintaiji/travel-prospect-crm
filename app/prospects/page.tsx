@@ -11,6 +11,7 @@ import {
   PROSPECT_COLOR_TYPES,
   PROSPECT_TEMPERATURES,
   SOCIAL_PLATFORMS,
+  type ConversationEntry,
   type Prospect,
 } from "../lib/types";
 
@@ -40,6 +41,13 @@ type ProspectFormState = {
   notes: string;
 };
 
+type ConversationFormState = {
+  date: string;
+  channel: Prospect["mainPlatform"];
+  content: string;
+  nextAction: string;
+};
+
 const initialFormState: ProspectFormState = {
   firstName: "",
   lastName: "",
@@ -66,6 +74,13 @@ const initialFormState: ProspectFormState = {
   notes: "",
 };
 
+const initialConversationFormState: ConversationFormState = {
+  date: "",
+  channel: SOCIAL_PLATFORMS[0],
+  content: "",
+  nextAction: "",
+};
+
 const socialLinkLabels: Array<{
   key: keyof Prospect["socialLinks"];
   label: string;
@@ -82,6 +97,10 @@ export default function ProspectsPage () {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [formState, setFormState] = useState<ProspectFormState>(initialFormState);
+  const [activeConversationProspectId, setActiveConversationProspectId] = useState<string | null>(null);
+  const [conversationFormState, setConversationFormState] = useState<ConversationFormState>(
+    initialConversationFormState,
+  );
 
   useEffect(() => {
     const storedProspects = loadProspects();
@@ -96,6 +115,23 @@ export default function ProspectsPage () {
       ...currentFormState,
       [field]: value,
     }));
+  }
+
+  function updateConversationFormField<Field extends keyof ConversationFormState>(
+    field: Field,
+    value: ConversationFormState[Field],
+  ) {
+    setConversationFormState((currentFormState) => ({
+      ...currentFormState,
+      [field]: value,
+    }));
+  }
+
+  function toggleConversationForm(prospectId: string) {
+    setActiveConversationProspectId((currentProspectId) =>
+      currentProspectId === prospectId ? null : prospectId,
+    );
+    setConversationFormState(initialConversationFormState);
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -153,6 +189,42 @@ export default function ProspectsPage () {
     setProspects(updatedProspects);
     setFormState(initialFormState);
     setIsFormVisible(false);
+  }
+
+  function handleConversationSubmit(
+    prospectId: string,
+    event: React.FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    const newConversationEntry: ConversationEntry = {
+      id: createProspectId(),
+      date: conversationFormState.date,
+      channel: conversationFormState.channel,
+      content: conversationFormState.content.trim(),
+      nextAction: conversationFormState.nextAction.trim(),
+    };
+
+    const updatedProspects = prospects.map((prospect) => {
+      if (prospect.id !== prospectId) {
+        return prospect;
+      }
+
+      return {
+        ...prospect,
+        conversationHistory: [
+          ...prospect.conversationHistory,
+          newConversationEntry,
+        ],
+        lastInteractionDate: conversationFormState.date,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    saveProspects(updatedProspects);
+    setProspects(updatedProspects);
+    setConversationFormState(initialConversationFormState);
+    setActiveConversationProspectId(null);
   }
 
   return (
@@ -573,6 +645,12 @@ export default function ProspectsPage () {
                 const hasContactDetails = Boolean(
                   prospect.phone.trim() || prospect.whatsapp.trim() || prospect.email.trim(),
                 );
+                const conversationHistory = prospect.conversationHistory ?? [];
+                const lastConversationEntry =
+                  conversationHistory.length > 0
+                    ? conversationHistory[conversationHistory.length - 1]
+                    : null;
+                const isConversationFormVisible = activeConversationProspectId === prospect.id;
 
                 return (
                   <article
@@ -660,6 +738,141 @@ export default function ProspectsPage () {
                       <div className="rounded-2xl bg-white/5 p-3">
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Dernière interaction</p>
                         <p className="mt-1 font-medium text-white">{prospect.lastInteractionDate || "—"}</p>
+                      </div>
+                      <div className="rounded-2xl bg-white/5 p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Conversation</p>
+                            <p className="mt-1 font-medium text-white">
+                              {conversationHistory.length} échange{conversationHistory.length > 1 ? "s" : ""}
+                            </p>
+                          </div>
+                          <button
+                            className="rounded-full border border-emerald-400/30 px-3 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                            type="button"
+                            onClick={() => toggleConversationForm(prospect.id)}
+                          >
+                            {isConversationFormVisible ? "Masquer" : "Ajouter un échange"}
+                          </button>
+                        </div>
+
+                        {lastConversationEntry ? (
+                          <div className="mt-3 rounded-2xl bg-slate-950/50 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                              Dernier échange
+                            </p>
+                            <p className="mt-2 text-xs text-slate-400">
+                              {lastConversationEntry.date} · {lastConversationEntry.channel}
+                            </p>
+                            <p className="mt-1 text-sm leading-5 text-white">{lastConversationEntry.content}</p>
+                            {lastConversationEntry.nextAction ? (
+                              <p className="mt-2 text-sm text-emerald-300">
+                                Prochaine action : {lastConversationEntry.nextAction}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <p className="mt-3 text-sm text-slate-400">Aucun échange enregistré.</p>
+                        )}
+
+                        {isConversationFormVisible ? (
+                          <form
+                            className="mt-3 grid gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-3"
+                            onSubmit={(event) => handleConversationSubmit(prospect.id, event)}
+                          >
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Date de l'échange
+                              <input
+                                className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                value={conversationFormState.date}
+                                onChange={(event) => updateConversationFormField("date", event.target.value)}
+                                required
+                                type="date"
+                              />
+                            </label>
+
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Canal
+                              <select
+                                className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                value={conversationFormState.channel}
+                                onChange={(event) =>
+                                  updateConversationFormField(
+                                    "channel",
+                                    event.target.value as Prospect["mainPlatform"],
+                                  )
+                                }
+                              >
+                                {SOCIAL_PLATFORMS.map((platform) => (
+                                  <option key={platform} value={platform}>
+                                    {platform}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Résumé de l'échange
+                              <textarea
+                                className="min-h-20 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                                value={conversationFormState.content}
+                                onChange={(event) => updateConversationFormField("content", event.target.value)}
+                                placeholder="Résumé court..."
+                                required
+                              />
+                            </label>
+
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Prochaine action
+                              <input
+                                className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                                value={conversationFormState.nextAction}
+                                onChange={(event) => updateConversationFormField("nextAction", event.target.value)}
+                                placeholder="Relancer, envoyer une info..."
+                              />
+                            </label>
+
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                className="rounded-full bg-emerald-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300"
+                                type="submit"
+                              >
+                                Enregistrer
+                              </button>
+                              <button
+                                className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                                type="button"
+                                onClick={() => {
+                                  setConversationFormState(initialConversationFormState);
+                                  setActiveConversationProspectId(null);
+                                }}
+                              >
+                                Annuler
+                              </button>
+                            </div>
+                          </form>
+                        ) : null}
+
+                        {conversationHistory.length > 0 ? (
+                          <div className="mt-3 grid max-h-48 gap-2 overflow-y-auto pr-1">
+                            {conversationHistory.map((conversationEntry) => (
+                              <div
+                                className="rounded-xl border border-white/10 bg-slate-950/40 p-3"
+                                key={conversationEntry.id}
+                              >
+                                <p className="text-xs font-semibold text-slate-300">
+                                  {conversationEntry.date} · {conversationEntry.channel}
+                                </p>
+                                <p className="mt-1 text-sm leading-5 text-white">{conversationEntry.content}</p>
+                                {conversationEntry.nextAction ? (
+                                  <p className="mt-1 text-xs text-emerald-300">
+                                    Prochaine action : {conversationEntry.nextAction}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </article>
