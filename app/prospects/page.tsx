@@ -100,6 +100,8 @@ type ProspectSortOption =
 
 type ProspectViewMode = "compact" | "detailed";
 
+type ProspectDisplayMode = "list" | "pipeline";
+
 const MESSAGE_ASSISTANT_SITUATIONS = [
   "Réagir à un post voyage",
   "Premier message privé",
@@ -416,6 +418,7 @@ export default function ProspectsPage () {
   const [prospectFilters, setProspectFilters] = useState<ProspectFilters>(initialProspectFilters);
   const [prospectSortOption, setProspectSortOption] = useState<ProspectSortOption>("createdAtDesc");
   const [prospectViewMode, setProspectViewMode] = useState<ProspectViewMode>("compact");
+  const [prospectDisplayMode, setProspectDisplayMode] = useState<ProspectDisplayMode>("list");
   const [backupMessage, setBackupMessage] = useState("");
   const [isBackupError, setIsBackupError] = useState(false);
 
@@ -589,6 +592,15 @@ export default function ProspectsPage () {
       tags: prospect.tags ?? [],
       notes: prospect.notes,
     });
+  }
+
+  function openFullProspectFromPipeline(prospect: Prospect) {
+    setProspectDisplayMode("list");
+    setProspectViewMode("detailed");
+
+    if (activeFullProspectId !== prospect.id) {
+      toggleFullProspectForm(prospect);
+    }
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -1084,7 +1096,27 @@ export default function ProspectsPage () {
       firstProspect.createdAt || "",
     );
   });
+  const pipelineProspectsByStatus = PROSPECT_STATUSES.reduce(
+    (groupedProspects, status) => {
+      groupedProspects[status] = filteredProspects
+        .filter((prospect) => prospect.status === status)
+        .sort((firstProspect, secondProspect) => {
+          if (firstProspect.score !== secondProspect.score) {
+            return secondProspect.score - firstProspect.score;
+          }
+
+          return compareDateStrings(
+            firstProspect.nextActionDate || "9999-12-31",
+            secondProspect.nextActionDate || "9999-12-31",
+          );
+        });
+
+      return groupedProspects;
+    },
+    {} as Record<Prospect["status"], Prospect[]>,
+  );
   const isDetailedView = prospectViewMode === "detailed";
+  const isPipelineView = prospectDisplayMode === "pipeline";
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-slate-950 px-4 py-6 text-white sm:px-6 sm:py-10">
@@ -1716,7 +1748,7 @@ export default function ProspectsPage () {
             </section>
 
             <section className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[minmax(0,2fr)_repeat(7,minmax(0,1fr))]">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[minmax(0,2fr)_repeat(8,minmax(0,1fr))]">
                 <label className="grid gap-2 text-sm text-slate-300">
                   Recherche
                   <input
@@ -1861,12 +1893,24 @@ export default function ProspectsPage () {
                     <option value="detailed">Vue détaillée</option>
                   </select>
                 </label>
+
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Affichage
+                  <select
+                    className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                    value={prospectDisplayMode}
+                    onChange={(event) => setProspectDisplayMode(event.target.value as ProspectDisplayMode)}
+                  >
+                    <option value="list">Liste</option>
+                    <option value="pipeline">Pipeline</option>
+                  </select>
+                </label>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm text-slate-300">
-                    {sortedProspects.length} prospect{sortedProspects.length > 1 ? "s" : ""} affiché{sortedProspects.length > 1 ? "s" : ""} sur {prospects.length}
+                    {filteredProspects.length} prospect{filteredProspects.length > 1 ? "s" : ""} affiché{filteredProspects.length > 1 ? "s" : ""} sur {prospects.length}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
                     Utilise la vue compacte pour le suivi quotidien, la vue détaillée pour analyser une fiche.
@@ -1882,7 +1926,94 @@ export default function ProspectsPage () {
               </div>
             </section>
 
-            {sortedProspects.length === 0 ? (
+            {isPipelineView ? (
+              <section className="grid gap-4 lg:flex lg:overflow-x-auto lg:pb-2">
+                {PROSPECT_STATUSES.map((status) => {
+                  const statusProspects = pipelineProspectsByStatus[status];
+
+                  return (
+                    <div
+                      className="min-w-0 rounded-2xl border border-white/10 bg-slate-950/40 p-4 lg:min-w-72 lg:max-w-80"
+                      key={status}
+                    >
+                      <div className="mb-4 flex items-start justify-between gap-3">
+                        <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                          {status}
+                        </h3>
+                        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
+                          {statusProspects.length}
+                        </span>
+                      </div>
+
+                      {statusProspects.length === 0 ? (
+                        <p className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-400">
+                          Aucun prospect
+                        </p>
+                      ) : (
+                        <div className="grid gap-3">
+                          {statusProspects.map((prospect) => {
+                            const prospectTags = prospect.tags ?? [];
+
+                            return (
+                              <article
+                                className="min-w-0 rounded-2xl border border-white/10 bg-slate-900/80 p-4"
+                                key={prospect.id}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <h4 className="truncate font-semibold text-white">
+                                      {getProspectDisplayName(prospect)}
+                                    </h4>
+                                    <p className="mt-1 text-xs text-slate-400">
+                                      {prospect.mainPlatform} · {prospect.category}
+                                    </p>
+                                  </div>
+                                  <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-xs font-semibold text-emerald-200">
+                                    {prospect.score}
+                                  </span>
+                                </div>
+
+                                <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium">
+                                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-200">
+                                    {prospect.temperature}
+                                  </span>
+                                  {prospect.nextActionDate ? (
+                                    <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-sky-200">
+                                      Relance : {prospect.nextActionDate}
+                                    </span>
+                                  ) : null}
+                                </div>
+
+                                {prospectTags.length > 0 ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {prospectTags.map((tag) => (
+                                      <span
+                                        className="rounded-full border border-white/10 bg-slate-950/60 px-2 py-1 text-xs text-slate-300"
+                                        key={tag}
+                                      >
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+
+                                <button
+                                  className="mt-4 min-h-10 w-full rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                                  type="button"
+                                  onClick={() => openFullProspectFromPipeline(prospect)}
+                                >
+                                  Voir la fiche
+                                </button>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </section>
+            ) : sortedProspects.length === 0 ? (
               <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-6 text-center text-slate-300">
                 Aucun prospect ne correspond à ta recherche.
               </div>
