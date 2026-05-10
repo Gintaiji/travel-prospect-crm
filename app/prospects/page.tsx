@@ -87,6 +87,27 @@ type ProspectFilters = {
   colorType: FilterValue<Prospect["colorType"]>;
 };
 
+const MESSAGE_ASSISTANT_SITUATIONS = [
+  "Réagir à un post voyage",
+  "Premier message privé",
+  "Relance douce",
+  "Transition vers Travel Advantage",
+  "Proposition de présentation",
+  "Après un refus / pas maintenant",
+] as const;
+
+const MESSAGE_ASSISTANT_STYLES = ["Doux", "Naturel", "Direct"] as const;
+
+type MessageAssistantSituation = (typeof MESSAGE_ASSISTANT_SITUATIONS)[number];
+type MessageAssistantStyle = (typeof MESSAGE_ASSISTANT_STYLES)[number];
+
+type MessageAssistantState = {
+  situation: MessageAssistantSituation;
+  style: MessageAssistantStyle;
+  generatedMessage: string;
+  copiedProspectId: string | null;
+};
+
 function calculateProspectScore(prospect: Prospect) {
   const interactionStats = prospect.interactionStats ?? {
     followerSinceDate: "",
@@ -227,6 +248,13 @@ const initialProspectFilters: ProspectFilters = {
   colorType: "Tous",
 };
 
+const initialMessageAssistantState: MessageAssistantState = {
+  situation: MESSAGE_ASSISTANT_SITUATIONS[0],
+  style: MESSAGE_ASSISTANT_STYLES[1],
+  generatedMessage: "",
+  copiedProspectId: null,
+};
+
 const socialLinkLabels: Array<{
   key: keyof Prospect["socialLinks"];
   label: string;
@@ -238,6 +266,63 @@ const socialLinkLabels: Array<{
   { key: "youtube", label: "YouTube" },
   { key: "other", label: "Autre" },
 ];
+
+function buildMessageAssistantContext(prospect: Prospect) {
+  const firstName = prospect.firstName.trim();
+  const displayName = prospect.displayName.trim();
+  const city = prospect.city.trim();
+  const country = prospect.country.trim();
+  const notes = prospect.notes.trim();
+  const location = [city, country].filter(Boolean).join(", ");
+
+  return {
+    greetingName: firstName || displayName || "",
+    displayName,
+    location,
+    platform: prospect.mainPlatform,
+    temperature: prospect.temperature,
+    notesHint: notes ? `J'ai noté aussi : ${notes.slice(0, 120)}${notes.length > 120 ? "..." : ""}` : "",
+  };
+}
+
+function adaptMessageTone(message: string, style: MessageAssistantStyle) {
+  if (style === "Doux") {
+    return `${message} Bien sûr, aucun souci si ce n'est pas le moment.`;
+  }
+
+  if (style === "Direct") {
+    return message.replace("je me demandais", "je voulais te demander");
+  }
+
+  return message;
+}
+
+function generateProspectMessage(
+  prospect: Prospect,
+  situation: MessageAssistantSituation,
+  style: MessageAssistantStyle,
+) {
+  const context = buildMessageAssistantContext(prospect);
+  const greeting = context.greetingName ? `Hello ${context.greetingName}, ` : "Hello, ";
+  const platformMention = context.platform ? `sur ${context.platform}` : "ici";
+  const locationMention = context.location ? ` depuis ${context.location}` : "";
+  const notesMention = context.notesHint ? ` ${context.notesHint}` : "";
+  const warmTemperatureMention =
+    context.temperature === "Chaud" || context.temperature === "Tiède"
+      ? "Comme tu sembles déjà sensible au sujet du voyage, "
+      : "";
+
+  const messageBySituation: Record<MessageAssistantSituation, string> = {
+    "Réagir à un post voyage": `${greeting}j'ai vu ton post voyage ${platformMention}${locationMention}, ça m'a donné envie de te demander : c'est une destination que tu recommanderais ?${notesMention}`,
+    "Premier message privé": `${greeting}je me permets de t'écrire simplement parce que ton profil m'a interpellé autour du voyage. Tu voyages plutôt pour te déconnecter, découvrir, ou les deux ?${notesMention}`,
+    "Relance douce": `${greeting}je reviens vers toi tranquillement, sans pression. Je voulais juste savoir si le sujet voyage t'intéresse toujours, ou si je garde ça pour plus tard.${notesMention}`,
+    "Transition vers Travel Advantage": `${greeting}je te demande parce que je travaille aussi autour d'une plateforme liée au voyage. L'idée, c'est d'aider les gens à voyager plus intelligemment avec des avantages membres. Si ça t'intrigue, je peux t'expliquer simplement.`,
+    "Proposition de présentation": `${greeting}${warmTemperatureMention}je peux te montrer le concept en quelques minutes, simplement, pour que tu voies si ça te parle. Si ce n'est pas le bon moment, aucun problème.`,
+    "Après un refus / pas maintenant": `${greeting}merci pour ton retour, je comprends totalement. Je ne veux pas forcer les choses. Je garde la porte ouverte, et on pourra en reparler plus tard si le sujet voyage revient au bon moment pour toi.`,
+  };
+
+  return adaptMessageTone(messageBySituation[situation], style);
+}
 
 export default function ProspectsPage () {
   const [prospects, setProspects] = useState<Prospect[]>([]);
@@ -254,6 +339,10 @@ export default function ProspectsPage () {
   const [activeFullProspectId, setActiveFullProspectId] = useState<string | null>(null);
   const [fullProspectFormState, setFullProspectFormState] = useState<FullProspectFormState>(
     initialFullProspectFormState,
+  );
+  const [activeMessageAssistantProspectId, setActiveMessageAssistantProspectId] = useState<string | null>(null);
+  const [messageAssistantState, setMessageAssistantState] = useState<MessageAssistantState>(
+    initialMessageAssistantState,
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [prospectFilters, setProspectFilters] = useState<ProspectFilters>(initialProspectFilters);
@@ -313,9 +402,27 @@ export default function ProspectsPage () {
     }));
   }
 
+  function updateMessageAssistantField<Field extends keyof Omit<MessageAssistantState, "copiedProspectId">>(
+    field: Field,
+    value: MessageAssistantState[Field],
+  ) {
+    setMessageAssistantState((currentState) => ({
+      ...currentState,
+      [field]: value,
+      copiedProspectId: null,
+    }));
+  }
+
   function resetFilters() {
     setSearchQuery("");
     setProspectFilters(initialProspectFilters);
+  }
+
+  function toggleMessageAssistant(prospectId: string) {
+    setActiveMessageAssistantProspectId((currentProspectId) =>
+      currentProspectId === prospectId ? null : prospectId,
+    );
+    setMessageAssistantState(initialMessageAssistantState);
   }
 
   function toggleConversationForm(prospectId: string) {
@@ -651,6 +758,11 @@ export default function ProspectsPage () {
       setActiveFullProspectId(null);
       setFullProspectFormState(initialFullProspectFormState);
     }
+
+    if (activeMessageAssistantProspectId === prospectId) {
+      setActiveMessageAssistantProspectId(null);
+      setMessageAssistantState(initialMessageAssistantState);
+    }
   }
 
   function handleMarkAsFollowedUp(prospectId: string) {
@@ -668,6 +780,30 @@ export default function ProspectsPage () {
 
     saveProspects(updatedProspects);
     setProspects(updatedProspects);
+  }
+
+  function handleGenerateProspectMessage(prospect: Prospect) {
+    setMessageAssistantState((currentState) => ({
+      ...currentState,
+      generatedMessage: generateProspectMessage(
+        prospect,
+        currentState.situation,
+        currentState.style,
+      ),
+      copiedProspectId: null,
+    }));
+  }
+
+  async function handleCopyProspectMessage(prospectId: string) {
+    if (!messageAssistantState.generatedMessage || !navigator.clipboard?.writeText) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(messageAssistantState.generatedMessage);
+    setMessageAssistantState((currentState) => ({
+      ...currentState,
+      copiedProspectId: prospectId,
+    }));
   }
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
@@ -1442,6 +1578,7 @@ export default function ProspectsPage () {
                 const isConversationFormVisible = activeConversationProspectId === prospect.id;
                 const isQualificationFormVisible = activeQualificationProspectId === prospect.id;
                 const isFullProspectFormVisible = activeFullProspectId === prospect.id;
+                const isMessageAssistantVisible = activeMessageAssistantProspectId === prospect.id;
                 const priorityLabel =
                   prospect.score >= 75
                     ? "Priorité haute"
@@ -1480,6 +1617,13 @@ export default function ProspectsPage () {
                         {isFullProspectFormVisible ? "Masquer la fiche complète" : "Voir / modifier la fiche complète"}
                       </button>
                       <button
+                        className="rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/20"
+                        type="button"
+                        onClick={() => toggleMessageAssistant(prospect.id)}
+                      >
+                        Préparer un message
+                      </button>
+                      <button
                         className="rounded-full border border-red-400/40 bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-200 transition hover:bg-red-500/20"
                         type="button"
                         onClick={() => handleDeleteProspect(prospect.id)}
@@ -1487,6 +1631,105 @@ export default function ProspectsPage () {
                         Supprimer le prospect
                       </button>
                     </div>
+
+                    {isMessageAssistantVisible ? (
+                      <div className="mb-4 grid gap-3 rounded-2xl border border-sky-400/20 bg-slate-950/70 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.2em] text-sky-300">
+                              Assistant message
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-slate-400">
+                              Message court, humain, sans pression.
+                            </p>
+                          </div>
+                          <button
+                            className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                            type="button"
+                            onClick={() => {
+                              setActiveMessageAssistantProspectId(null);
+                              setMessageAssistantState(initialMessageAssistantState);
+                            }}
+                          >
+                            Fermer
+                          </button>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <label className="grid gap-1 text-xs text-slate-300">
+                            Situation
+                            <select
+                              className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-sky-400"
+                              value={messageAssistantState.situation}
+                              onChange={(event) =>
+                                updateMessageAssistantField(
+                                  "situation",
+                                  event.target.value as MessageAssistantSituation,
+                                )
+                              }
+                            >
+                              {MESSAGE_ASSISTANT_SITUATIONS.map((situation) => (
+                                <option key={situation} value={situation}>
+                                  {situation}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label className="grid gap-1 text-xs text-slate-300">
+                            Style
+                            <select
+                              className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-sky-400"
+                              value={messageAssistantState.style}
+                              onChange={(event) =>
+                                updateMessageAssistantField(
+                                  "style",
+                                  event.target.value as MessageAssistantStyle,
+                                )
+                              }
+                            >
+                              {MESSAGE_ASSISTANT_STYLES.map((style) => (
+                                <option key={style} value={style}>
+                                  {style}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+
+                        <button
+                          className="rounded-full bg-sky-300 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-sky-200"
+                          type="button"
+                          onClick={() => handleGenerateProspectMessage(prospect)}
+                        >
+                          Générer le message
+                        </button>
+
+                        <div className="min-h-24 rounded-2xl border border-white/10 bg-slate-950 p-3 text-sm leading-6 text-slate-100">
+                          {messageAssistantState.generatedMessage || (
+                            <span className="text-slate-500">
+                              Le message généré apparaîtra ici.
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                          <button
+                            className="rounded-full border border-sky-400/30 px-4 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            type="button"
+                            disabled={!messageAssistantState.generatedMessage}
+                            onClick={() => handleCopyProspectMessage(prospect.id)}
+                          >
+                            Copier le message
+                          </button>
+                          {messageAssistantState.copiedProspectId === prospect.id ? (
+                            <p className="text-xs font-medium text-emerald-300">
+                              Message copié.
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
 
                     {isFullProspectFormVisible ? (
                       <form
