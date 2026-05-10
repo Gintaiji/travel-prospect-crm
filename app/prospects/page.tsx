@@ -1087,13 +1087,13 @@ export default function ProspectsPage () {
   const isDetailedView = prospectViewMode === "detailed";
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
+    <main className="min-h-screen overflow-x-hidden bg-slate-950 px-4 py-6 text-white sm:px-6 sm:py-10">
       <section className="mx-auto max-w-6xl">
-        <header className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <header className="mb-8 flex flex-col gap-4 md:mb-10 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.3em] text-emerald-400">CRM</p>
             <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center md:gap-6">
-              <h1 className="text-4xl font-bold tracking-tight">Prospects</h1>
+              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Prospects</h1>
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-slate-200">
                 {prospects.length} prospect{prospects.length > 1 ? "s" : ""}
               </span>
@@ -1106,7 +1106,7 @@ export default function ProspectsPage () {
           </div>
 
           <button
-            className="rounded-full bg-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
+            className="w-full rounded-full bg-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 sm:w-auto"
             type="button"
             onClick={() => setIsFormVisible((currentValue) => !currentValue)}
           >
@@ -1114,7 +1114,7 @@ export default function ProspectsPage () {
           </button>
         </header>
 
-        <section className="mb-8 rounded-2xl border border-white/10 bg-white/5 p-4">
+        <section className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-4 sm:mb-8">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
@@ -1134,15 +1134,15 @@ export default function ProspectsPage () {
               ) : null}
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex w-full flex-wrap gap-2 md:w-auto">
               <button
-                className="rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                className="min-h-10 flex-1 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10 sm:flex-none"
                 type="button"
                 onClick={handleExportProspects}
               >
                 Exporter les prospects
               </button>
-              <label className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5">
+              <label className="min-h-10 flex-1 cursor-pointer rounded-full border border-white/10 px-4 py-2 text-center text-xs font-semibold text-slate-200 transition hover:bg-white/5 sm:flex-none">
                 Importer une sauvegarde
                 <input
                   ref={importFileInputRef}
@@ -1158,7 +1158,7 @@ export default function ProspectsPage () {
 
         {isFormVisible ? (
           <form
-            className="mb-8 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-xl"
+            className="mb-8 rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-6"
             onSubmit={handleSubmit}
           >
             <div className="mb-6">
@@ -1600,7 +1600,7 @@ export default function ProspectsPage () {
         ) : null}
 
         {prospects.length === 0 ? (
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-xl">
+          <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-8">
             <div className="flex min-h-[300px] flex-col items-center justify-center text-center">
               <div className="mb-5 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-5 py-3 text-emerald-300">
                 Aucun prospect pour le moment
@@ -1618,7 +1618,7 @@ export default function ProspectsPage () {
             </div>
           </section>
         ) : (
-          <section className="grid gap-6 rounded-3xl border border-white/10 bg-white/5 p-8 shadow-xl">
+          <section className="grid gap-5 rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:gap-6 sm:p-8">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Liste</p>
@@ -1645,7 +1645,7 @@ export default function ProspectsPage () {
                   Aucune relance prévue pour le moment.
                 </p>
               ) : (
-                <div className="grid max-h-96 gap-3 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid max-h-96 gap-3 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
                   {followUpProspects.map((prospect) => {
                     const name = prospect.displayName?.trim()
                       ? prospect.displayName
@@ -1670,7 +1670,7 @@ export default function ProspectsPage () {
 
                     return (
                       <article
-                        className="rounded-2xl border border-white/10 bg-slate-900/70 p-4"
+                        className="min-w-0 rounded-2xl border border-white/10 bg-slate-900/70 p-4"
                         key={prospect.id}
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -1702,7 +1702,7 @@ export default function ProspectsPage () {
                         ) : null}
 
                         <button
-                          className="mt-3 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                          className="mt-3 min-h-10 w-full rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10 sm:w-auto"
                           type="button"
                           onClick={() => handleMarkAsFollowedUp(prospect.id)}
                         >
@@ -1716,7 +1716,7 @@ export default function ProspectsPage () {
             </section>
 
             <section className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-              <div className="grid gap-4 lg:grid-cols-3 xl:grid-cols-[minmax(0,2fr)_repeat(7,minmax(0,1fr))]">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[minmax(0,2fr)_repeat(7,minmax(0,1fr))]">
                 <label className="grid gap-2 text-sm text-slate-300">
                   Recherche
                   <input
@@ -1887,7 +1887,7 @@ export default function ProspectsPage () {
                 Aucun prospect ne correspond à ta recherche.
               </div>
             ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {sortedProspects.map((prospect) => {
                 const name = getProspectDisplayName(prospect);
                 const availableSocialLinks = socialLinkLabels
@@ -1956,7 +1956,7 @@ export default function ProspectsPage () {
                 return (
                   <article
                     key={prospect.id}
-                    className="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl transition hover:border-emerald-400/30"
+                    className="min-w-0 rounded-3xl border border-white/10 bg-slate-900/70 p-4 shadow-xl transition hover:border-emerald-400/30 sm:p-5"
                   >
                     <div className="mb-4 flex items-start justify-between gap-3">
                       <div>
@@ -1990,28 +1990,28 @@ export default function ProspectsPage () {
 
                     <div className="mb-4 flex flex-wrap gap-2">
                       <button
-                        className="rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                        className="min-h-10 w-full rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10 sm:w-auto"
                         type="button"
                         onClick={() => toggleFullProspectForm(prospect)}
                       >
                         {isFullProspectFormVisible ? "Masquer la fiche complète" : "Voir / modifier la fiche complète"}
                       </button>
                       <button
-                        className="rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/20"
+                        className="min-h-10 w-full rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/20 sm:w-auto"
                         type="button"
                         onClick={() => toggleMessageAssistant(prospect.id)}
                       >
                         Préparer un message
                       </button>
                       <button
-                        className="rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                        className="min-h-10 w-full rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10 sm:w-auto"
                         type="button"
                         onClick={() => toggleConversationForm(prospect.id)}
                       >
                         {isConversationFormVisible ? "Masquer l’échange" : "Ajouter un échange"}
                       </button>
                       <button
-                        className="rounded-full border border-red-400/40 bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-200 transition hover:bg-red-500/20"
+                        className="min-h-10 w-full rounded-full border border-red-400/40 bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-200 transition hover:bg-red-500/20 sm:w-auto"
                         type="button"
                         onClick={() => handleDeleteProspect(prospect.id)}
                       >
@@ -2027,7 +2027,7 @@ export default function ProspectsPage () {
                         <div className="mt-3 flex flex-wrap gap-2">
                           {profileUrl ? (
                             <a
-                              className="rounded-full border border-emerald-400/30 px-3 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                              className="min-h-10 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
                               href={profileUrl}
                               target="_blank"
                               rel="noreferrer"
@@ -2037,7 +2037,7 @@ export default function ProspectsPage () {
                           ) : null}
                           {instagramUrl ? (
                             <a
-                              className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              className="min-h-10 rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
                               href={instagramUrl}
                               target="_blank"
                               rel="noreferrer"
@@ -2047,7 +2047,7 @@ export default function ProspectsPage () {
                           ) : null}
                           {facebookUrl ? (
                             <a
-                              className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              className="min-h-10 rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
                               href={facebookUrl}
                               target="_blank"
                               rel="noreferrer"
@@ -2057,7 +2057,7 @@ export default function ProspectsPage () {
                           ) : null}
                           {linkedinUrl ? (
                             <a
-                              className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              className="min-h-10 rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
                               href={linkedinUrl}
                               target="_blank"
                               rel="noreferrer"
@@ -2067,7 +2067,7 @@ export default function ProspectsPage () {
                           ) : null}
                           {tiktokUrl ? (
                             <a
-                              className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              className="min-h-10 rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
                               href={tiktokUrl}
                               target="_blank"
                               rel="noreferrer"
@@ -2077,7 +2077,7 @@ export default function ProspectsPage () {
                           ) : null}
                           {youtubeUrl ? (
                             <a
-                              className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              className="min-h-10 rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
                               href={youtubeUrl}
                               target="_blank"
                               rel="noreferrer"
@@ -2087,7 +2087,7 @@ export default function ProspectsPage () {
                           ) : null}
                           {whatsappNumber ? (
                             <a
-                              className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
+                              className="min-h-10 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
                               href={`https://wa.me/${whatsappNumber}`}
                               target="_blank"
                               rel="noreferrer"
@@ -2097,7 +2097,7 @@ export default function ProspectsPage () {
                           ) : null}
                           {phoneNumber ? (
                             <a
-                              className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              className="min-h-10 rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
                               href={`tel:${phoneNumber}`}
                             >
                               Appeler
@@ -2105,7 +2105,7 @@ export default function ProspectsPage () {
                           ) : null}
                           {emailAddress ? (
                             <a
-                              className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              className="min-h-10 rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
                               href={emailHref}
                             >
                               Email
@@ -2113,7 +2113,7 @@ export default function ProspectsPage () {
                           ) : null}
                           {emailAddress ? (
                             <button
-                              className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/20"
+                              className="min-h-10 rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/20"
                               type="button"
                               onClick={() => handleCopyEmail(prospect.id, emailAddress)}
                             >
@@ -2122,7 +2122,7 @@ export default function ProspectsPage () {
                           ) : null}
                           {profileUrl ? (
                             <button
-                              className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/20"
+                              className="min-h-10 rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/20"
                               type="button"
                               onClick={() => handleCopyProfileLink(prospect.id, profileUrl)}
                             >
@@ -2159,7 +2159,7 @@ export default function ProspectsPage () {
                             </p>
                           </div>
                           <button
-                            className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                            className="min-h-10 rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
                             type="button"
                             onClick={() => {
                               setActiveMessageAssistantProspectId(null);
@@ -2219,7 +2219,7 @@ export default function ProspectsPage () {
                         </div>
 
                         <button
-                          className="rounded-full bg-sky-300 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-sky-200"
+                          className="min-h-10 rounded-full bg-sky-300 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-sky-200"
                           type="button"
                           onClick={() => handleGenerateProspectMessage(prospect)}
                         >
@@ -2236,7 +2236,7 @@ export default function ProspectsPage () {
 
                         <div className="flex flex-wrap items-center gap-3">
                           <button
-                            className="rounded-full border border-sky-400/30 px-4 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="min-h-10 rounded-full border border-sky-400/30 px-4 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/10 disabled:cursor-not-allowed disabled:opacity-50"
                             type="button"
                             disabled={!messageAssistantState.generatedMessage}
                             onClick={() => handleCopyProspectMessage(prospect.id)}
@@ -2254,7 +2254,7 @@ export default function ProspectsPage () {
 
                     {isFullProspectFormVisible ? (
                       <form
-                        className="mb-4 grid gap-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4"
+                        className="mb-4 grid min-w-0 gap-4 rounded-2xl border border-white/10 bg-slate-950/60 p-3 sm:p-4"
                         onSubmit={(event) => handleFullProspectSubmit(prospect.id, event)}
                       >
                         <fieldset className="rounded-2xl border border-white/10 bg-white/5 p-3">
