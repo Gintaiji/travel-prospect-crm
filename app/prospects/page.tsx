@@ -149,6 +149,14 @@ function calculateProspectScore(prospect: Prospect) {
   return Math.min(Math.max(score, 0), 100);
 }
 
+function compareDateStrings(firstDate: string, secondDate: string) {
+  if (firstDate === secondDate) {
+    return 0;
+  }
+
+  return firstDate < secondDate ? -1 : 1;
+}
+
 const initialFormState: ProspectFormState = {
   firstName: "",
   lastName: "",
@@ -645,7 +653,30 @@ export default function ProspectsPage () {
     }
   }
 
+  function handleMarkAsFollowedUp(prospectId: string) {
+    const updatedProspects = prospects.map((prospect) => {
+      if (prospect.id !== prospectId) {
+        return prospect;
+      }
+
+      return {
+        ...prospect,
+        nextActionDate: "",
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    saveProspects(updatedProspects);
+    setProspects(updatedProspects);
+  }
+
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const followUpProspects = prospects
+    .filter((prospect) => prospect.nextActionDate.trim())
+    .sort((firstProspect, secondProspect) =>
+      compareDateStrings(firstProspect.nextActionDate, secondProspect.nextActionDate),
+    );
   const filteredProspects = prospects.filter((prospect) => {
     const searchableText = [
       prospect.firstName,
@@ -1165,6 +1196,92 @@ export default function ProspectsPage () {
                 {filteredProspects.length} prospect{filteredProspects.length > 1 ? "s" : ""} affiché{filteredProspects.length > 1 ? "s" : ""} sur {prospects.length}
               </p>
             </div>
+
+            <section className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.3em] text-emerald-400">Prospects à relancer</p>
+                  <h3 className="mt-1 text-xl font-bold text-white">Relances prévues</h3>
+                </div>
+                <p className="text-sm text-slate-300">
+                  {followUpProspects.length} relance{followUpProspects.length > 1 ? "s" : ""}
+                </p>
+              </div>
+
+              {followUpProspects.length === 0 ? (
+                <p className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+                  Aucune relance prévue pour le moment.
+                </p>
+              ) : (
+                <div className="grid max-h-96 gap-3 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
+                  {followUpProspects.map((prospect) => {
+                    const name = prospect.displayName?.trim()
+                      ? prospect.displayName
+                      : `${prospect.firstName} ${prospect.lastName}`;
+                    const lastConversationEntry =
+                      prospect.conversationHistory.length > 0
+                        ? prospect.conversationHistory[prospect.conversationHistory.length - 1]
+                        : null;
+                    const dateComparison = compareDateStrings(prospect.nextActionDate, todayDate);
+                    const followUpStatus =
+                      dateComparison < 0
+                        ? "En retard"
+                        : dateComparison === 0
+                          ? "Aujourd'hui"
+                          : "À venir";
+                    const followUpBadgeClass =
+                      dateComparison < 0
+                        ? "border-red-400/40 bg-red-500/10 text-red-200"
+                        : dateComparison === 0
+                          ? "border-amber-300/40 bg-amber-300/10 text-amber-100"
+                          : "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
+
+                    return (
+                      <article
+                        className="rounded-2xl border border-white/10 bg-slate-900/70 p-4"
+                        key={prospect.id}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h4 className="font-semibold text-white">{name}</h4>
+                            <p className="mt-1 text-xs text-slate-400">
+                              {prospect.status} · {prospect.temperature}
+                            </p>
+                          </div>
+                          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${followUpBadgeClass}`}>
+                            {followUpStatus}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                          <p><span className="text-slate-500">Score :</span> <span className="font-medium text-white">{prospect.score}</span></p>
+                          <p><span className="text-slate-500">Relance :</span> <span className="font-medium text-white">{prospect.nextActionDate}</span></p>
+                        </div>
+
+                        {lastConversationEntry ? (
+                          <div className="mt-3 rounded-xl bg-white/5 p-3 text-sm">
+                            <p className="leading-5 text-white">{lastConversationEntry.content}</p>
+                            {lastConversationEntry.nextAction ? (
+                              <p className="mt-2 text-xs text-emerald-300">
+                                Prochaine action : {lastConversationEntry.nextAction}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        <button
+                          className="mt-3 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                          type="button"
+                          onClick={() => handleMarkAsFollowedUp(prospect.id)}
+                        >
+                          Marquer comme relancé
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
 
             <section className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
               <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_repeat(5,minmax(0,1fr))]">
