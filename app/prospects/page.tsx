@@ -39,6 +39,13 @@ type ProspectFormState = {
   tiktokUrl: string;
   youtubeUrl: string;
   otherUrl: string;
+  isFollower: boolean;
+  hasSentMessage: boolean;
+  followerSinceDate: string;
+  commentsCount: string;
+  interactionsCount: string;
+  likesCount: string;
+  messagesCount: string;
   notes: string;
 };
 
@@ -57,6 +64,13 @@ type QualificationFormState = {
   score: string;
   nextActionDate: string;
   notes: string;
+  isFollower: boolean;
+  hasSentMessage: boolean;
+  followerSinceDate: string;
+  commentsCount: string;
+  interactionsCount: string;
+  likesCount: string;
+  messagesCount: string;
 };
 
 type FilterValue<T extends string> = "Tous" | T;
@@ -92,6 +106,13 @@ const initialFormState: ProspectFormState = {
   tiktokUrl: "",
   youtubeUrl: "",
   otherUrl: "",
+  isFollower: false,
+  hasSentMessage: false,
+  followerSinceDate: "",
+  commentsCount: "0",
+  interactionsCount: "0",
+  likesCount: "0",
+  messagesCount: "0",
   notes: "",
 };
 
@@ -110,6 +131,13 @@ const initialQualificationFormState: QualificationFormState = {
   score: "0",
   nextActionDate: "",
   notes: "",
+  isFollower: false,
+  hasSentMessage: false,
+  followerSinceDate: "",
+  commentsCount: "0",
+  interactionsCount: "0",
+  likesCount: "0",
+  messagesCount: "0",
 };
 
 const initialProspectFilters: ProspectFilters = {
@@ -211,6 +239,14 @@ export default function ProspectsPage () {
       return;
     }
 
+    const interactionStats = prospect.interactionStats ?? {
+      followerSinceDate: "",
+      commentsCount: 0,
+      interactionsCount: 0,
+      likesCount: 0,
+      messagesCount: 0,
+    };
+
     setActiveQualificationProspectId(prospect.id);
     setQualificationFormState({
       status: prospect.status,
@@ -220,6 +256,13 @@ export default function ProspectsPage () {
       score: String(prospect.score),
       nextActionDate: prospect.nextActionDate,
       notes: prospect.notes,
+      isFollower: prospect.isFollower,
+      hasSentMessage: prospect.hasSentMessage,
+      followerSinceDate: interactionStats.followerSinceDate,
+      commentsCount: String(interactionStats.commentsCount),
+      interactionsCount: String(interactionStats.interactionsCount),
+      likesCount: String(interactionStats.likesCount),
+      messagesCount: String(interactionStats.messagesCount),
     });
   }
 
@@ -227,6 +270,10 @@ export default function ProspectsPage () {
     event.preventDefault();
 
     const now = new Date().toISOString();
+    const commentsCount = Number(formState.commentsCount);
+    const interactionsCount = Number(formState.interactionsCount);
+    const likesCount = Number(formState.likesCount);
+    const messagesCount = Number(formState.messagesCount);
     const newProspect: Prospect = {
       id: createProspectId(),
       firstName: formState.firstName.trim(),
@@ -256,14 +303,14 @@ export default function ProspectsPage () {
       colorType: formState.colorType,
       score: 0,
       tags: [],
-      isFollower: false,
-      hasSentMessage: false,
+      isFollower: formState.isFollower,
+      hasSentMessage: formState.hasSentMessage,
       interactionStats: {
-        followerSinceDate: "",
-        commentsCount: 0,
-        interactionsCount: 0,
-        likesCount: 0,
-        messagesCount: 0,
+        followerSinceDate: formState.followerSinceDate,
+        commentsCount: Number.isNaN(commentsCount) ? 0 : commentsCount,
+        interactionsCount: Number.isNaN(interactionsCount) ? 0 : interactionsCount,
+        likesCount: Number.isNaN(likesCount) ? 0 : likesCount,
+        messagesCount: Number.isNaN(messagesCount) ? 0 : messagesCount,
       },
       lastInteractionDate: "",
       nextActionDate: "",
@@ -323,6 +370,10 @@ export default function ProspectsPage () {
     event.preventDefault();
 
     const score = Number(qualificationFormState.score);
+    const commentsCount = Number(qualificationFormState.commentsCount);
+    const interactionsCount = Number(qualificationFormState.interactionsCount);
+    const likesCount = Number(qualificationFormState.likesCount);
+    const messagesCount = Number(qualificationFormState.messagesCount);
     const updatedProspects = prospects.map((prospect) => {
       if (prospect.id !== prospectId) {
         return prospect;
@@ -337,6 +388,15 @@ export default function ProspectsPage () {
         score: Number.isNaN(score) ? 0 : score,
         nextActionDate: qualificationFormState.nextActionDate,
         notes: qualificationFormState.notes.trim(),
+        isFollower: qualificationFormState.isFollower,
+        hasSentMessage: qualificationFormState.hasSentMessage,
+        interactionStats: {
+          followerSinceDate: qualificationFormState.followerSinceDate,
+          commentsCount: Number.isNaN(commentsCount) ? 0 : commentsCount,
+          interactionsCount: Number.isNaN(interactionsCount) ? 0 : interactionsCount,
+          likesCount: Number.isNaN(likesCount) ? 0 : likesCount,
+          messagesCount: Number.isNaN(messagesCount) ? 0 : messagesCount,
+        },
         updatedAt: new Date().toISOString(),
       };
     });
@@ -722,6 +782,87 @@ export default function ProspectsPage () {
 
               <fieldset className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
                 <legend className="px-2 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                  Activité et interactions
+                </legend>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-300">
+                    <input
+                      checked={formState.isFollower}
+                      className="h-4 w-4 accent-emerald-400"
+                      onChange={(event) => updateFormField("isFollower", event.target.checked)}
+                      type="checkbox"
+                    />
+                    Est follower ?
+                  </label>
+
+                  <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-300">
+                    <input
+                      checked={formState.hasSentMessage}
+                      className="h-4 w-4 accent-emerald-400"
+                      onChange={(event) => updateFormField("hasSentMessage", event.target.checked)}
+                      type="checkbox"
+                    />
+                    A déjà envoyé un message ?
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Date d'inscription / follow
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                      value={formState.followerSinceDate}
+                      onChange={(event) => updateFormField("followerSinceDate", event.target.value)}
+                      type="date"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Nombre de commentaires
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                      min="0"
+                      value={formState.commentsCount}
+                      onChange={(event) => updateFormField("commentsCount", event.target.value)}
+                      type="number"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Nombre d'interactions
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                      min="0"
+                      value={formState.interactionsCount}
+                      onChange={(event) => updateFormField("interactionsCount", event.target.value)}
+                      type="number"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Nombre de likes / cœurs
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                      min="0"
+                      value={formState.likesCount}
+                      onChange={(event) => updateFormField("likesCount", event.target.value)}
+                      type="number"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Nombre de messages
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                      min="0"
+                      value={formState.messagesCount}
+                      onChange={(event) => updateFormField("messagesCount", event.target.value)}
+                      type="number"
+                    />
+                  </label>
+                </div>
+              </fieldset>
+
+              <fieldset className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                <legend className="px-2 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
                   Notes
                 </legend>
                 <label className="mt-4 grid gap-2 text-sm text-slate-300">
@@ -931,6 +1072,13 @@ export default function ProspectsPage () {
                 const hasContactDetails = Boolean(
                   prospect.phone.trim() || prospect.whatsapp.trim() || prospect.email.trim(),
                 );
+                const interactionStats = prospect.interactionStats ?? {
+                  followerSinceDate: "",
+                  commentsCount: 0,
+                  interactionsCount: 0,
+                  likesCount: 0,
+                  messagesCount: 0,
+                };
                 const conversationHistory = prospect.conversationHistory ?? [];
                 const lastConversationEntry =
                   conversationHistory.length > 0
@@ -1085,6 +1233,96 @@ export default function ProspectsPage () {
                               />
                             </label>
 
+                            <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 md:grid-cols-2">
+                              <label className="flex items-center gap-3 text-xs text-slate-300">
+                                <input
+                                  checked={qualificationFormState.isFollower}
+                                  className="h-4 w-4 accent-emerald-400"
+                                  onChange={(event) =>
+                                    updateQualificationFormField("isFollower", event.target.checked)
+                                  }
+                                  type="checkbox"
+                                />
+                                Est follower ?
+                              </label>
+
+                              <label className="flex items-center gap-3 text-xs text-slate-300">
+                                <input
+                                  checked={qualificationFormState.hasSentMessage}
+                                  className="h-4 w-4 accent-emerald-400"
+                                  onChange={(event) =>
+                                    updateQualificationFormField("hasSentMessage", event.target.checked)
+                                  }
+                                  type="checkbox"
+                                />
+                                A déjà envoyé un message ?
+                              </label>
+
+                              <label className="grid gap-1 text-xs text-slate-300 md:col-span-2">
+                                Date d'inscription / follow
+                                <input
+                                  className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                  value={qualificationFormState.followerSinceDate}
+                                  onChange={(event) =>
+                                    updateQualificationFormField("followerSinceDate", event.target.value)
+                                  }
+                                  type="date"
+                                />
+                              </label>
+
+                              <label className="grid gap-1 text-xs text-slate-300">
+                                Commentaires
+                                <input
+                                  className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                  min="0"
+                                  value={qualificationFormState.commentsCount}
+                                  onChange={(event) =>
+                                    updateQualificationFormField("commentsCount", event.target.value)
+                                  }
+                                  type="number"
+                                />
+                              </label>
+
+                              <label className="grid gap-1 text-xs text-slate-300">
+                                Interactions
+                                <input
+                                  className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                  min="0"
+                                  value={qualificationFormState.interactionsCount}
+                                  onChange={(event) =>
+                                    updateQualificationFormField("interactionsCount", event.target.value)
+                                  }
+                                  type="number"
+                                />
+                              </label>
+
+                              <label className="grid gap-1 text-xs text-slate-300">
+                                Likes / cœurs
+                                <input
+                                  className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                  min="0"
+                                  value={qualificationFormState.likesCount}
+                                  onChange={(event) =>
+                                    updateQualificationFormField("likesCount", event.target.value)
+                                  }
+                                  type="number"
+                                />
+                              </label>
+
+                              <label className="grid gap-1 text-xs text-slate-300">
+                                Messages
+                                <input
+                                  className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                  min="0"
+                                  value={qualificationFormState.messagesCount}
+                                  onChange={(event) =>
+                                    updateQualificationFormField("messagesCount", event.target.value)
+                                  }
+                                  type="number"
+                                />
+                              </label>
+                            </div>
+
                             <label className="grid gap-1 text-xs text-slate-300">
                               Notes
                               <textarea
@@ -1115,6 +1353,20 @@ export default function ProspectsPage () {
                             </div>
                           </form>
                         ) : null}
+                      </div>
+                      <div className="rounded-2xl bg-white/5 p-3">
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Activité</p>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                          <p><span className="text-slate-500">Follower :</span> <span className="font-medium text-white">{prospect.isFollower ? "Oui" : "Non"}</span></p>
+                          <p><span className="text-slate-500">Message reçu :</span> <span className="font-medium text-white">{prospect.hasSentMessage ? "Oui" : "Non"}</span></p>
+                          {interactionStats.followerSinceDate ? (
+                            <p className="col-span-2"><span className="text-slate-500">Follow :</span> <span className="font-medium text-white">{interactionStats.followerSinceDate}</span></p>
+                          ) : null}
+                          <p><span className="text-slate-500">Commentaires :</span> <span className="font-medium text-white">{interactionStats.commentsCount}</span></p>
+                          <p><span className="text-slate-500">Interactions :</span> <span className="font-medium text-white">{interactionStats.interactionsCount}</span></p>
+                          <p><span className="text-slate-500">Likes / cœurs :</span> <span className="font-medium text-white">{interactionStats.likesCount}</span></p>
+                          <p><span className="text-slate-500">Messages :</span> <span className="font-medium text-white">{interactionStats.messagesCount}</span></p>
+                        </div>
                       </div>
                       <div className="rounded-2xl bg-white/5 p-3">
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Localisation</p>
