@@ -18,13 +18,25 @@ type ProspectFormState = {
   firstName: string;
   lastName: string;
   displayName: string;
+  jobTitle: string;
+  businessArea: string;
   mainPlatform: Prospect["mainPlatform"];
   profileUrl: string;
   category: Prospect["category"];
   temperature: Prospect["temperature"];
   colorType: Prospect["colorType"];
   city: string;
+  region: string;
   country: string;
+  phone: string;
+  whatsapp: string;
+  email: string;
+  facebookUrl: string;
+  instagramUrl: string;
+  linkedinUrl: string;
+  tiktokUrl: string;
+  youtubeUrl: string;
+  otherUrl: string;
   notes: string;
 };
 
@@ -32,15 +44,39 @@ const initialFormState: ProspectFormState = {
   firstName: "",
   lastName: "",
   displayName: "",
+  jobTitle: "",
+  businessArea: "",
   mainPlatform: SOCIAL_PLATFORMS[0],
   profileUrl: "",
   category: PROSPECT_CATEGORIES[0],
   temperature: PROSPECT_TEMPERATURES[0],
   colorType: PROSPECT_COLOR_TYPES[0],
   city: "",
+  region: "",
   country: "",
+  phone: "",
+  whatsapp: "",
+  email: "",
+  facebookUrl: "",
+  instagramUrl: "",
+  linkedinUrl: "",
+  tiktokUrl: "",
+  youtubeUrl: "",
+  otherUrl: "",
   notes: "",
 };
+
+const socialLinkLabels: Array<{
+  key: keyof Prospect["socialLinks"];
+  label: string;
+}> = [
+  { key: "facebook", label: "Facebook" },
+  { key: "instagram", label: "Instagram" },
+  { key: "linkedin", label: "LinkedIn" },
+  { key: "tiktok", label: "TikTok" },
+  { key: "youtube", label: "YouTube" },
+  { key: "other", label: "Autre" },
+];
 
 export default function ProspectsPage () {
   const [prospects, setProspects] = useState<Prospect[]>([]);
@@ -71,23 +107,23 @@ export default function ProspectsPage () {
       firstName: formState.firstName.trim(),
       lastName: formState.lastName.trim(),
       displayName: formState.displayName.trim(),
-      jobTitle: "",
-      businessArea: "",
+      jobTitle: formState.jobTitle.trim(),
+      businessArea: formState.businessArea.trim(),
       city: formState.city.trim(),
-      region: "",
+      region: formState.region.trim(),
       country: formState.country.trim(),
-      phone: "",
-      whatsapp: "",
-      email: "",
+      phone: formState.phone.trim(),
+      whatsapp: formState.whatsapp.trim(),
+      email: formState.email.trim(),
       mainPlatform: formState.mainPlatform,
       profileUrl: formState.profileUrl.trim(),
       socialLinks: {
-        facebook: "",
-        instagram: "",
-        linkedin: "",
-        tiktok: "",
-        youtube: "",
-        other: "",
+        facebook: formState.facebookUrl.trim(),
+        instagram: formState.instagramUrl.trim(),
+        linkedin: formState.linkedinUrl.trim(),
+        tiktok: formState.tiktokUrl.trim(),
+        youtube: formState.youtubeUrl.trim(),
+        other: formState.otherUrl.trim(),
       },
       category: formState.category,
       status: "À contacter",
@@ -161,7 +197,12 @@ export default function ProspectsPage () {
               </p>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-6">
+              <fieldset className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                <legend className="px-2 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                  Identité
+                </legend>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
               <label className="grid gap-2 text-sm text-slate-300">
                 Prénom
                 <input
@@ -192,22 +233,120 @@ export default function ProspectsPage () {
                 />
               </label>
 
-              <label className="grid gap-2 text-sm text-slate-300">
-                Plateforme principale
-                <select
-                  className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
-                  value={formState.mainPlatform}
-                  onChange={(event) =>
-                    updateFormField("mainPlatform", event.target.value as Prospect["mainPlatform"])
-                  }
-                >
-                  {SOCIAL_PLATFORMS.map((platform) => (
-                    <option key={platform} value={platform}>
-                      {platform}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Métier / poste
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      value={formState.jobTitle}
+                      onChange={(event) => updateFormField("jobTitle", event.target.value)}
+                      placeholder="Métier ou poste"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Domaine / activité
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      value={formState.businessArea}
+                      onChange={(event) => updateFormField("businessArea", event.target.value)}
+                      placeholder="Domaine ou activité"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Ville
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      value={formState.city}
+                      onChange={(event) => updateFormField("city", event.target.value)}
+                      placeholder="Ville"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Région
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      value={formState.region}
+                      onChange={(event) => updateFormField("region", event.target.value)}
+                      placeholder="Région"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Pays
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      value={formState.country}
+                      onChange={(event) => updateFormField("country", event.target.value)}
+                      placeholder="Pays"
+                    />
+                  </label>
+                </div>
+              </fieldset>
+
+              <fieldset className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                <legend className="px-2 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                  Coordonnées
+                </legend>
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Téléphone
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      value={formState.phone}
+                      onChange={(event) => updateFormField("phone", event.target.value)}
+                      placeholder="+33..."
+                      type="tel"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    WhatsApp
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      value={formState.whatsapp}
+                      onChange={(event) => updateFormField("whatsapp", event.target.value)}
+                      placeholder="+33..."
+                      type="tel"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Email
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      value={formState.email}
+                      onChange={(event) => updateFormField("email", event.target.value)}
+                      placeholder="email@exemple.com"
+                      type="email"
+                    />
+                  </label>
+                </div>
+              </fieldset>
+
+              <fieldset className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                <legend className="px-2 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                  Réseaux sociaux
+                </legend>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Plateforme principale
+                    <select
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                      value={formState.mainPlatform}
+                      onChange={(event) =>
+                        updateFormField("mainPlatform", event.target.value as Prospect["mainPlatform"])
+                      }
+                    >
+                      {SOCIAL_PLATFORMS.map((platform) => (
+                        <option key={platform} value={platform}>
+                          {platform}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
               <label className="grid gap-2 text-sm text-slate-300 md:col-span-2">
                 Lien du profil
@@ -219,6 +358,80 @@ export default function ProspectsPage () {
                   type="url"
                 />
               </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Lien Facebook
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      value={formState.facebookUrl}
+                      onChange={(event) => updateFormField("facebookUrl", event.target.value)}
+                      placeholder="https://facebook.com/..."
+                      type="url"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Lien Instagram
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      value={formState.instagramUrl}
+                      onChange={(event) => updateFormField("instagramUrl", event.target.value)}
+                      placeholder="https://instagram.com/..."
+                      type="url"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Lien LinkedIn
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      value={formState.linkedinUrl}
+                      onChange={(event) => updateFormField("linkedinUrl", event.target.value)}
+                      placeholder="https://linkedin.com/in/..."
+                      type="url"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Lien TikTok
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      value={formState.tiktokUrl}
+                      onChange={(event) => updateFormField("tiktokUrl", event.target.value)}
+                      placeholder="https://tiktok.com/@..."
+                      type="url"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Lien YouTube
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      value={formState.youtubeUrl}
+                      onChange={(event) => updateFormField("youtubeUrl", event.target.value)}
+                      placeholder="https://youtube.com/..."
+                      type="url"
+                    />
+                  </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Autre lien
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      value={formState.otherUrl}
+                      onChange={(event) => updateFormField("otherUrl", event.target.value)}
+                      placeholder="https://..."
+                      type="url"
+                    />
+                  </label>
+                </div>
+              </fieldset>
+
+              <fieldset className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                <legend className="px-2 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                  Qualification
+                </legend>
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
 
               <label className="grid gap-2 text-sm text-slate-300">
                 Catégorie
@@ -270,36 +483,23 @@ export default function ProspectsPage () {
                   ))}
                 </select>
               </label>
+                </div>
+              </fieldset>
 
-              <label className="grid gap-2 text-sm text-slate-300">
-                Ville
-                <input
-                  className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
-                  value={formState.city}
-                  onChange={(event) => updateFormField("city", event.target.value)}
-                  placeholder="Ville"
-                />
-              </label>
-
-              <label className="grid gap-2 text-sm text-slate-300">
-                Pays
-                <input
-                  className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
-                  value={formState.country}
-                  onChange={(event) => updateFormField("country", event.target.value)}
-                  placeholder="Pays"
-                />
-              </label>
-
-              <label className="grid gap-2 text-sm text-slate-300 md:col-span-2">
-                Notes
-                <textarea
-                  className="min-h-32 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
-                  value={formState.notes}
-                  onChange={(event) => updateFormField("notes", event.target.value)}
-                  placeholder="Contexte, intérêts, prochaine idée de message..."
-                />
-              </label>
+              <fieldset className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                <legend className="px-2 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                  Notes
+                </legend>
+                <label className="mt-4 grid gap-2 text-sm text-slate-300">
+                  Notes
+                  <textarea
+                    className="min-h-32 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                    value={formState.notes}
+                    onChange={(event) => updateFormField("notes", event.target.value)}
+                    placeholder="Contexte, intérêts, prochaine idée de message..."
+                  />
+                </label>
+              </fieldset>
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3">
@@ -356,6 +556,23 @@ export default function ProspectsPage () {
                 const name = prospect.displayName?.trim()
                   ? prospect.displayName
                   : `${prospect.firstName} ${prospect.lastName}`;
+                const availableSocialLinks = socialLinkLabels
+                  .map((socialLink) => ({
+                    ...socialLink,
+                    url: prospect.socialLinks[socialLink.key]?.trim(),
+                  }))
+                  .filter(
+                    (
+                      socialLink,
+                    ): socialLink is {
+                      key: keyof Prospect["socialLinks"];
+                      label: string;
+                      url: string;
+                    } => Boolean(socialLink.url),
+                  );
+                const hasContactDetails = Boolean(
+                  prospect.phone.trim() || prospect.whatsapp.trim() || prospect.email.trim(),
+                );
 
                 return (
                   <article
@@ -365,9 +582,14 @@ export default function ProspectsPage () {
                     <div className="mb-4 flex items-start justify-between gap-3">
                       <div>
                         <h3 className="text-xl font-semibold text-white">{name}</h3>
-                        <p className="mt-1 text-sm text-slate-400">
-                          {prospect.jobTitle || "Pas de poste renseigné"}
-                        </p>
+                        {prospect.jobTitle ? (
+                          <p className="mt-1 text-sm text-slate-400">{prospect.jobTitle}</p>
+                        ) : null}
+                        {prospect.businessArea ? (
+                          <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">
+                            {prospect.businessArea}
+                          </p>
+                        ) : null}
                       </div>
                       <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
                         {prospect.mainPlatform}
@@ -389,8 +611,48 @@ export default function ProspectsPage () {
                       </div>
                       <div className="rounded-2xl bg-white/5 p-3">
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Localisation</p>
-                        <p className="mt-1 font-medium text-white">{prospect.city || "—"} / {prospect.country || "—"}</p>
+                        <p className="mt-1 font-medium text-white">
+                          {[prospect.city, prospect.region, prospect.country].filter(Boolean).join(" / ") || "—"}
+                        </p>
                       </div>
+                      {hasContactDetails ? (
+                        <div className="rounded-2xl bg-white/5 p-3">
+                          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Coordonnées</p>
+                          <div className="mt-2 grid gap-1 font-medium text-white">
+                            {prospect.phone ? <p>Téléphone : {prospect.phone}</p> : null}
+                            {prospect.whatsapp ? <p>WhatsApp : {prospect.whatsapp}</p> : null}
+                            {prospect.email ? <p>Email : {prospect.email}</p> : null}
+                          </div>
+                        </div>
+                      ) : null}
+                      {prospect.profileUrl || availableSocialLinks.length > 0 ? (
+                        <div className="rounded-2xl bg-white/5 p-3">
+                          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Réseaux sociaux</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {prospect.profileUrl ? (
+                              <a
+                                className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-300 transition hover:border-emerald-300/50"
+                                href={prospect.profileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Profil
+                              </a>
+                            ) : null}
+                            {availableSocialLinks.map((socialLink) => (
+                              <a
+                                className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-300 transition hover:border-emerald-300/50"
+                                href={socialLink.url}
+                                key={socialLink.key}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {socialLink.label}
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="rounded-2xl bg-white/5 p-3">
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Score</p>
                         <p className="mt-1 font-medium text-white">{prospect.score}</p>
