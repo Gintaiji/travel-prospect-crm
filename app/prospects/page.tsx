@@ -91,6 +91,15 @@ type ProspectFilters = {
   tag: FilterValue<Prospect["tags"][number]>;
 };
 
+type ProspectSortOption =
+  | "createdAtDesc"
+  | "scoreDesc"
+  | "nextActionDate"
+  | "nameAsc"
+  | "temperatureHotFirst";
+
+type ProspectViewMode = "compact" | "detailed";
+
 const MESSAGE_ASSISTANT_SITUATIONS = [
   "Réagir à un post voyage",
   "Premier message privé",
@@ -188,6 +197,24 @@ function toggleProspectTag(currentTags: Prospect["tags"], tag: Prospect["tags"][
   }
 
   return [...currentTags, tag];
+}
+
+function getProspectDisplayName(prospect: Prospect) {
+  const fullName = `${prospect.firstName} ${prospect.lastName}`.trim();
+
+  return prospect.displayName.trim() || fullName || "Prospect sans nom";
+}
+
+function getTemperatureSortRank(temperature: Prospect["temperature"]) {
+  if (temperature === "Chaud") {
+    return 0;
+  }
+
+  if (temperature === "Tiède") {
+    return 1;
+  }
+
+  return 2;
 }
 
 const initialFormState: ProspectFormState = {
@@ -371,6 +398,8 @@ export default function ProspectsPage () {
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [prospectFilters, setProspectFilters] = useState<ProspectFilters>(initialProspectFilters);
+  const [prospectSortOption, setProspectSortOption] = useState<ProspectSortOption>("createdAtDesc");
+  const [prospectViewMode, setProspectViewMode] = useState<ProspectViewMode>("compact");
   const [backupMessage, setBackupMessage] = useState("");
   const [isBackupError, setIsBackupError] = useState(false);
 
@@ -979,6 +1008,39 @@ export default function ProspectsPage () {
       matchesTag
     );
   });
+  const sortedProspects = [...filteredProspects].sort((firstProspect, secondProspect) => {
+    if (prospectSortOption === "scoreDesc") {
+      return secondProspect.score - firstProspect.score;
+    }
+
+    if (prospectSortOption === "nextActionDate") {
+      return compareDateStrings(
+        firstProspect.nextActionDate || "9999-12-31",
+        secondProspect.nextActionDate || "9999-12-31",
+      );
+    }
+
+    if (prospectSortOption === "nameAsc") {
+      return getProspectDisplayName(firstProspect).localeCompare(
+        getProspectDisplayName(secondProspect),
+        "fr",
+        { sensitivity: "base" },
+      );
+    }
+
+    if (prospectSortOption === "temperatureHotFirst") {
+      return (
+        getTemperatureSortRank(firstProspect.temperature) -
+        getTemperatureSortRank(secondProspect.temperature)
+      );
+    }
+
+    return compareDateStrings(
+      secondProspect.createdAt || "",
+      firstProspect.createdAt || "",
+    );
+  });
+  const isDetailedView = prospectViewMode === "detailed";
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
@@ -1610,7 +1672,7 @@ export default function ProspectsPage () {
             </section>
 
             <section className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_repeat(5,minmax(0,1fr))]">
+              <div className="grid gap-4 lg:grid-cols-3 xl:grid-cols-[minmax(0,2fr)_repeat(7,minmax(0,1fr))]">
                 <label className="grid gap-2 text-sm text-slate-300">
                   Recherche
                   <input
@@ -1728,12 +1790,44 @@ export default function ProspectsPage () {
                     ))}
                   </select>
                 </label>
+
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Tri
+                  <select
+                    className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                    value={prospectSortOption}
+                    onChange={(event) => setProspectSortOption(event.target.value as ProspectSortOption)}
+                  >
+                    <option value="createdAtDesc">Date de création récente</option>
+                    <option value="scoreDesc">Score décroissant</option>
+                    <option value="nextActionDate">Prochaine relance</option>
+                    <option value="nameAsc">Nom A-Z</option>
+                    <option value="temperatureHotFirst">Température : chaud d’abord</option>
+                  </select>
+                </label>
+
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Vue
+                  <select
+                    className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                    value={prospectViewMode}
+                    onChange={(event) => setProspectViewMode(event.target.value as ProspectViewMode)}
+                  >
+                    <option value="compact">Vue compacte</option>
+                    <option value="detailed">Vue détaillée</option>
+                  </select>
+                </label>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-slate-300">
-                  {filteredProspects.length} prospect{filteredProspects.length > 1 ? "s" : ""} affiché{filteredProspects.length > 1 ? "s" : ""} sur {prospects.length}
-                </p>
+                <div>
+                  <p className="text-sm text-slate-300">
+                    {sortedProspects.length} prospect{sortedProspects.length > 1 ? "s" : ""} affiché{sortedProspects.length > 1 ? "s" : ""} sur {prospects.length}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Utilise la vue compacte pour le suivi quotidien, la vue détaillée pour analyser une fiche.
+                  </p>
+                </div>
                 <button
                   className="rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/5"
                   type="button"
@@ -1744,16 +1838,14 @@ export default function ProspectsPage () {
               </div>
             </section>
 
-            {filteredProspects.length === 0 ? (
+            {sortedProspects.length === 0 ? (
               <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-6 text-center text-slate-300">
                 Aucun prospect ne correspond à ta recherche.
               </div>
             ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredProspects.map((prospect) => {
-                const name = prospect.displayName?.trim()
-                  ? prospect.displayName
-                  : `${prospect.firstName} ${prospect.lastName}`;
+              {sortedProspects.map((prospect) => {
+                const name = getProspectDisplayName(prospect);
                 const availableSocialLinks = socialLinkLabels
                   .map((socialLink) => ({
                     ...socialLink,
@@ -1804,10 +1896,10 @@ export default function ProspectsPage () {
                     <div className="mb-4 flex items-start justify-between gap-3">
                       <div>
                         <h3 className="text-xl font-semibold text-white">{name}</h3>
-                        {prospect.jobTitle ? (
+                        {isDetailedView && prospect.jobTitle ? (
                           <p className="mt-1 text-sm text-slate-400">{prospect.jobTitle}</p>
                         ) : null}
-                        {prospect.businessArea ? (
+                        {isDetailedView && prospect.businessArea ? (
                           <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">
                             {prospect.businessArea}
                           </p>
@@ -1845,6 +1937,13 @@ export default function ProspectsPage () {
                         onClick={() => toggleMessageAssistant(prospect.id)}
                       >
                         Préparer un message
+                      </button>
+                      <button
+                        className="rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                        type="button"
+                        onClick={() => toggleConversationForm(prospect.id)}
+                      >
+                        {isConversationFormVisible ? "Masquer l’échange" : "Ajouter un échange"}
                       </button>
                       <button
                         className="rounded-full border border-red-400/40 bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-200 transition hover:bg-red-500/20"
@@ -2217,7 +2316,7 @@ export default function ProspectsPage () {
                           {prospect.nextActionDate ? (
                             <p><span className="text-slate-500">Prochaine relance :</span> <span className="font-medium text-white">{prospect.nextActionDate}</span></p>
                           ) : null}
-                          {prospect.notes ? (
+                          {isDetailedView && prospect.notes ? (
                             <p className="leading-5"><span className="text-slate-500">Notes :</span> <span className="font-medium text-white">{prospect.notes}</span></p>
                           ) : null}
                         </div>
@@ -2466,6 +2565,7 @@ export default function ProspectsPage () {
                           </span>
                         </div>
                       </div>
+                      {isDetailedView ? (
                       <div className="rounded-2xl bg-white/5 p-3">
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Activité</p>
                         <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
@@ -2480,13 +2580,16 @@ export default function ProspectsPage () {
                           <p><span className="text-slate-500">Messages :</span> <span className="font-medium text-white">{interactionStats.messagesCount}</span></p>
                         </div>
                       </div>
+                      ) : null}
+                      {isDetailedView ? (
                       <div className="rounded-2xl bg-white/5 p-3">
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Localisation</p>
                         <p className="mt-1 font-medium text-white">
                           {[prospect.city, prospect.region, prospect.country].filter(Boolean).join(" / ") || "—"}
                         </p>
                       </div>
-                      {hasContactDetails ? (
+                      ) : null}
+                      {isDetailedView && hasContactDetails ? (
                         <div className="rounded-2xl bg-white/5 p-3">
                           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Coordonnées</p>
                           <div className="mt-2 grid gap-1 font-medium text-white">
@@ -2496,7 +2599,7 @@ export default function ProspectsPage () {
                           </div>
                         </div>
                       ) : null}
-                      {prospect.profileUrl || availableSocialLinks.length > 0 ? (
+                      {isDetailedView && (prospect.profileUrl || availableSocialLinks.length > 0) ? (
                         <div className="rounded-2xl bg-white/5 p-3">
                           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Réseaux sociaux</p>
                           <div className="mt-2 flex flex-wrap gap-2">
@@ -2524,10 +2627,13 @@ export default function ProspectsPage () {
                           </div>
                         </div>
                       ) : null}
+                      {isDetailedView ? (
                       <div className="rounded-2xl bg-white/5 p-3">
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Dernière interaction</p>
                         <p className="mt-1 font-medium text-white">{prospect.lastInteractionDate || "—"}</p>
                       </div>
+                      ) : null}
+                      {isDetailedView || isConversationFormVisible ? (
                       <div className="rounded-2xl bg-white/5 p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -2663,6 +2769,7 @@ export default function ProspectsPage () {
                           </div>
                         ) : null}
                       </div>
+                      ) : null}
                     </div>
                   </article>
                 );
