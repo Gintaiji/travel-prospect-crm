@@ -9,6 +9,7 @@ import {
 import {
   PROSPECT_CATEGORIES,
   PROSPECT_COLOR_TYPES,
+  PROSPECT_STATUSES,
   PROSPECT_TEMPERATURES,
   SOCIAL_PLATFORMS,
   type ConversationEntry,
@@ -48,6 +49,16 @@ type ConversationFormState = {
   nextAction: string;
 };
 
+type QualificationFormState = {
+  status: Prospect["status"];
+  category: Prospect["category"];
+  temperature: Prospect["temperature"];
+  colorType: Prospect["colorType"];
+  score: string;
+  nextActionDate: string;
+  notes: string;
+};
+
 const initialFormState: ProspectFormState = {
   firstName: "",
   lastName: "",
@@ -81,6 +92,16 @@ const initialConversationFormState: ConversationFormState = {
   nextAction: "",
 };
 
+const initialQualificationFormState: QualificationFormState = {
+  status: PROSPECT_STATUSES[0],
+  category: PROSPECT_CATEGORIES[0],
+  temperature: PROSPECT_TEMPERATURES[0],
+  colorType: PROSPECT_COLOR_TYPES[0],
+  score: "0",
+  nextActionDate: "",
+  notes: "",
+};
+
 const socialLinkLabels: Array<{
   key: keyof Prospect["socialLinks"];
   label: string;
@@ -100,6 +121,10 @@ export default function ProspectsPage () {
   const [activeConversationProspectId, setActiveConversationProspectId] = useState<string | null>(null);
   const [conversationFormState, setConversationFormState] = useState<ConversationFormState>(
     initialConversationFormState,
+  );
+  const [activeQualificationProspectId, setActiveQualificationProspectId] = useState<string | null>(null);
+  const [qualificationFormState, setQualificationFormState] = useState<QualificationFormState>(
+    initialQualificationFormState,
   );
 
   useEffect(() => {
@@ -127,11 +152,40 @@ export default function ProspectsPage () {
     }));
   }
 
+  function updateQualificationFormField<Field extends keyof QualificationFormState>(
+    field: Field,
+    value: QualificationFormState[Field],
+  ) {
+    setQualificationFormState((currentFormState) => ({
+      ...currentFormState,
+      [field]: value,
+    }));
+  }
+
   function toggleConversationForm(prospectId: string) {
     setActiveConversationProspectId((currentProspectId) =>
       currentProspectId === prospectId ? null : prospectId,
     );
     setConversationFormState(initialConversationFormState);
+  }
+
+  function toggleQualificationForm(prospect: Prospect) {
+    if (activeQualificationProspectId === prospect.id) {
+      setActiveQualificationProspectId(null);
+      setQualificationFormState(initialQualificationFormState);
+      return;
+    }
+
+    setActiveQualificationProspectId(prospect.id);
+    setQualificationFormState({
+      status: prospect.status,
+      category: prospect.category,
+      temperature: prospect.temperature,
+      colorType: prospect.colorType,
+      score: String(prospect.score),
+      nextActionDate: prospect.nextActionDate,
+      notes: prospect.notes,
+    });
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -225,6 +279,37 @@ export default function ProspectsPage () {
     setProspects(updatedProspects);
     setConversationFormState(initialConversationFormState);
     setActiveConversationProspectId(null);
+  }
+
+  function handleQualificationSubmit(
+    prospectId: string,
+    event: React.FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    const score = Number(qualificationFormState.score);
+    const updatedProspects = prospects.map((prospect) => {
+      if (prospect.id !== prospectId) {
+        return prospect;
+      }
+
+      return {
+        ...prospect,
+        status: qualificationFormState.status,
+        category: qualificationFormState.category,
+        temperature: qualificationFormState.temperature,
+        colorType: qualificationFormState.colorType,
+        score: Number.isNaN(score) ? 0 : score,
+        nextActionDate: qualificationFormState.nextActionDate,
+        notes: qualificationFormState.notes.trim(),
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    saveProspects(updatedProspects);
+    setProspects(updatedProspects);
+    setActiveQualificationProspectId(null);
+    setQualificationFormState(initialQualificationFormState);
   }
 
   return (
@@ -651,6 +736,7 @@ export default function ProspectsPage () {
                     ? conversationHistory[conversationHistory.length - 1]
                     : null;
                 const isConversationFormVisible = activeConversationProspectId === prospect.id;
+                const isQualificationFormVisible = activeQualificationProspectId === prospect.id;
 
                 return (
                   <article
@@ -676,16 +762,158 @@ export default function ProspectsPage () {
 
                     <div className="grid gap-3 text-sm text-slate-300">
                       <div className="rounded-2xl bg-white/5 p-3">
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Catégorie</p>
-                        <p className="mt-1 font-medium text-white">{prospect.category}</p>
-                      </div>
-                      <div className="rounded-2xl bg-white/5 p-3">
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Température</p>
-                        <p className="mt-1 font-medium text-white">{prospect.temperature}</p>
-                      </div>
-                      <div className="rounded-2xl bg-white/5 p-3">
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Statut</p>
-                        <p className="mt-1 font-medium text-white">{prospect.status}</p>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Qualification</p>
+                            <p className="mt-1 font-medium text-white">{prospect.status}</p>
+                          </div>
+                          <button
+                            className="rounded-full border border-emerald-400/30 px-3 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                            type="button"
+                            onClick={() => toggleQualificationForm(prospect)}
+                          >
+                            {isQualificationFormVisible ? "Masquer" : "Modifier la qualification"}
+                          </button>
+                        </div>
+
+                        <div className="mt-3 grid gap-2 text-sm">
+                          <p><span className="text-slate-500">Catégorie :</span> <span className="font-medium text-white">{prospect.category}</span></p>
+                          <p><span className="text-slate-500">Température :</span> <span className="font-medium text-white">{prospect.temperature}</span></p>
+                          <p><span className="text-slate-500">Type couleur :</span> <span className="font-medium text-white">{prospect.colorType}</span></p>
+                          <p><span className="text-slate-500">Score :</span> <span className="font-medium text-white">{prospect.score}</span></p>
+                          {prospect.nextActionDate ? (
+                            <p><span className="text-slate-500">Prochaine relance :</span> <span className="font-medium text-white">{prospect.nextActionDate}</span></p>
+                          ) : null}
+                          {prospect.notes ? (
+                            <p className="leading-5"><span className="text-slate-500">Notes :</span> <span className="font-medium text-white">{prospect.notes}</span></p>
+                          ) : null}
+                        </div>
+
+                        {isQualificationFormVisible ? (
+                          <form
+                            className="mt-3 grid gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-3"
+                            onSubmit={(event) => handleQualificationSubmit(prospect.id, event)}
+                          >
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Statut
+                              <select
+                                className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                value={qualificationFormState.status}
+                                onChange={(event) =>
+                                  updateQualificationFormField("status", event.target.value as Prospect["status"])
+                                }
+                              >
+                                {PROSPECT_STATUSES.map((status) => (
+                                  <option key={status} value={status}>
+                                    {status}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <label className="grid gap-1 text-xs text-slate-300">
+                                Catégorie
+                                <select
+                                  className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                  value={qualificationFormState.category}
+                                  onChange={(event) =>
+                                    updateQualificationFormField("category", event.target.value as Prospect["category"])
+                                  }
+                                >
+                                  {PROSPECT_CATEGORIES.map((category) => (
+                                    <option key={category} value={category}>
+                                      {category}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <label className="grid gap-1 text-xs text-slate-300">
+                                Température / marché
+                                <select
+                                  className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                  value={qualificationFormState.temperature}
+                                  onChange={(event) =>
+                                    updateQualificationFormField("temperature", event.target.value as Prospect["temperature"])
+                                  }
+                                >
+                                  {PROSPECT_TEMPERATURES.map((temperature) => (
+                                    <option key={temperature} value={temperature}>
+                                      {temperature}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <label className="grid gap-1 text-xs text-slate-300">
+                                Type couleur
+                                <select
+                                  className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                  value={qualificationFormState.colorType}
+                                  onChange={(event) =>
+                                    updateQualificationFormField("colorType", event.target.value as Prospect["colorType"])
+                                  }
+                                >
+                                  {PROSPECT_COLOR_TYPES.map((colorType) => (
+                                    <option key={colorType} value={colorType}>
+                                      {colorType}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <label className="grid gap-1 text-xs text-slate-300">
+                                Score
+                                <input
+                                  className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                  value={qualificationFormState.score}
+                                  onChange={(event) => updateQualificationFormField("score", event.target.value)}
+                                  type="number"
+                                />
+                              </label>
+                            </div>
+
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Prochaine relance
+                              <input
+                                className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                value={qualificationFormState.nextActionDate}
+                                onChange={(event) => updateQualificationFormField("nextActionDate", event.target.value)}
+                                type="date"
+                              />
+                            </label>
+
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Notes
+                              <textarea
+                                className="min-h-20 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                                value={qualificationFormState.notes}
+                                onChange={(event) => updateQualificationFormField("notes", event.target.value)}
+                                placeholder="Notes de qualification..."
+                              />
+                            </label>
+
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                className="rounded-full bg-emerald-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300"
+                                type="submit"
+                              >
+                                Enregistrer
+                              </button>
+                              <button
+                                className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                                type="button"
+                                onClick={() => {
+                                  setActiveQualificationProspectId(null);
+                                  setQualificationFormState(initialQualificationFormState);
+                                }}
+                              >
+                                Annuler
+                              </button>
+                            </div>
+                          </form>
+                        ) : null}
                       </div>
                       <div className="rounded-2xl bg-white/5 p-3">
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Localisation</p>
@@ -731,10 +959,6 @@ export default function ProspectsPage () {
                           </div>
                         </div>
                       ) : null}
-                      <div className="rounded-2xl bg-white/5 p-3">
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Score</p>
-                        <p className="mt-1 font-medium text-white">{prospect.score}</p>
-                      </div>
                       <div className="rounded-2xl bg-white/5 p-3">
                         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Dernière interaction</p>
                         <p className="mt-1 font-medium text-white">{prospect.lastInteractionDate || "—"}</p>
