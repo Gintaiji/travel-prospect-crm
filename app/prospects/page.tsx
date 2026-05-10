@@ -217,6 +217,20 @@ function getTemperatureSortRank(temperature: Prospect["temperature"]) {
   return 2;
 }
 
+function cleanPhoneNumber(phoneNumber: string) {
+  return phoneNumber.replace(/[\s.\-()]/g, "");
+}
+
+function buildWhatsAppNumber(phoneNumber: string) {
+  const cleanedPhoneNumber = cleanPhoneNumber(phoneNumber);
+
+  if (cleanedPhoneNumber.startsWith("0")) {
+    return `33${cleanedPhoneNumber.slice(1)}`;
+  }
+
+  return cleanedPhoneNumber;
+}
+
 const initialFormState: ProspectFormState = {
   firstName: "",
   lastName: "",
@@ -396,6 +410,8 @@ export default function ProspectsPage () {
   const [messageAssistantState, setMessageAssistantState] = useState<MessageAssistantState>(
     initialMessageAssistantState,
   );
+  const [copiedQuickActionProspectId, setCopiedQuickActionProspectId] = useState<string | null>(null);
+  const [copiedEmailProspectId, setCopiedEmailProspectId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [prospectFilters, setProspectFilters] = useState<ProspectFilters>(initialProspectFilters);
   const [prospectSortOption, setProspectSortOption] = useState<ProspectSortOption>("createdAtDesc");
@@ -864,6 +880,34 @@ export default function ProspectsPage () {
       ...currentState,
       copiedProspectId: prospectId,
     }));
+  }
+
+  async function handleCopyProfileLink(prospectId: string, profileUrl: string) {
+    if (!profileUrl || !navigator.clipboard?.writeText) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(profileUrl);
+    setCopiedQuickActionProspectId(prospectId);
+    window.setTimeout(() => {
+      setCopiedQuickActionProspectId((currentProspectId) =>
+        currentProspectId === prospectId ? null : currentProspectId,
+      );
+    }, 1800);
+  }
+
+  async function handleCopyEmail(prospectId: string, emailAddress: string) {
+    if (!emailAddress || !navigator.clipboard?.writeText) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(emailAddress);
+    setCopiedEmailProspectId(prospectId);
+    window.setTimeout(() => {
+      setCopiedEmailProspectId((currentProspectId) =>
+        currentProspectId === prospectId ? null : currentProspectId,
+      );
+    }, 1800);
   }
 
   function handleExportProspects() {
@@ -1887,6 +1931,27 @@ export default function ProspectsPage () {
                     : prospect.score >= 40
                       ? "Priorité moyenne"
                       : "Priorité basse";
+                const profileUrl = prospect.profileUrl.trim();
+                const instagramUrl = prospect.socialLinks.instagram.trim();
+                const facebookUrl = prospect.socialLinks.facebook.trim();
+                const linkedinUrl = prospect.socialLinks.linkedin.trim();
+                const tiktokUrl = prospect.socialLinks.tiktok.trim();
+                const youtubeUrl = prospect.socialLinks.youtube.trim();
+                const whatsappNumber = buildWhatsAppNumber(prospect.whatsapp.trim());
+                const phoneNumber = cleanPhoneNumber(prospect.phone.trim());
+                const emailAddress = prospect.email.trim();
+                const emailHref = emailAddress ? `mailto:${encodeURIComponent(emailAddress)}` : "";
+                const hasQuickActions = Boolean(
+                  profileUrl ||
+                    instagramUrl ||
+                    facebookUrl ||
+                    linkedinUrl ||
+                    tiktokUrl ||
+                    youtubeUrl ||
+                    whatsappNumber ||
+                    phoneNumber ||
+                    emailAddress,
+                );
 
                 return (
                   <article
@@ -1952,6 +2017,134 @@ export default function ProspectsPage () {
                       >
                         Supprimer le prospect
                       </button>
+                    </div>
+
+                    <div className="mb-4 rounded-2xl border border-white/10 bg-slate-950/40 p-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                        Actions rapides
+                      </p>
+                      {hasQuickActions ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {profileUrl ? (
+                            <a
+                              className="rounded-full border border-emerald-400/30 px-3 py-1 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                              href={profileUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Ouvrir profil
+                            </a>
+                          ) : null}
+                          {instagramUrl ? (
+                            <a
+                              className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              href={instagramUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Instagram
+                            </a>
+                          ) : null}
+                          {facebookUrl ? (
+                            <a
+                              className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              href={facebookUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Facebook
+                            </a>
+                          ) : null}
+                          {linkedinUrl ? (
+                            <a
+                              className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              href={linkedinUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              LinkedIn
+                            </a>
+                          ) : null}
+                          {tiktokUrl ? (
+                            <a
+                              className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              href={tiktokUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              TikTok
+                            </a>
+                          ) : null}
+                          {youtubeUrl ? (
+                            <a
+                              className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              href={youtubeUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              YouTube
+                            </a>
+                          ) : null}
+                          {whatsappNumber ? (
+                            <a
+                              className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
+                              href={`https://wa.me/${whatsappNumber}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              WhatsApp
+                            </a>
+                          ) : null}
+                          {phoneNumber ? (
+                            <a
+                              className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              href={`tel:${phoneNumber}`}
+                            >
+                              Appeler
+                            </a>
+                          ) : null}
+                          {emailAddress ? (
+                            <a
+                              className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              href={emailHref}
+                            >
+                              Email
+                            </a>
+                          ) : null}
+                          {emailAddress ? (
+                            <button
+                              className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/20"
+                              type="button"
+                              onClick={() => handleCopyEmail(prospect.id, emailAddress)}
+                            >
+                              Copier email
+                            </button>
+                          ) : null}
+                          {profileUrl ? (
+                            <button
+                              className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/20"
+                              type="button"
+                              onClick={() => handleCopyProfileLink(prospect.id, profileUrl)}
+                            >
+                              Copier lien profil
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-sm text-slate-400">
+                          Aucune action rapide disponible.
+                        </p>
+                      )}
+                      {copiedQuickActionProspectId === prospect.id ? (
+                        <p className="mt-2 text-xs font-medium text-emerald-300">
+                          Lien copié.
+                        </p>
+                      ) : null}
+                      {copiedEmailProspectId === prospect.id ? (
+                        <p className="mt-2 text-xs font-medium text-emerald-300">
+                          Email copié.
+                        </p>
+                      ) : null}
                     </div>
 
                     {isMessageAssistantVisible ? (
