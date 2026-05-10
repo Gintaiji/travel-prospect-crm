@@ -10,6 +10,7 @@ import {
   PROSPECT_CATEGORIES,
   PROSPECT_COLOR_TYPES,
   PROSPECT_STATUSES,
+  PROSPECT_TAGS,
   PROSPECT_TEMPERATURES,
   SOCIAL_PLATFORMS,
   type ConversationEntry,
@@ -46,6 +47,7 @@ type ProspectFormState = {
   interactionsCount: string;
   likesCount: string;
   messagesCount: string;
+  tags: Prospect["tags"];
   notes: string;
 };
 
@@ -70,6 +72,7 @@ type QualificationFormState = {
   interactionsCount: string;
   likesCount: string;
   messagesCount: string;
+  tags: Prospect["tags"];
 };
 
 type FullProspectFormState = ProspectFormState & {
@@ -85,6 +88,7 @@ type ProspectFilters = {
   category: FilterValue<Prospect["category"]>;
   temperature: FilterValue<Prospect["temperature"]>;
   colorType: FilterValue<Prospect["colorType"]>;
+  tag: FilterValue<Prospect["tags"][number]>;
 };
 
 const MESSAGE_ASSISTANT_SITUATIONS = [
@@ -163,7 +167,7 @@ function calculateProspectScore(prospect: Prospect) {
     score += 35;
   }
 
-  if (prospect.tags.includes("À éviter")) {
+  if ((prospect.tags ?? []).includes("À éviter")) {
     score -= 30;
   }
 
@@ -176,6 +180,14 @@ function compareDateStrings(firstDate: string, secondDate: string) {
   }
 
   return firstDate < secondDate ? -1 : 1;
+}
+
+function toggleProspectTag(currentTags: Prospect["tags"], tag: Prospect["tags"][number]) {
+  if (currentTags.includes(tag)) {
+    return currentTags.filter((currentTag) => currentTag !== tag);
+  }
+
+  return [...currentTags, tag];
 }
 
 const initialFormState: ProspectFormState = {
@@ -208,6 +220,7 @@ const initialFormState: ProspectFormState = {
   interactionsCount: "0",
   likesCount: "0",
   messagesCount: "0",
+  tags: [],
   notes: "",
 };
 
@@ -232,6 +245,7 @@ const initialQualificationFormState: QualificationFormState = {
   interactionsCount: "0",
   likesCount: "0",
   messagesCount: "0",
+  tags: [],
 };
 
 const initialFullProspectFormState: FullProspectFormState = {
@@ -246,6 +260,7 @@ const initialProspectFilters: ProspectFilters = {
   category: "Tous",
   temperature: "Tous",
   colorType: "Tous",
+  tag: "Tous",
 };
 
 const initialMessageAssistantState: MessageAssistantState = {
@@ -274,6 +289,12 @@ function buildMessageAssistantContext(prospect: Prospect) {
   const country = prospect.country.trim();
   const notes = prospect.notes.trim();
   const location = [city, country].filter(Boolean).join(", ");
+  const tags = prospect.tags ?? [];
+  const tagInsights = [
+    tags.includes("Famille") ? "voyages en famille" : "",
+    tags.includes("Bons plans") ? "bons plans voyage" : "",
+    tags.includes("Entrepreneur") || tags.includes("Business") ? "opportunité ou projet autour du voyage" : "",
+  ].filter(Boolean);
 
   return {
     greetingName: firstName || displayName || "",
@@ -281,6 +302,8 @@ function buildMessageAssistantContext(prospect: Prospect) {
     location,
     platform: prospect.mainPlatform,
     temperature: prospect.temperature,
+    hasAvoidTag: tags.includes("À éviter"),
+    tagHint: tagInsights.length > 0 ? ` J'ai pensé à ${tagInsights.join(", ")}.` : "",
     notesHint: notes ? `J'ai noté aussi : ${notes.slice(0, 120)}${notes.length > 120 ? "..." : ""}` : "",
   };
 }
@@ -306,6 +329,7 @@ function generateProspectMessage(
   const greeting = context.greetingName ? `Hello ${context.greetingName}, ` : "Hello, ";
   const platformMention = context.platform ? `sur ${context.platform}` : "ici";
   const locationMention = context.location ? ` depuis ${context.location}` : "";
+  const tagMention = context.tagHint;
   const notesMention = context.notesHint ? ` ${context.notesHint}` : "";
   const warmTemperatureMention =
     context.temperature === "Chaud" || context.temperature === "Tiède"
@@ -313,11 +337,11 @@ function generateProspectMessage(
       : "";
 
   const messageBySituation: Record<MessageAssistantSituation, string> = {
-    "Réagir à un post voyage": `${greeting}j'ai vu ton post voyage ${platformMention}${locationMention}, ça m'a donné envie de te demander : c'est une destination que tu recommanderais ?${notesMention}`,
-    "Premier message privé": `${greeting}je me permets de t'écrire simplement parce que ton profil m'a interpellé autour du voyage. Tu voyages plutôt pour te déconnecter, découvrir, ou les deux ?${notesMention}`,
-    "Relance douce": `${greeting}je reviens vers toi tranquillement, sans pression. Je voulais juste savoir si le sujet voyage t'intéresse toujours, ou si je garde ça pour plus tard.${notesMention}`,
-    "Transition vers Travel Advantage": `${greeting}je te demande parce que je travaille aussi autour d'une plateforme liée au voyage. L'idée, c'est d'aider les gens à voyager plus intelligemment avec des avantages membres. Si ça t'intrigue, je peux t'expliquer simplement.`,
-    "Proposition de présentation": `${greeting}${warmTemperatureMention}je peux te montrer le concept en quelques minutes, simplement, pour que tu voies si ça te parle. Si ce n'est pas le bon moment, aucun problème.`,
+    "Réagir à un post voyage": `${greeting}j'ai vu ton post voyage ${platformMention}${locationMention}, ça m'a donné envie de te demander : c'est une destination que tu recommanderais ?${tagMention}${notesMention}`,
+    "Premier message privé": `${greeting}je me permets de t'écrire simplement parce que ton profil m'a interpellé autour du voyage. Tu voyages plutôt pour te déconnecter, découvrir, ou les deux ?${tagMention}${notesMention}`,
+    "Relance douce": `${greeting}je reviens vers toi tranquillement, sans pression. Je voulais juste savoir si le sujet voyage t'intéresse toujours, ou si je garde ça pour plus tard.${tagMention}${notesMention}`,
+    "Transition vers Travel Advantage": `${greeting}je te demande parce que je travaille aussi autour d'une plateforme liée au voyage. L'idée, c'est d'aider les gens à voyager plus intelligemment avec des avantages membres.${tagMention} Si ça t'intrigue, je peux t'expliquer simplement.`,
+    "Proposition de présentation": `${greeting}${warmTemperatureMention}je peux te montrer le concept en quelques minutes, simplement, pour que tu voies si ça te parle.${tagMention} Si ce n'est pas le bon moment, aucun problème.`,
     "Après un refus / pas maintenant": `${greeting}merci pour ton retour, je comprends totalement. Je ne veux pas forcer les choses. Je garde la porte ouverte, et on pourra en reparler plus tard si le sujet voyage revient au bon moment pour toi.`,
   };
 
@@ -462,6 +486,7 @@ export default function ProspectsPage () {
       interactionsCount: String(interactionStats.interactionsCount),
       likesCount: String(interactionStats.likesCount),
       messagesCount: String(interactionStats.messagesCount),
+      tags: prospect.tags ?? [],
     });
   }
 
@@ -513,6 +538,7 @@ export default function ProspectsPage () {
       likesCount: String(interactionStats.likesCount),
       messagesCount: String(interactionStats.messagesCount),
       nextActionDate: prospect.nextActionDate,
+      tags: prospect.tags ?? [],
       notes: prospect.notes,
     });
   }
@@ -553,7 +579,7 @@ export default function ProspectsPage () {
       temperature: formState.temperature,
       colorType: formState.colorType,
       score: 0,
-      tags: [],
+      tags: formState.tags,
       isFollower: formState.isFollower,
       hasSentMessage: formState.hasSentMessage,
       interactionStats: {
@@ -648,8 +674,9 @@ export default function ProspectsPage () {
           commentsCount: Number.isNaN(commentsCount) ? 0 : commentsCount,
           interactionsCount: Number.isNaN(interactionsCount) ? 0 : interactionsCount,
           likesCount: Number.isNaN(likesCount) ? 0 : likesCount,
-          messagesCount: Number.isNaN(messagesCount) ? 0 : messagesCount,
-        },
+        messagesCount: Number.isNaN(messagesCount) ? 0 : messagesCount,
+      },
+        tags: qualificationFormState.tags,
         updatedAt: new Date().toISOString(),
       };
 
@@ -717,6 +744,7 @@ export default function ProspectsPage () {
           messagesCount: Number.isNaN(messagesCount) ? 0 : messagesCount,
         },
         nextActionDate: fullProspectFormState.nextActionDate,
+        tags: fullProspectFormState.tags,
         notes: fullProspectFormState.notes.trim(),
         updatedAt: new Date().toISOString(),
       };
@@ -827,6 +855,7 @@ export default function ProspectsPage () {
       prospect.phone,
       prospect.whatsapp,
       prospect.notes,
+      ...(prospect.tags ?? []),
     ]
       .join(" ")
       .toLowerCase();
@@ -843,6 +872,8 @@ export default function ProspectsPage () {
       prospectFilters.temperature === "Tous" || prospect.temperature === prospectFilters.temperature;
     const matchesColorType =
       prospectFilters.colorType === "Tous" || prospect.colorType === prospectFilters.colorType;
+    const matchesTag =
+      prospectFilters.tag === "Tous" || (prospect.tags ?? []).includes(prospectFilters.tag);
 
     return (
       matchesSearch &&
@@ -850,7 +881,8 @@ export default function ProspectsPage () {
       matchesStatus &&
       matchesCategory &&
       matchesTemperature &&
-      matchesColorType
+      matchesColorType &&
+      matchesTag
     );
   });
 
@@ -1182,6 +1214,28 @@ export default function ProspectsPage () {
                   ))}
                 </select>
               </label>
+                </div>
+              </fieldset>
+
+              <fieldset className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                <legend className="px-2 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                  Centres d’intérêt / tags
+                </legend>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {PROSPECT_TAGS.map((tag) => (
+                    <label
+                      className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/70 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-emerald-400/40"
+                      key={tag}
+                    >
+                      <input
+                        checked={formState.tags.includes(tag)}
+                        className="h-4 w-4 accent-emerald-400"
+                        onChange={() => updateFormField("tags", toggleProspectTag(formState.tags, tag))}
+                        type="checkbox"
+                      />
+                      {tag}
+                    </label>
+                  ))}
                 </div>
               </fieldset>
 
@@ -1520,6 +1574,24 @@ export default function ProspectsPage () {
                     ))}
                   </select>
                 </label>
+
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Tag
+                  <select
+                    className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                    value={prospectFilters.tag}
+                    onChange={(event) =>
+                      updateProspectFilter("tag", event.target.value as ProspectFilters["tag"])
+                    }
+                  >
+                    <option value="Tous">Tous</option>
+                    {PROSPECT_TAGS.map((tag) => (
+                      <option key={tag} value={tag}>
+                        {tag}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -1571,6 +1643,8 @@ export default function ProspectsPage () {
                   messagesCount: 0,
                 };
                 const conversationHistory = prospect.conversationHistory ?? [];
+                const prospectTags = prospect.tags ?? [];
+                const hasAvoidTag = prospectTags.includes("À éviter");
                 const lastConversationEntry =
                   conversationHistory.length > 0
                     ? conversationHistory[conversationHistory.length - 1]
@@ -1607,6 +1681,19 @@ export default function ProspectsPage () {
                         {prospect.mainPlatform}
                       </span>
                     </div>
+
+                    {prospectTags.length > 0 ? (
+                      <div className="mb-4 flex flex-wrap gap-2">
+                        {prospectTags.map((tag) => (
+                          <span
+                            className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-200"
+                            key={tag}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
 
                     <div className="mb-4 flex flex-wrap gap-2">
                       <button
@@ -1654,6 +1741,12 @@ export default function ProspectsPage () {
                             Fermer
                           </button>
                         </div>
+
+                        {hasAvoidTag ? (
+                          <p className="rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200">
+                            Attention : ce prospect est marqué À éviter.
+                          </p>
+                        ) : null}
 
                         <div className="grid gap-3 md:grid-cols-2">
                           <label className="grid gap-1 text-xs text-slate-300">
@@ -1876,6 +1969,33 @@ export default function ProspectsPage () {
 
                         <fieldset className="rounded-2xl border border-white/10 bg-white/5 p-3">
                           <legend className="px-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                            Centres d’intérêt / tags
+                          </legend>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {PROSPECT_TAGS.map((tag) => (
+                              <label
+                                className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-950 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-emerald-400/40"
+                                key={tag}
+                              >
+                                <input
+                                  checked={fullProspectFormState.tags.includes(tag)}
+                                  className="h-4 w-4 accent-emerald-400"
+                                  onChange={() =>
+                                    updateFullProspectFormField(
+                                      "tags",
+                                      toggleProspectTag(fullProspectFormState.tags, tag),
+                                    )
+                                  }
+                                  type="checkbox"
+                                />
+                                {tag}
+                              </label>
+                            ))}
+                          </div>
+                        </fieldset>
+
+                        <fieldset className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                          <legend className="px-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
                             Activité et interactions
                           </legend>
                           <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -2050,6 +2170,33 @@ export default function ProspectsPage () {
                                 type="date"
                               />
                             </label>
+
+                            <div className="grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-3">
+                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                                Tags
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {PROSPECT_TAGS.map((tag) => (
+                                  <label
+                                    className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-950 px-3 py-2 text-xs font-medium text-slate-200 transition hover:border-emerald-400/40"
+                                    key={tag}
+                                  >
+                                    <input
+                                      checked={qualificationFormState.tags.includes(tag)}
+                                      className="h-4 w-4 accent-emerald-400"
+                                      onChange={() =>
+                                        updateQualificationFormField(
+                                          "tags",
+                                          toggleProspectTag(qualificationFormState.tags, tag),
+                                        )
+                                      }
+                                      type="checkbox"
+                                    />
+                                    {tag}
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
 
                             <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 md:grid-cols-2">
                               <label className="flex items-center gap-3 text-xs text-slate-300">
