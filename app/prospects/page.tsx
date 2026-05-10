@@ -59,6 +59,16 @@ type QualificationFormState = {
   notes: string;
 };
 
+type FilterValue<T extends string> = "Tous" | T;
+
+type ProspectFilters = {
+  platform: FilterValue<Prospect["mainPlatform"]>;
+  status: FilterValue<Prospect["status"]>;
+  category: FilterValue<Prospect["category"]>;
+  temperature: FilterValue<Prospect["temperature"]>;
+  colorType: FilterValue<Prospect["colorType"]>;
+};
+
 const initialFormState: ProspectFormState = {
   firstName: "",
   lastName: "",
@@ -102,6 +112,14 @@ const initialQualificationFormState: QualificationFormState = {
   notes: "",
 };
 
+const initialProspectFilters: ProspectFilters = {
+  platform: "Tous",
+  status: "Tous",
+  category: "Tous",
+  temperature: "Tous",
+  colorType: "Tous",
+};
+
 const socialLinkLabels: Array<{
   key: keyof Prospect["socialLinks"];
   label: string;
@@ -126,6 +144,8 @@ export default function ProspectsPage () {
   const [qualificationFormState, setQualificationFormState] = useState<QualificationFormState>(
     initialQualificationFormState,
   );
+  const [searchQuery, setSearchQuery] = useState("");
+  const [prospectFilters, setProspectFilters] = useState<ProspectFilters>(initialProspectFilters);
 
   useEffect(() => {
     const storedProspects = loadProspects();
@@ -160,6 +180,21 @@ export default function ProspectsPage () {
       ...currentFormState,
       [field]: value,
     }));
+  }
+
+  function updateProspectFilter<Field extends keyof ProspectFilters>(
+    field: Field,
+    value: ProspectFilters[Field],
+  ) {
+    setProspectFilters((currentFilters) => ({
+      ...currentFilters,
+      [field]: value,
+    }));
+  }
+
+  function resetFilters() {
+    setSearchQuery("");
+    setProspectFilters(initialProspectFilters);
   }
 
   function toggleConversationForm(prospectId: string) {
@@ -311,6 +346,48 @@ export default function ProspectsPage () {
     setActiveQualificationProspectId(null);
     setQualificationFormState(initialQualificationFormState);
   }
+
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredProspects = prospects.filter((prospect) => {
+    const searchableText = [
+      prospect.firstName,
+      prospect.lastName,
+      prospect.displayName,
+      prospect.jobTitle,
+      prospect.businessArea,
+      prospect.city,
+      prospect.region,
+      prospect.country,
+      prospect.email,
+      prospect.phone,
+      prospect.whatsapp,
+      prospect.notes,
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    const matchesSearch =
+      !normalizedSearchQuery || searchableText.includes(normalizedSearchQuery);
+    const matchesPlatform =
+      prospectFilters.platform === "Tous" || prospect.mainPlatform === prospectFilters.platform;
+    const matchesStatus =
+      prospectFilters.status === "Tous" || prospect.status === prospectFilters.status;
+    const matchesCategory =
+      prospectFilters.category === "Tous" || prospect.category === prospectFilters.category;
+    const matchesTemperature =
+      prospectFilters.temperature === "Tous" || prospect.temperature === prospectFilters.temperature;
+    const matchesColorType =
+      prospectFilters.colorType === "Tous" || prospect.colorType === prospectFilters.colorType;
+
+    return (
+      matchesSearch &&
+      matchesPlatform &&
+      matchesStatus &&
+      matchesCategory &&
+      matchesTemperature &&
+      matchesColorType
+    );
+  });
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-white">
@@ -705,11 +782,135 @@ export default function ProspectsPage () {
                 <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Liste</p>
                 <h2 className="text-2xl font-bold text-white">Prospects enregistrés</h2>
               </div>
-              <p className="text-sm text-slate-300">Dernière mise à jour côté navigateur.</p>
+              <p className="text-sm text-slate-300">
+                {filteredProspects.length} prospect{filteredProspects.length > 1 ? "s" : ""} affiché{filteredProspects.length > 1 ? "s" : ""} sur {prospects.length}
+              </p>
             </div>
 
+            <section className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_repeat(5,minmax(0,1fr))]">
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Recherche
+                  <input
+                    className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Nom, ville, email, notes..."
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Plateforme
+                  <select
+                    className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                    value={prospectFilters.platform}
+                    onChange={(event) =>
+                      updateProspectFilter("platform", event.target.value as ProspectFilters["platform"])
+                    }
+                  >
+                    <option value="Tous">Tous</option>
+                    {SOCIAL_PLATFORMS.map((platform) => (
+                      <option key={platform} value={platform}>
+                        {platform}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Statut
+                  <select
+                    className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                    value={prospectFilters.status}
+                    onChange={(event) =>
+                      updateProspectFilter("status", event.target.value as ProspectFilters["status"])
+                    }
+                  >
+                    <option value="Tous">Tous</option>
+                    {PROSPECT_STATUSES.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Catégorie
+                  <select
+                    className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                    value={prospectFilters.category}
+                    onChange={(event) =>
+                      updateProspectFilter("category", event.target.value as ProspectFilters["category"])
+                    }
+                  >
+                    <option value="Tous">Toutes</option>
+                    {PROSPECT_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Température
+                  <select
+                    className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                    value={prospectFilters.temperature}
+                    onChange={(event) =>
+                      updateProspectFilter("temperature", event.target.value as ProspectFilters["temperature"])
+                    }
+                  >
+                    <option value="Tous">Toutes</option>
+                    {PROSPECT_TEMPERATURES.map((temperature) => (
+                      <option key={temperature} value={temperature}>
+                        {temperature}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Type couleur
+                  <select
+                    className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                    value={prospectFilters.colorType}
+                    onChange={(event) =>
+                      updateProspectFilter("colorType", event.target.value as ProspectFilters["colorType"])
+                    }
+                  >
+                    <option value="Tous">Tous</option>
+                    {PROSPECT_COLOR_TYPES.map((colorType) => (
+                      <option key={colorType} value={colorType}>
+                        {colorType}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-slate-300">
+                  {filteredProspects.length} prospect{filteredProspects.length > 1 ? "s" : ""} affiché{filteredProspects.length > 1 ? "s" : ""} sur {prospects.length}
+                </p>
+                <button
+                  className="rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/5"
+                  type="button"
+                  onClick={resetFilters}
+                >
+                  Réinitialiser les filtres
+                </button>
+              </div>
+            </section>
+
+            {filteredProspects.length === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-6 text-center text-slate-300">
+                Aucun prospect ne correspond à ta recherche.
+              </div>
+            ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {prospects.map((prospect) => {
+              {filteredProspects.map((prospect) => {
                 const name = prospect.displayName?.trim()
                   ? prospect.displayName
                   : `${prospect.firstName} ${prospect.lastName}`;
@@ -1103,6 +1304,7 @@ export default function ProspectsPage () {
                 );
               })}
             </div>
+            )}
           </section>
         )}
       </section>
