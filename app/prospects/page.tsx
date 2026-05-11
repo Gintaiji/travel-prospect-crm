@@ -168,6 +168,20 @@ type MessageAssistantState = {
   suggestedStatusAppliedProspectId: string | null;
 };
 
+type PotentialDuplicateReason =
+  | "même email"
+  | "même téléphone"
+  | "même WhatsApp"
+  | "même lien profil"
+  | "même réseau social"
+  | "même identité et ville";
+
+type PotentialDuplicateGroup = {
+  id: string;
+  prospects: Prospect[];
+  reasons: PotentialDuplicateReason[];
+};
+
 function calculateProspectScore(prospect: Prospect) {
   const interactionStats = prospect.interactionStats ?? {
     followerSinceDate: "",
@@ -256,6 +270,151 @@ function toggleProspectTag(currentTags: Prospect["tags"], tag: Prospect["tags"][
   }
 
   return [...currentTags, tag];
+}
+
+function normalizeText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function normalizePhone(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function normalizeUrl(value: string) {
+  const trimmedValue = value.trim().toLowerCase();
+
+  if (!trimmedValue) {
+    return "";
+  }
+
+  try {
+    const parsedUrl = new URL(
+      trimmedValue.startsWith("http://") || trimmedValue.startsWith("https://")
+        ? trimmedValue
+        : `https://${trimmedValue}`,
+    );
+    const hostname = parsedUrl.hostname.replace(/^www\./, "");
+    const pathname = parsedUrl.pathname.replace(/\/+$/, "");
+
+    return `${hostname}${pathname}`;
+  } catch {
+    return trimmedValue
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "")
+      .replace(/\/+$/, "");
+  }
+}
+
+function getProspectDuplicateReasons(
+  firstProspect: Prospect,
+  secondProspect: Prospect,
+) {
+  const reasons: PotentialDuplicateReason[] = [];
+  const firstEmail = normalizeEmail(firstProspect.email);
+  const secondEmail = normalizeEmail(secondProspect.email);
+  const firstPhone = normalizePhone(firstProspect.phone);
+  const secondPhone = normalizePhone(secondProspect.phone);
+  const firstWhatsapp = normalizePhone(firstProspect.whatsapp);
+  const secondWhatsapp = normalizePhone(secondProspect.whatsapp);
+  const firstProfileUrl = normalizeUrl(firstProspect.profileUrl);
+  const secondProfileUrl = normalizeUrl(secondProspect.profileUrl);
+  const firstInstagramUrl = normalizeUrl(firstProspect.socialLinks.instagram);
+  const secondInstagramUrl = normalizeUrl(secondProspect.socialLinks.instagram);
+  const firstFacebookUrl = normalizeUrl(firstProspect.socialLinks.facebook);
+  const secondFacebookUrl = normalizeUrl(secondProspect.socialLinks.facebook);
+  const firstLinkedinUrl = normalizeUrl(firstProspect.socialLinks.linkedin);
+  const secondLinkedinUrl = normalizeUrl(secondProspect.socialLinks.linkedin);
+  const sameIdentityAndCity =
+    Boolean(
+      normalizeText(firstProspect.firstName) &&
+        normalizeText(firstProspect.lastName) &&
+        normalizeText(firstProspect.city),
+    ) &&
+    normalizeText(firstProspect.firstName) === normalizeText(secondProspect.firstName) &&
+    normalizeText(firstProspect.lastName) === normalizeText(secondProspect.lastName) &&
+    normalizeText(firstProspect.city) === normalizeText(secondProspect.city);
+
+  if (firstEmail && firstEmail === secondEmail) {
+    reasons.push("même email");
+  }
+
+  if (firstPhone && firstPhone === secondPhone) {
+    reasons.push("même téléphone");
+  }
+
+  if (firstWhatsapp && firstWhatsapp === secondWhatsapp) {
+    reasons.push("même WhatsApp");
+  }
+
+  if (firstProfileUrl && firstProfileUrl === secondProfileUrl) {
+    reasons.push("même lien profil");
+  }
+
+  if (
+    (firstInstagramUrl && firstInstagramUrl === secondInstagramUrl) ||
+    (firstFacebookUrl && firstFacebookUrl === secondFacebookUrl) ||
+    (firstLinkedinUrl && firstLinkedinUrl === secondLinkedinUrl)
+  ) {
+    reasons.push("même réseau social");
+  }
+
+  if (sameIdentityAndCity) {
+    reasons.push("même identité et ville");
+  }
+
+  return reasons;
+}
+
+function findPotentialDuplicates(prospectsToCheck: Prospect[]) {
+  const duplicateGroups: PotentialDuplicateGroup[] = [];
+
+  prospectsToCheck.forEach((prospect, prospectIndex) => {
+    prospectsToCheck.slice(prospectIndex + 1).forEach((comparedProspect) => {
+      const reasons = getProspectDuplicateReasons(prospect, comparedProspect);
+
+      if (reasons.length === 0) {
+        return;
+      }
+
+      const existingGroup = duplicateGroups.find((group) =>
+        group.prospects.some(
+          (groupProspect) =>
+            groupProspect.id === prospect.id || groupProspect.id === comparedProspect.id,
+        ),
+      );
+
+      if (existingGroup) {
+        [prospect, comparedProspect].forEach((duplicateProspect) => {
+          if (!existingGroup.prospects.some((groupProspect) => groupProspect.id === duplicateProspect.id)) {
+            existingGroup.prospects.push(duplicateProspect);
+          }
+        });
+        reasons.forEach((reason) => {
+          if (!existingGroup.reasons.includes(reason)) {
+            existingGroup.reasons.push(reason);
+          }
+        });
+        return;
+      }
+
+      duplicateGroups.push({
+        id: `${prospect.id}-${comparedProspect.id}`,
+        prospects: [prospect, comparedProspect],
+        reasons,
+      });
+    });
+  });
+
+  return duplicateGroups;
 }
 
 function escapeCsvValue(value: string | number | boolean) {
@@ -944,6 +1103,20 @@ export default function ProspectsPage () {
       ...newProspectBase,
       score: calculateProspectScore(newProspectBase),
     };
+    const hasPotentialDuplicate = findPotentialDuplicates([newProspect, ...prospects]).some(
+      (duplicateGroup) =>
+        duplicateGroup.prospects.some((prospect) => prospect.id === newProspect.id),
+    );
+
+    if (hasPotentialDuplicate) {
+      const confirmed = window.confirm(
+        "Un doublon potentiel existe déjà. Ajouter quand même ce prospect ?",
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
 
     const updatedProspects = [newProspect, ...prospects];
     saveProspects(updatedProspects);
@@ -1105,8 +1278,8 @@ export default function ProspectsPage () {
     setFullProspectFormState(initialFullProspectFormState);
   }
 
-  function handleDeleteProspect(prospectId: string) {
-    const confirmed = window.confirm("Supprimer ce prospect ? Cette action est définitive.");
+  function deleteProspectAfterConfirmation(prospectId: string, confirmationMessage: string) {
+    const confirmed = window.confirm(confirmationMessage);
 
     if (!confirmed) {
       return;
@@ -1134,6 +1307,29 @@ export default function ProspectsPage () {
     if (activeMessageAssistantProspectId === prospectId) {
       setActiveMessageAssistantProspectId(null);
       setMessageAssistantState(initialMessageAssistantState);
+    }
+  }
+
+  function handleDeleteProspect(prospectId: string) {
+    deleteProspectAfterConfirmation(
+      prospectId,
+      "Supprimer ce prospect ? Cette action est définitive.",
+    );
+  }
+
+  function handleDeletePotentialDuplicate(prospectId: string) {
+    deleteProspectAfterConfirmation(
+      prospectId,
+      "Supprimer ce doublon potentiel ? Cette action est définitive.",
+    );
+  }
+
+  function handleViewPotentialDuplicate(prospect: Prospect) {
+    setProspectDisplayMode("list");
+    setProspectViewMode("detailed");
+
+    if (activeFullProspectId !== prospect.id) {
+      toggleFullProspectForm(prospect);
     }
   }
 
@@ -1932,6 +2128,7 @@ export default function ProspectsPage () {
   );
   const isDetailedView = prospectViewMode === "detailed";
   const isPipelineView = prospectDisplayMode === "pipeline";
+  const potentialDuplicateGroups = findPotentialDuplicates(prospects);
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-slate-950 px-4 py-6 text-white sm:px-6 sm:py-10">
@@ -2501,6 +2698,82 @@ export default function ProspectsPage () {
           </section>
         ) : (
           <section className="grid gap-5 rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:gap-6 sm:p-8">
+            <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                    Doublons potentiels
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-300">
+                    Aucun prospect n’est fusionné automatiquement. À toi de décider quelle fiche garder.
+                  </p>
+                </div>
+                <span className="rounded-full border border-white/10 bg-slate-950/50 px-3 py-1 text-xs font-semibold text-slate-200">
+                  {potentialDuplicateGroups.length} groupe{potentialDuplicateGroups.length > 1 ? "s" : ""}
+                </span>
+              </div>
+
+              {potentialDuplicateGroups.length === 0 ? (
+                <p className="mt-3 rounded-xl border border-white/10 bg-slate-950/40 p-3 text-sm text-slate-300">
+                  Aucun doublon détecté.
+                </p>
+              ) : (
+                <div className="mt-3 grid gap-3">
+                  {potentialDuplicateGroups.map((duplicateGroup) => (
+                    <article
+                      className="rounded-2xl border border-white/10 bg-slate-950/50 p-3"
+                      key={duplicateGroup.id}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-white">
+                            {duplicateGroup.prospects.length} fiche{duplicateGroup.prospects.length > 1 ? "s" : ""} concernée{duplicateGroup.prospects.length > 1 ? "s" : ""}
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-slate-400">
+                            Raison : {duplicateGroup.reasons.join(", ")}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid gap-2 md:grid-cols-2">
+                        {duplicateGroup.prospects.map((duplicateProspect) => (
+                          <div
+                            className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/5 p-3 sm:flex-row sm:items-center sm:justify-between"
+                            key={duplicateProspect.id}
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-white">
+                                {getProspectDisplayName(duplicateProspect)}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-400">
+                                {duplicateProspect.mainPlatform} · {duplicateProspect.status}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                className="min-h-9 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                                type="button"
+                                onClick={() => handleViewPotentialDuplicate(duplicateProspect)}
+                              >
+                                Voir la fiche
+                              </button>
+                              <button
+                                className="min-h-9 rounded-full border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:bg-red-500/20"
+                                type="button"
+                                onClick={() => handleDeletePotentialDuplicate(duplicateProspect.id)}
+                              >
+                                Supprimer
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
             <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Liste</p>
