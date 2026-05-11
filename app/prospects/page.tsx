@@ -120,6 +120,44 @@ const MESSAGE_ASSISTANT_STYLES = ["Doux", "Naturel", "Direct"] as const;
 type MessageAssistantSituation = (typeof MESSAGE_ASSISTANT_SITUATIONS)[number];
 type MessageAssistantStyle = (typeof MESSAGE_ASSISTANT_STYLES)[number];
 
+const PROSPECT_CSV_COLUMNS = [
+  "firstName",
+  "lastName",
+  "displayName",
+  "jobTitle",
+  "businessArea",
+  "city",
+  "region",
+  "country",
+  "phone",
+  "whatsapp",
+  "email",
+  "mainPlatform",
+  "profileUrl",
+  "facebook",
+  "instagram",
+  "linkedin",
+  "tiktok",
+  "youtube",
+  "otherLink",
+  "category",
+  "status",
+  "temperature",
+  "colorType",
+  "score",
+  "tags",
+  "isFollower",
+  "hasSentMessage",
+  "followerSinceDate",
+  "commentsCount",
+  "interactionsCount",
+  "likesCount",
+  "messagesCount",
+  "lastInteractionDate",
+  "nextActionDate",
+  "notes",
+] as const;
+
 type MessageAssistantState = {
   situation: MessageAssistantSituation;
   style: MessageAssistantStyle;
@@ -218,6 +256,93 @@ function toggleProspectTag(currentTags: Prospect["tags"], tag: Prospect["tags"][
   }
 
   return [...currentTags, tag];
+}
+
+function escapeCsvValue(value: string | number | boolean) {
+  const stringValue = String(value);
+
+  if (!/[",\r\n]/.test(stringValue)) {
+    return stringValue;
+  }
+
+  return `"${stringValue.replaceAll('"', '""')}"`;
+}
+
+function parseCsvRows(csvText: string) {
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentCell = "";
+  let isInsideQuotedCell = false;
+
+  for (let index = 0; index < csvText.length; index += 1) {
+    const currentCharacter = csvText[index];
+    const nextCharacter = csvText[index + 1];
+
+    if (currentCharacter === '"') {
+      if (isInsideQuotedCell && nextCharacter === '"') {
+        currentCell += '"';
+        index += 1;
+      } else {
+        isInsideQuotedCell = !isInsideQuotedCell;
+      }
+      continue;
+    }
+
+    if (currentCharacter === "," && !isInsideQuotedCell) {
+      currentRow.push(currentCell);
+      currentCell = "";
+      continue;
+    }
+
+    if ((currentCharacter === "\n" || currentCharacter === "\r") && !isInsideQuotedCell) {
+      currentRow.push(currentCell);
+      rows.push(currentRow);
+      currentRow = [];
+      currentCell = "";
+
+      if (currentCharacter === "\r" && nextCharacter === "\n") {
+        index += 1;
+      }
+      continue;
+    }
+
+    currentCell += currentCharacter;
+  }
+
+  if (isInsideQuotedCell) {
+    return null;
+  }
+
+  if (currentCell || currentRow.length > 0) {
+    currentRow.push(currentCell);
+    rows.push(currentRow);
+  }
+
+  return rows.filter((row) => row.some((cell) => cell.trim()));
+}
+
+function normalizeCsvNumber(value: string) {
+  const parsedValue = Number(value);
+
+  return Number.isNaN(parsedValue) ? 0 : parsedValue;
+}
+
+function normalizeCsvBoolean(value: string) {
+  const normalizedValue = value.trim().toLowerCase();
+
+  return ["true", "1", "yes", "oui", "vrai"].includes(normalizedValue);
+}
+
+function normalizeCsvCell(value: string | undefined) {
+  return (value ?? "").trim();
+}
+
+function pickAllowedCsvValue<T extends string>(
+  value: string,
+  allowedValues: readonly T[],
+  fallbackValue: T,
+) {
+  return allowedValues.includes(value as T) ? (value as T) : fallbackValue;
 }
 
 function getProspectDisplayName(prospect: Prospect) {
@@ -550,6 +675,7 @@ export default function ProspectsPage () {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [isFormVisible, setIsFormVisible] = useState(false);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
+  const csvImportFileInputRef = useRef<HTMLInputElement | null>(null);
   const [formState, setFormState] = useState<ProspectFormState>(initialFormState);
   const [activeConversationProspectId, setActiveConversationProspectId] = useState<string | null>(null);
   const [conversationFormState, setConversationFormState] = useState<ConversationFormState>(
@@ -1317,15 +1443,272 @@ export default function ProspectsPage () {
     setIsBackupError(false);
   }
 
+  function handleExportProspectsCsv() {
+    const today = new Date().toISOString().slice(0, 10);
+    const csvRows = prospects.map((prospect) => {
+      const interactionStats = prospect.interactionStats ?? {
+        followerSinceDate: "",
+        commentsCount: 0,
+        interactionsCount: 0,
+        likesCount: 0,
+        messagesCount: 0,
+      };
+      const csvValues: Record<(typeof PROSPECT_CSV_COLUMNS)[number], string | number | boolean> = {
+        firstName: prospect.firstName,
+        lastName: prospect.lastName,
+        displayName: prospect.displayName,
+        jobTitle: prospect.jobTitle,
+        businessArea: prospect.businessArea,
+        city: prospect.city,
+        region: prospect.region,
+        country: prospect.country,
+        phone: prospect.phone,
+        whatsapp: prospect.whatsapp,
+        email: prospect.email,
+        mainPlatform: prospect.mainPlatform,
+        profileUrl: prospect.profileUrl,
+        facebook: prospect.socialLinks.facebook,
+        instagram: prospect.socialLinks.instagram,
+        linkedin: prospect.socialLinks.linkedin,
+        tiktok: prospect.socialLinks.tiktok,
+        youtube: prospect.socialLinks.youtube,
+        otherLink: prospect.socialLinks.other,
+        category: prospect.category,
+        status: prospect.status,
+        temperature: prospect.temperature,
+        colorType: prospect.colorType,
+        score: prospect.score,
+        tags: (prospect.tags ?? []).join("|"),
+        isFollower: prospect.isFollower,
+        hasSentMessage: prospect.hasSentMessage,
+        followerSinceDate: interactionStats.followerSinceDate,
+        commentsCount: interactionStats.commentsCount,
+        interactionsCount: interactionStats.interactionsCount,
+        likesCount: interactionStats.likesCount,
+        messagesCount: interactionStats.messagesCount,
+        lastInteractionDate: prospect.lastInteractionDate,
+        nextActionDate: prospect.nextActionDate,
+        notes: prospect.notes,
+      };
+
+      return PROSPECT_CSV_COLUMNS.map((column) => escapeCsvValue(csvValues[column])).join(",");
+    });
+    const csvContent = [
+      PROSPECT_CSV_COLUMNS.join(","),
+      ...csvRows,
+    ].join("\r\n");
+    const csvBlob = new Blob([`\uFEFF${csvContent}`], { type: "text/csv;charset=utf-8" });
+    const csvUrl = URL.createObjectURL(csvBlob);
+    const downloadLink = document.createElement("a");
+
+    downloadLink.href = csvUrl;
+    downloadLink.download = `travel-prospect-crm-prospects-${today}.csv`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+    URL.revokeObjectURL(csvUrl);
+    setBackupMessage("");
+    setIsBackupError(false);
+  }
+
   function resetImportFileInput() {
     if (importFileInputRef.current) {
       importFileInputRef.current.value = "";
     }
   }
 
+  function resetCsvImportFileInput() {
+    if (csvImportFileInputRef.current) {
+      csvImportFileInputRef.current.value = "";
+    }
+  }
+
   function showInvalidImportMessage() {
     setBackupMessage("Fichier invalide. Import impossible.");
     setIsBackupError(true);
+  }
+
+  function showInvalidCsvImportMessage() {
+    setBackupMessage("CSV invalide. Import impossible.");
+    setIsBackupError(true);
+  }
+
+  function buildProspectFromCsvRow(
+    headerIndexes: Record<string, number>,
+    row: string[],
+    now: string,
+  ) {
+    const getCell = (column: (typeof PROSPECT_CSV_COLUMNS)[number]) =>
+      normalizeCsvCell(row[headerIndexes[column]]);
+    const importedTags = getCell("tags")
+      .split("|")
+      .map((tag) => tag.trim())
+      .filter((tag): tag is Prospect["tags"][number] =>
+        PROSPECT_TAGS.includes(tag as Prospect["tags"][number]),
+      );
+    const prospectBase: Prospect = {
+      id: createProspectId(),
+      firstName: getCell("firstName"),
+      lastName: getCell("lastName"),
+      displayName: getCell("displayName"),
+      jobTitle: getCell("jobTitle"),
+      businessArea: getCell("businessArea"),
+      city: getCell("city"),
+      region: getCell("region"),
+      country: getCell("country"),
+      phone: getCell("phone"),
+      whatsapp: getCell("whatsapp"),
+      email: getCell("email"),
+      mainPlatform: pickAllowedCsvValue(
+        getCell("mainPlatform"),
+        SOCIAL_PLATFORMS,
+        SOCIAL_PLATFORMS[0],
+      ),
+      profileUrl: getCell("profileUrl"),
+      socialLinks: {
+        facebook: getCell("facebook"),
+        instagram: getCell("instagram"),
+        linkedin: getCell("linkedin"),
+        tiktok: getCell("tiktok"),
+        youtube: getCell("youtube"),
+        other: getCell("otherLink"),
+      },
+      category: pickAllowedCsvValue(
+        getCell("category"),
+        PROSPECT_CATEGORIES,
+        PROSPECT_CATEGORIES[0],
+      ),
+      status: pickAllowedCsvValue(
+        getCell("status"),
+        PROSPECT_STATUSES,
+        PROSPECT_STATUSES[0],
+      ),
+      temperature: pickAllowedCsvValue(
+        getCell("temperature"),
+        PROSPECT_TEMPERATURES,
+        PROSPECT_TEMPERATURES[0],
+      ),
+      colorType: pickAllowedCsvValue(
+        getCell("colorType"),
+        PROSPECT_COLOR_TYPES,
+        PROSPECT_COLOR_TYPES[0],
+      ),
+      score: normalizeCsvNumber(getCell("score")),
+      tags: importedTags,
+      isFollower: normalizeCsvBoolean(getCell("isFollower")),
+      hasSentMessage: normalizeCsvBoolean(getCell("hasSentMessage")),
+      interactionStats: {
+        followerSinceDate: getCell("followerSinceDate"),
+        commentsCount: normalizeCsvNumber(getCell("commentsCount")),
+        interactionsCount: normalizeCsvNumber(getCell("interactionsCount")),
+        likesCount: normalizeCsvNumber(getCell("likesCount")),
+        messagesCount: normalizeCsvNumber(getCell("messagesCount")),
+      },
+      lastInteractionDate: getCell("lastInteractionDate"),
+      nextActionDate: getCell("nextActionDate"),
+      conversationHistory: [],
+      notes: getCell("notes"),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    return {
+      ...prospectBase,
+      score: calculateProspectScore(prospectBase),
+    };
+  }
+
+  function handleImportProspectsCsv(event: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFile = event.target.files?.[0];
+
+    if (!selectedFile) {
+      return;
+    }
+
+    if (!selectedFile.name.toLowerCase().endsWith(".csv")) {
+      showInvalidCsvImportMessage();
+      resetCsvImportFileInput();
+      return;
+    }
+
+    const fileReader = new FileReader();
+
+    fileReader.onload = () => {
+      try {
+        const csvRows = parseCsvRows(String(fileReader.result).replace(/^\uFEFF/, ""));
+
+        if (!csvRows || csvRows.length < 2) {
+          showInvalidCsvImportMessage();
+          resetCsvImportFileInput();
+          return;
+        }
+
+        const header = csvRows[0].map((columnName) => columnName.trim());
+        const headerIndexes = PROSPECT_CSV_COLUMNS.reduce(
+          (indexes, columnName) => ({
+            ...indexes,
+            [columnName]: header.indexOf(columnName),
+          }),
+          {} as Record<(typeof PROSPECT_CSV_COLUMNS)[number], number>,
+        );
+        const hasKnownColumn = PROSPECT_CSV_COLUMNS.some(
+          (columnName) => headerIndexes[columnName] >= 0,
+        );
+
+        if (!hasKnownColumn) {
+          showInvalidCsvImportMessage();
+          resetCsvImportFileInput();
+          return;
+        }
+
+        const confirmed = window.confirm(
+          "Importer ce CSV ? Les prospects seront ajoutés à la liste actuelle.",
+        );
+
+        if (!confirmed) {
+          resetCsvImportFileInput();
+          return;
+        }
+
+        const now = new Date().toISOString();
+        const importedProspects = csvRows
+          .slice(1)
+          .filter((row) => row.some((cell) => cell.trim()))
+          .map((row) => buildProspectFromCsvRow(headerIndexes, row, now));
+
+        if (importedProspects.length === 0) {
+          showInvalidCsvImportMessage();
+          resetCsvImportFileInput();
+          return;
+        }
+
+        const updatedProspects = [...importedProspects, ...prospects];
+
+        saveProspects(updatedProspects);
+        setProspects(updatedProspects);
+        setActiveConversationProspectId(null);
+        setConversationFormState(initialConversationFormState);
+        setActiveQualificationProspectId(null);
+        setQualificationFormState(initialQualificationFormState);
+        setActiveFullProspectId(null);
+        setFullProspectFormState(initialFullProspectFormState);
+        setActiveMessageAssistantProspectId(null);
+        setMessageAssistantState(initialMessageAssistantState);
+        setBackupMessage("CSV importé avec succès.");
+        setIsBackupError(false);
+        resetCsvImportFileInput();
+      } catch {
+        showInvalidCsvImportMessage();
+        resetCsvImportFileInput();
+      }
+    };
+
+    fileReader.onerror = () => {
+      showInvalidCsvImportMessage();
+      resetCsvImportFileInput();
+    };
+
+    fileReader.readAsText(selectedFile);
   }
 
   function handleImportProspects(event: React.ChangeEvent<HTMLInputElement>) {
@@ -1579,7 +1962,7 @@ export default function ProspectsPage () {
         </header>
 
         <section className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-4 sm:mb-8">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="grid gap-4">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
                 Sauvegarde des données
@@ -1598,24 +1981,59 @@ export default function ProspectsPage () {
               ) : null}
             </div>
 
-            <div className="flex w-full flex-wrap gap-2 md:w-auto">
-              <button
-                className="min-h-10 flex-1 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10 sm:flex-none"
-                type="button"
-                onClick={handleExportProspects}
-              >
-                Exporter les prospects
-              </button>
-              <label className="min-h-10 flex-1 cursor-pointer rounded-full border border-white/10 px-4 py-2 text-center text-xs font-semibold text-slate-200 transition hover:bg-white/5 sm:flex-none">
-                Importer une sauvegarde
-                <input
-                  ref={importFileInputRef}
-                  accept=".json,application/json"
-                  className="hidden"
-                  type="file"
-                  onChange={handleImportProspects}
-                />
-              </label>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Import / export JSON
+                </p>
+                <div className="mt-3 flex w-full flex-wrap gap-2">
+                  <button
+                    className="min-h-10 flex-1 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10 sm:flex-none"
+                    type="button"
+                    onClick={handleExportProspects}
+                  >
+                    Exporter les prospects
+                  </button>
+                  <label className="min-h-10 flex-1 cursor-pointer rounded-full border border-white/10 px-4 py-2 text-center text-xs font-semibold text-slate-200 transition hover:bg-white/5 sm:flex-none">
+                    Importer une sauvegarde
+                    <input
+                      ref={importFileInputRef}
+                      accept=".json,application/json"
+                      className="hidden"
+                      type="file"
+                      onChange={handleImportProspects}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                  Import / export CSV
+                </p>
+                <p className="mt-2 text-xs leading-5 text-slate-300">
+                  Le CSV permet d’importer une liste préparée depuis Excel ou Google Sheets.
+                </p>
+                <div className="mt-3 flex w-full flex-wrap gap-2">
+                  <button
+                    className="min-h-10 flex-1 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10 sm:flex-none"
+                    type="button"
+                    onClick={handleExportProspectsCsv}
+                  >
+                    Exporter en CSV
+                  </button>
+                  <label className="min-h-10 flex-1 cursor-pointer rounded-full border border-white/10 px-4 py-2 text-center text-xs font-semibold text-slate-200 transition hover:bg-white/5 sm:flex-none">
+                    Importer un CSV
+                    <input
+                      ref={csvImportFileInputRef}
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      type="file"
+                      onChange={handleImportProspectsCsv}
+                    />
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
         </section>
