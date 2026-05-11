@@ -126,6 +126,8 @@ type MessageAssistantState = {
   generatedMessage: string;
   copiedProspectId: string | null;
   addedHistoryProspectId: string | null;
+  suggestedFollowUpAppliedProspectId: string | null;
+  suggestedStatusAppliedProspectId: string | null;
 };
 
 function calculateProspectScore(prospect: Prospect) {
@@ -329,6 +331,8 @@ const initialMessageAssistantState: MessageAssistantState = {
   generatedMessage: "",
   copiedProspectId: null,
   addedHistoryProspectId: null,
+  suggestedFollowUpAppliedProspectId: null,
+  suggestedStatusAppliedProspectId: null,
 };
 
 const socialLinkLabels: Array<{
@@ -444,6 +448,65 @@ function getMessageAssistantObjective(situation: MessageAssistantSituation) {
   };
 
   return objectiveBySituation[situation];
+}
+
+function getMessageAssistantNextAction(situation: MessageAssistantSituation) {
+  const nextActionBySituation: Record<MessageAssistantSituation, string> = {
+    "Commentaire public": "Surveiller si la personne répond ou interagit, puis envisager une demande d’ajout.",
+    "Demande d’ajout / connexion": "Attendre l’acceptation, puis envoyer un premier message privé.",
+    "Premier message privé": "Attendre une réponse, puis qualifier l’intérêt voyage.",
+    "Relance après silence": "Relancer une dernière fois plus tard si aucun retour, puis clôturer proprement.",
+    "Question de qualification voyage": "Selon la réponse, proposer une transition douce vers le club privé.",
+    "Transition vers le club privé": "Si la personne est curieuse, proposer une présentation simple.",
+    "Invitation présentation": "Programmer ou envoyer la présentation, puis prévoir un suivi.",
+    "Suivi après présentation": "Noter son retour et classer la personne : intéressée, pas maintenant ou refus.",
+    "Relance pas maintenant": "Prévoir une relance plus tard sans pression.",
+    "Message de clôture propre": "Ne plus relancer sauf si la personne revient d’elle-même.",
+  };
+
+  return nextActionBySituation[situation];
+}
+
+function getMessageAssistantSuggestedFollowUpDays(situation: MessageAssistantSituation) {
+  const suggestedFollowUpDaysBySituation: Record<MessageAssistantSituation, number | null> = {
+    "Commentaire public": null,
+    "Demande d’ajout / connexion": 3,
+    "Premier message privé": 3,
+    "Relance après silence": 7,
+    "Question de qualification voyage": 3,
+    "Transition vers le club privé": 3,
+    "Invitation présentation": 1,
+    "Suivi après présentation": 3,
+    "Relance pas maintenant": 30,
+    "Message de clôture propre": null,
+  };
+
+  return suggestedFollowUpDaysBySituation[situation];
+}
+
+function formatSuggestedFollowUpLabel(daysToAdd: number | null) {
+  if (daysToAdd === null) {
+    return "Aucune relance automatique suggérée";
+  }
+
+  return `Relance suggérée : dans ${daysToAdd} jour${daysToAdd > 1 ? "s" : ""}`;
+}
+
+function getMessageAssistantSuggestedStatus(situation: MessageAssistantSituation) {
+  const suggestedStatusBySituation: Record<MessageAssistantSituation, Prospect["status"] | null> = {
+    "Commentaire public": null,
+    "Demande d’ajout / connexion": "Contact lancé",
+    "Premier message privé": "Contact lancé",
+    "Relance après silence": "À relancer",
+    "Question de qualification voyage": "Conversation ouverte",
+    "Transition vers le club privé": "Intérêt voyage détecté",
+    "Invitation présentation": "Présentation proposée",
+    "Suivi après présentation": "Présentation faite",
+    "Relance pas maintenant": "Pas maintenant",
+    "Message de clôture propre": "Refus",
+  };
+
+  return suggestedStatusBySituation[situation];
 }
 
 function generateProspectMessage(
@@ -569,7 +632,7 @@ export default function ProspectsPage () {
     }));
   }
 
-  function updateMessageAssistantField<Field extends keyof Omit<MessageAssistantState, "copiedProspectId">>(
+  function updateMessageAssistantField<Field extends "situation" | "style">(
     field: Field,
     value: MessageAssistantState[Field],
   ) {
@@ -578,6 +641,8 @@ export default function ProspectsPage () {
       [field]: value,
       copiedProspectId: null,
       addedHistoryProspectId: null,
+      suggestedFollowUpAppliedProspectId: null,
+      suggestedStatusAppliedProspectId: null,
     }));
   }
 
@@ -1036,7 +1101,117 @@ export default function ProspectsPage () {
       ),
       copiedProspectId: null,
       addedHistoryProspectId: null,
+      suggestedFollowUpAppliedProspectId: null,
+      suggestedStatusAppliedProspectId: null,
     }));
+  }
+
+  function handleApplySuggestedFollowUp(prospect: Prospect) {
+    const suggestedFollowUpDays = getMessageAssistantSuggestedFollowUpDays(messageAssistantState.situation);
+
+    if (suggestedFollowUpDays === null) {
+      return;
+    }
+
+    const nextActionDate = formatFutureLocalDate(suggestedFollowUpDays);
+    const updatedProspects = prospects.map((currentProspect) => {
+      if (currentProspect.id !== prospect.id) {
+        return currentProspect;
+      }
+
+      return {
+        ...currentProspect,
+        nextActionDate,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    saveProspects(updatedProspects);
+    setProspects(updatedProspects);
+
+    if (activeQualificationProspectId === prospect.id) {
+      setQualificationFormState((currentFormState) => ({
+        ...currentFormState,
+        nextActionDate,
+      }));
+    }
+
+    if (activeFullProspectId === prospect.id) {
+      setFullProspectFormState((currentFormState) => ({
+        ...currentFormState,
+        nextActionDate,
+      }));
+    }
+
+    setMessageAssistantState((currentState) => ({
+      ...currentState,
+      suggestedFollowUpAppliedProspectId: prospect.id,
+    }));
+    window.setTimeout(() => {
+      setMessageAssistantState((currentState) => ({
+        ...currentState,
+        suggestedFollowUpAppliedProspectId:
+          currentState.suggestedFollowUpAppliedProspectId === prospect.id
+            ? null
+            : currentState.suggestedFollowUpAppliedProspectId,
+      }));
+    }, 1800);
+  }
+
+  function handleApplySuggestedStatus(prospect: Prospect) {
+    const suggestedStatus = getMessageAssistantSuggestedStatus(messageAssistantState.situation);
+
+    if (suggestedStatus === null) {
+      return;
+    }
+
+    const updatedProspects = prospects.map((currentProspect) => {
+      if (currentProspect.id !== prospect.id) {
+        return currentProspect;
+      }
+
+      const updatedProspect: Prospect = {
+        ...currentProspect,
+        status: suggestedStatus,
+        updatedAt: new Date().toISOString(),
+      };
+
+      return {
+        ...updatedProspect,
+        score: calculateProspectScore(updatedProspect),
+      };
+    });
+
+    saveProspects(updatedProspects);
+    setProspects(updatedProspects);
+
+    if (activeQualificationProspectId === prospect.id) {
+      setQualificationFormState((currentFormState) => ({
+        ...currentFormState,
+        status: suggestedStatus,
+      }));
+    }
+
+    if (activeFullProspectId === prospect.id) {
+      setFullProspectFormState((currentFormState) => ({
+        ...currentFormState,
+        status: suggestedStatus,
+      }));
+    }
+
+    setMessageAssistantState((currentState) => ({
+      ...currentState,
+      suggestedStatusAppliedProspectId: prospect.id,
+    }));
+    window.setTimeout(() => {
+      setMessageAssistantState((currentState) => ({
+        ...currentState,
+        suggestedStatusAppliedProspectId:
+          currentState.suggestedStatusAppliedProspectId === prospect.id
+            ? null
+            : currentState.suggestedStatusAppliedProspectId,
+      }));
+    }, 1800);
   }
 
   async function handleCopyProspectMessage(prospectId: string) {
@@ -1062,7 +1237,7 @@ export default function ProspectsPage () {
       date: today,
       channel: prospect.mainPlatform,
       content: messageAssistantState.generatedMessage.trim(),
-      nextAction: "",
+      nextAction: getMessageAssistantNextAction(messageAssistantState.situation),
     };
     const updatedProspects = prospects.map((currentProspect) => {
       if (currentProspect.id !== prospect.id) {
@@ -2352,6 +2527,18 @@ export default function ProspectsPage () {
                 const isQualificationFormVisible = activeQualificationProspectId === prospect.id;
                 const isFullProspectFormVisible = activeFullProspectId === prospect.id;
                 const isMessageAssistantVisible = activeMessageAssistantProspectId === prospect.id;
+                const messageAssistantNextAction = getMessageAssistantNextAction(messageAssistantState.situation);
+                const messageAssistantSuggestedFollowUpDays = getMessageAssistantSuggestedFollowUpDays(
+                  messageAssistantState.situation,
+                );
+                const messageAssistantSuggestedFollowUpLabel = formatSuggestedFollowUpLabel(
+                  messageAssistantSuggestedFollowUpDays,
+                );
+                const messageAssistantSuggestedStatus = getMessageAssistantSuggestedStatus(
+                  messageAssistantState.situation,
+                );
+                const messageAssistantSuggestedStatusLabel =
+                  messageAssistantSuggestedStatus ?? "garder le statut actuel";
                 const priorityLabel =
                   prospect.score >= 75
                     ? "Priorité haute"
@@ -2674,6 +2861,67 @@ export default function ProspectsPage () {
                             </span>
                           )}
                         </div>
+
+                        {messageAssistantState.generatedMessage ? (
+                          <div className="grid gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                                Prochaine action conseillée
+                              </p>
+                              <p className="mt-2 text-sm leading-6 text-slate-100">
+                                {messageAssistantNextAction}
+                              </p>
+                            </div>
+
+                            <div className="grid gap-2 border-t border-white/10 pt-3 md:grid-cols-2">
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                  Relance
+                                </p>
+                                <p className="mt-1 text-sm text-slate-100">
+                                  {messageAssistantSuggestedFollowUpLabel}
+                                </p>
+                                {messageAssistantSuggestedFollowUpDays !== null ? (
+                                  <button
+                                    className="mt-3 min-h-10 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+                                    type="button"
+                                    onClick={() => handleApplySuggestedFollowUp(prospect)}
+                                  >
+                                    Appliquer la relance suggérée
+                                  </button>
+                                ) : null}
+                                {messageAssistantState.suggestedFollowUpAppliedProspectId === prospect.id ? (
+                                  <p className="mt-2 text-xs font-medium text-emerald-300">
+                                    Relance suggérée appliquée.
+                                  </p>
+                                ) : null}
+                              </div>
+
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                                  Statut
+                                </p>
+                                <p className="mt-1 text-sm text-slate-100">
+                                  Statut suggéré : {messageAssistantSuggestedStatusLabel}
+                                </p>
+                                {messageAssistantSuggestedStatus ? (
+                                  <button
+                                    className="mt-3 min-h-10 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+                                    type="button"
+                                    onClick={() => handleApplySuggestedStatus(prospect)}
+                                  >
+                                    Appliquer le statut suggéré
+                                  </button>
+                                ) : null}
+                                {messageAssistantState.suggestedStatusAppliedProspectId === prospect.id ? (
+                                  <p className="mt-2 text-xs font-medium text-emerald-300">
+                                    Statut suggéré appliqué.
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
 
                         <div className="flex flex-wrap items-center gap-3">
                           <button
