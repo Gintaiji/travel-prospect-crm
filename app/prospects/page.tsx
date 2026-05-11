@@ -103,12 +103,16 @@ type ProspectViewMode = "compact" | "detailed";
 type ProspectDisplayMode = "list" | "pipeline";
 
 const MESSAGE_ASSISTANT_SITUATIONS = [
-  "Réagir à un post voyage",
+  "Commentaire public",
+  "Demande d’ajout / connexion",
   "Premier message privé",
-  "Relance douce",
-  "Transition vers Travel Advantage",
-  "Proposition de présentation",
-  "Après un refus / pas maintenant",
+  "Relance après silence",
+  "Question de qualification voyage",
+  "Transition vers le club privé",
+  "Invitation présentation",
+  "Suivi après présentation",
+  "Relance pas maintenant",
+  "Message de clôture propre",
 ] as const;
 
 const MESSAGE_ASSISTANT_STYLES = ["Doux", "Naturel", "Direct"] as const;
@@ -121,6 +125,7 @@ type MessageAssistantState = {
   style: MessageAssistantStyle;
   generatedMessage: string;
   copiedProspectId: string | null;
+  addedHistoryProspectId: string | null;
 };
 
 function calculateProspectScore(prospect: Prospect) {
@@ -323,6 +328,7 @@ const initialMessageAssistantState: MessageAssistantState = {
   style: MESSAGE_ASSISTANT_STYLES[1],
   generatedMessage: "",
   copiedProspectId: null,
+  addedHistoryProspectId: null,
 };
 
 const socialLinkLabels: Array<{
@@ -337,6 +343,49 @@ const socialLinkLabels: Array<{
   { key: "other", label: "Autre" },
 ];
 
+function getNaturalNoteHint(notes: string) {
+  const cleanNotes = notes.trim();
+  const normalizedNotes = cleanNotes.toLowerCase();
+  const vagueNotes = [
+    "test",
+    "à relancer",
+    "a relancer",
+    "chaud",
+    "tiède",
+    "tiede",
+    "froid",
+    "famille",
+    "ok",
+    "vu",
+  ];
+
+  if (
+    cleanNotes.length < 18 ||
+    cleanNotes.split(/\s+/).length < 4 ||
+    vagueNotes.includes(normalizedNotes)
+  ) {
+    return "";
+  }
+
+  if (normalizedNotes.includes("famille")) {
+    return " J’ai repensé à ce que tu disais sur les voyages en famille.";
+  }
+
+  if (normalizedNotes.includes("portugal")) {
+    return " J’ai repensé à ce que tu disais sur le Portugal.";
+  }
+
+  if (normalizedNotes.includes("hôtel") || normalizedNotes.includes("hotel")) {
+    return " J’ai repensé à ce que tu disais sur les séjours et les hôtels.";
+  }
+
+  if (normalizedNotes.includes("bon plan") || normalizedNotes.includes("bons plans")) {
+    return " J’ai repensé à ce que tu disais sur les bons plans voyage.";
+  }
+
+  return "";
+}
+
 function buildMessageAssistantContext(prospect: Prospect) {
   const firstName = prospect.firstName.trim();
   const displayName = prospect.displayName.trim();
@@ -345,10 +394,13 @@ function buildMessageAssistantContext(prospect: Prospect) {
   const notes = prospect.notes.trim();
   const location = [city, country].filter(Boolean).join(", ");
   const tags = prospect.tags ?? [];
+  const hasTag = (searchedTag: string) =>
+    tags.some((tag) => tag.toLowerCase() === searchedTag.toLowerCase());
   const tagInsights = [
-    tags.includes("Famille") ? "voyages en famille" : "",
-    tags.includes("Bons plans") ? "bons plans voyage" : "",
-    tags.includes("Entrepreneur") || tags.includes("Business") ? "opportunité ou projet autour du voyage" : "",
+    hasTag("Famille") ? "les voyages en famille" : "",
+    hasTag("Bons plans") ? "les bons plans" : "",
+    hasTag("Hôtel") || hasTag("Hotel") ? "le confort hôtel" : "",
+    hasTag("Entrepreneur") || hasTag("Business") ? "la liberté et les projets autour du voyage" : "",
   ].filter(Boolean);
 
   return {
@@ -357,22 +409,41 @@ function buildMessageAssistantContext(prospect: Prospect) {
     location,
     platform: prospect.mainPlatform,
     temperature: prospect.temperature,
-    hasAvoidTag: tags.includes("À éviter"),
-    tagHint: tagInsights.length > 0 ? ` J'ai pensé à ${tagInsights.join(", ")}.` : "",
-    notesHint: notes ? `J'ai noté aussi : ${notes.slice(0, 120)}${notes.length > 120 ? "..." : ""}` : "",
+    hasAvoidTag: hasTag("À éviter"),
+    qualificationHint: tagInsights.length > 0 ? tagInsights.join(", ") : "",
+    naturalNoteHint: getNaturalNoteHint(notes),
   };
 }
 
 function adaptMessageTone(message: string, style: MessageAssistantStyle) {
   if (style === "Doux") {
-    return `${message} Bien sûr, aucun souci si ce n'est pas le moment.`;
+    return `${message} Bien sûr, aucun souci si ce n’est pas le moment.`;
   }
 
   if (style === "Direct") {
-    return message.replace("je me demandais", "je voulais te demander");
+    return message
+      .replace("je me permets de", "je")
+      .replace("Si tu veux,", "Si ça t’intéresse,");
   }
 
   return message;
+}
+
+function getMessageAssistantObjective(situation: MessageAssistantSituation) {
+  const objectiveBySituation: Record<MessageAssistantSituation, string> = {
+    "Commentaire public": "Objectif : ouvrir la conversation sans vendre.",
+    "Demande d’ajout / connexion": "Objectif : créer un premier lien naturel.",
+    "Premier message privé": "Objectif : démarrer l’échange simplement.",
+    "Relance après silence": "Objectif : relancer sans pression.",
+    "Question de qualification voyage": "Objectif : qualifier l’intérêt voyage.",
+    "Transition vers le club privé": "Objectif : faire le lien avec le club privé.",
+    "Invitation présentation": "Objectif : proposer une présentation simple.",
+    "Suivi après présentation": "Objectif : recueillir un retour à chaud.",
+    "Relance pas maintenant": "Objectif : respecter le timing et garder le contact.",
+    "Message de clôture propre": "Objectif : clore sans tension.",
+  };
+
+  return objectiveBySituation[situation];
 }
 
 function generateProspectMessage(
@@ -381,23 +452,32 @@ function generateProspectMessage(
   style: MessageAssistantStyle,
 ) {
   const context = buildMessageAssistantContext(prospect);
-  const greeting = context.greetingName ? `Hello ${context.greetingName}, ` : "Hello, ";
-  const platformMention = context.platform ? `sur ${context.platform}` : "ici";
-  const locationMention = context.location ? ` depuis ${context.location}` : "";
-  const tagMention = context.tagHint;
-  const notesMention = context.notesHint ? ` ${context.notesHint}` : "";
+  const greeting = context.greetingName ? `Salut ${context.greetingName}, ` : "Salut, ";
+  const platformMention = context.platform ? ` sur ${context.platform}` : "";
   const warmTemperatureMention =
     context.temperature === "Chaud" || context.temperature === "Tiède"
-      ? "Comme tu sembles déjà sensible au sujet du voyage, "
+      ? "Comme le sujet voyage semble déjà te parler, "
       : "";
+  const qualificationQuestion = context.qualificationHint
+    ? `Quand tu voyages, tu es plutôt sensible à ${context.qualificationHint}, ou tu cherches autre chose en priorité ?`
+    : "Quand tu voyages, tu cherches plutôt les bons plans, le confort, ou les expériences qui sortent un peu du classique ?";
+  const privateOpeningByStyle: Record<MessageAssistantStyle, string> = {
+    Doux: `${greeting}j’ai vu que tu partageais pas mal de choses autour du voyage. Tu voyages souvent en ce moment ou c’est plutôt un projet que tu prépares tranquillement ?`,
+    Naturel: `${greeting}j’ai vu passer ton contenu autour du voyage. Tu es plutôt du genre à partir dès que possible ou à préparer tes voyages longtemps à l’avance ?`,
+    Direct: `${greeting}je t’écris parce que j’ai vu que le voyage semblait t’intéresser. Tu voyages souvent ou tu cherches plutôt de nouvelles idées pour tes prochains départs ?`,
+  };
 
   const messageBySituation: Record<MessageAssistantSituation, string> = {
-    "Réagir à un post voyage": `${greeting}j'ai vu ton post voyage ${platformMention}${locationMention}, ça m'a donné envie de te demander : c'est une destination que tu recommanderais ?${tagMention}${notesMention}`,
-    "Premier message privé": `${greeting}je me permets de t'écrire simplement parce que ton profil m'a interpellé autour du voyage. Tu voyages plutôt pour te déconnecter, découvrir, ou les deux ?${tagMention}${notesMention}`,
-    "Relance douce": `${greeting}je reviens vers toi tranquillement, sans pression. Je voulais juste savoir si le sujet voyage t'intéresse toujours, ou si je garde ça pour plus tard.${tagMention}${notesMention}`,
-    "Transition vers Travel Advantage": `${greeting}je te demande parce que je travaille aussi autour d'une plateforme liée au voyage. L'idée, c'est d'aider les gens à voyager plus intelligemment avec des avantages membres.${tagMention} Si ça t'intrigue, je peux t'expliquer simplement.`,
-    "Proposition de présentation": `${greeting}${warmTemperatureMention}je peux te montrer le concept en quelques minutes, simplement, pour que tu voies si ça te parle.${tagMention} Si ce n'est pas le bon moment, aucun problème.`,
-    "Après un refus / pas maintenant": `${greeting}merci pour ton retour, je comprends totalement. Je ne veux pas forcer les choses. Je garde la porte ouverte, et on pourra en reparler plus tard si le sujet voyage revient au bon moment pour toi.`,
+    "Commentaire public": "Super spot, ça donne clairement envie de préparer le prochain départ.",
+    "Demande d’ajout / connexion": `Je suis tombé sur ton contenu autour du voyage${platformMention}, j’aime bien ton univers. Je t’ajoute ici, au plaisir d’échanger.`,
+    "Premier message privé": `${privateOpeningByStyle[style]}${context.naturalNoteHint}`,
+    "Relance après silence": `${greeting}je me permets de te relancer tranquillement, aucune pression. Le sujet voyage t’intéresse toujours ou ce n’est plus trop le moment ?`,
+    "Question de qualification voyage": `${greeting}${qualificationQuestion}`,
+    "Transition vers le club privé": `${greeting}je te demande parce que je travaille aussi autour d’un club privé lié au voyage. L’idée, c’est d’aider les gens à voyager plus intelligemment avec des avantages membres. Si tu es curieux/curieuse, je peux t’expliquer simplement.`,
+    "Invitation présentation": `${greeting}${warmTemperatureMention}si tu veux, je peux te montrer rapidement comment ça fonctionne. Ce n’est pas un engagement, juste une présentation simple pour voir si ça peut te parler.`,
+    "Suivi après présentation": `${greeting}merci d’avoir pris le temps de regarder. À chaud, qu’est-ce que tu en as pensé ? Tu te vois plutôt l’utiliser pour voyager, ou tu veux prendre le temps d’y réfléchir ?`,
+    "Relance pas maintenant": `${greeting}je comprends totalement. Je garde le contact, et si le sujet voyage redevient d’actualité pour toi plus tard, on en reparlera simplement.`,
+    "Message de clôture propre": `${greeting}merci pour ton retour. Je ne vais pas insister, le plus important c’est que ça reste fluide. Au plaisir d’échanger une prochaine fois.`,
   };
 
   return adaptMessageTone(messageBySituation[situation], style);
@@ -497,6 +577,7 @@ export default function ProspectsPage () {
       ...currentState,
       [field]: value,
       copiedProspectId: null,
+      addedHistoryProspectId: null,
     }));
   }
 
@@ -954,6 +1035,7 @@ export default function ProspectsPage () {
         currentState.style,
       ),
       copiedProspectId: null,
+      addedHistoryProspectId: null,
     }));
   }
 
@@ -967,6 +1049,52 @@ export default function ProspectsPage () {
       ...currentState,
       copiedProspectId: prospectId,
     }));
+  }
+
+  function handleAddGeneratedMessageToHistory(prospect: Prospect) {
+    if (!messageAssistantState.generatedMessage.trim()) {
+      return;
+    }
+
+    const today = formatFutureLocalDate(0);
+    const newConversationEntry: ConversationEntry = {
+      id: createProspectId(),
+      date: today,
+      channel: prospect.mainPlatform,
+      content: messageAssistantState.generatedMessage.trim(),
+      nextAction: "",
+    };
+    const updatedProspects = prospects.map((currentProspect) => {
+      if (currentProspect.id !== prospect.id) {
+        return currentProspect;
+      }
+
+      return {
+        ...currentProspect,
+        conversationHistory: [
+          ...(currentProspect.conversationHistory ?? []),
+          newConversationEntry,
+        ],
+        lastInteractionDate: today,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    saveProspects(updatedProspects);
+    setProspects(updatedProspects);
+    setMessageAssistantState((currentState) => ({
+      ...currentState,
+      addedHistoryProspectId: prospect.id,
+    }));
+    window.setTimeout(() => {
+      setMessageAssistantState((currentState) => ({
+        ...currentState,
+        addedHistoryProspectId:
+          currentState.addedHistoryProspectId === prospect.id
+            ? null
+            : currentState.addedHistoryProspectId,
+      }));
+    }, 1800);
   }
 
   async function handleCopyProfileLink(prospectId: string, profileUrl: string) {
@@ -2212,7 +2340,10 @@ export default function ProspectsPage () {
                 };
                 const conversationHistory = prospect.conversationHistory ?? [];
                 const prospectTags = prospect.tags ?? [];
-                const hasAvoidTag = prospectTags.includes("À éviter");
+                const hasAvoidTag = prospectTags.some((tag) =>
+                  String(tag) === "À éviter" || String(tag) === "Ã€ Ã©viter",
+                );
+                const messageAssistantObjective = getMessageAssistantObjective(messageAssistantState.situation);
                 const lastConversationEntry =
                   conversationHistory.length > 0
                     ? conversationHistory[conversationHistory.length - 1]
@@ -2474,6 +2605,18 @@ export default function ProspectsPage () {
                           </p>
                         ) : null}
 
+                        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                            Étape du tunnel
+                          </p>
+                          <p className="mt-1 text-sm text-slate-200">
+                            {messageAssistantState.situation}
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-slate-400">
+                            {messageAssistantObjective}
+                          </p>
+                        </div>
+
                         <div className="grid gap-3 md:grid-cols-2">
                           <label className="grid gap-1 text-xs text-slate-300">
                             Situation
@@ -2541,9 +2684,22 @@ export default function ProspectsPage () {
                           >
                             Copier le message
                           </button>
+                          <button
+                            className="min-h-10 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            type="button"
+                            disabled={!messageAssistantState.generatedMessage}
+                            onClick={() => handleAddGeneratedMessageToHistory(prospect)}
+                          >
+                            Ajouter comme échange
+                          </button>
                           {messageAssistantState.copiedProspectId === prospect.id ? (
                             <p className="text-xs font-medium text-emerald-300">
                               Message copié.
+                            </p>
+                          ) : null}
+                          {messageAssistantState.addedHistoryProspectId === prospect.id ? (
+                            <p className="text-xs font-medium text-emerald-300">
+                              Message ajouté à l’historique.
                             </p>
                           ) : null}
                         </div>
