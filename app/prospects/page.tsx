@@ -182,6 +182,12 @@ type PotentialDuplicateGroup = {
   reasons: PotentialDuplicateReason[];
 };
 
+type DuplicateMergeState = {
+  groupId: string;
+  keepProspectId: string;
+  mergeProspectId: string;
+};
+
 function calculateProspectScore(prospect: Prospect) {
   const interactionStats = prospect.interactionStats ?? {
     followerSinceDate: "",
@@ -415,6 +421,118 @@ function findPotentialDuplicates(prospectsToCheck: Prospect[]) {
   });
 
   return duplicateGroups;
+}
+
+function pickFilledText(primaryValue: string, secondaryValue: string) {
+  return primaryValue.trim() ? primaryValue : secondaryValue;
+}
+
+function pickOldestDate(firstDate: string, secondDate: string) {
+  if (!firstDate) {
+    return secondDate;
+  }
+
+  if (!secondDate) {
+    return firstDate;
+  }
+
+  return compareDateStrings(firstDate, secondDate) <= 0 ? firstDate : secondDate;
+}
+
+function pickNewestDate(firstDate: string, secondDate: string) {
+  if (!firstDate) {
+    return secondDate;
+  }
+
+  if (!secondDate) {
+    return firstDate;
+  }
+
+  return compareDateStrings(firstDate, secondDate) >= 0 ? firstDate : secondDate;
+}
+
+function pickMergedNextActionDate(firstDate: string, secondDate: string) {
+  const today = formatFutureLocalDate(0);
+  const futureDates = [firstDate, secondDate]
+    .filter((date) => date && compareDateStrings(date, today) >= 0)
+    .sort(compareDateStrings);
+
+  if (futureDates.length > 0) {
+    return futureDates[0];
+  }
+
+  return pickNewestDate(firstDate, secondDate);
+}
+
+function mergeProspectData(keptProspect: Prospect, mergedProspect: Prospect) {
+  const keptInteractionStats = keptProspect.interactionStats ?? {
+    followerSinceDate: "",
+    commentsCount: 0,
+    interactionsCount: 0,
+    likesCount: 0,
+    messagesCount: 0,
+  };
+  const mergedInteractionStats = mergedProspect.interactionStats ?? {
+    followerSinceDate: "",
+    commentsCount: 0,
+    interactionsCount: 0,
+    likesCount: 0,
+    messagesCount: 0,
+  };
+  const mergedConversationHistory = [
+    ...(keptProspect.conversationHistory ?? []),
+    ...(mergedProspect.conversationHistory ?? []),
+  ].sort((firstEntry, secondEntry) =>
+    compareDateStrings(firstEntry.date || "9999-12-31", secondEntry.date || "9999-12-31"),
+  );
+  const mergedTags = Array.from(new Set([...(keptProspect.tags ?? []), ...(mergedProspect.tags ?? [])]));
+  const mergedBase: Prospect = {
+    ...keptProspect,
+    firstName: pickFilledText(keptProspect.firstName, mergedProspect.firstName),
+    lastName: pickFilledText(keptProspect.lastName, mergedProspect.lastName),
+    displayName: pickFilledText(keptProspect.displayName, mergedProspect.displayName),
+    jobTitle: pickFilledText(keptProspect.jobTitle, mergedProspect.jobTitle),
+    businessArea: pickFilledText(keptProspect.businessArea, mergedProspect.businessArea),
+    city: pickFilledText(keptProspect.city, mergedProspect.city),
+    region: pickFilledText(keptProspect.region, mergedProspect.region),
+    country: pickFilledText(keptProspect.country, mergedProspect.country),
+    phone: pickFilledText(keptProspect.phone, mergedProspect.phone),
+    whatsapp: pickFilledText(keptProspect.whatsapp, mergedProspect.whatsapp),
+    email: pickFilledText(keptProspect.email, mergedProspect.email),
+    profileUrl: pickFilledText(keptProspect.profileUrl, mergedProspect.profileUrl),
+    socialLinks: {
+      facebook: pickFilledText(keptProspect.socialLinks.facebook, mergedProspect.socialLinks.facebook),
+      instagram: pickFilledText(keptProspect.socialLinks.instagram, mergedProspect.socialLinks.instagram),
+      linkedin: pickFilledText(keptProspect.socialLinks.linkedin, mergedProspect.socialLinks.linkedin),
+      tiktok: pickFilledText(keptProspect.socialLinks.tiktok, mergedProspect.socialLinks.tiktok),
+      youtube: pickFilledText(keptProspect.socialLinks.youtube, mergedProspect.socialLinks.youtube),
+      other: pickFilledText(keptProspect.socialLinks.other, mergedProspect.socialLinks.other),
+    },
+    tags: mergedTags,
+    isFollower: keptProspect.isFollower || mergedProspect.isFollower,
+    hasSentMessage: keptProspect.hasSentMessage || mergedProspect.hasSentMessage,
+    interactionStats: {
+      followerSinceDate: pickOldestDate(
+        keptInteractionStats.followerSinceDate,
+        mergedInteractionStats.followerSinceDate,
+      ),
+      commentsCount: keptInteractionStats.commentsCount + mergedInteractionStats.commentsCount,
+      interactionsCount: keptInteractionStats.interactionsCount + mergedInteractionStats.interactionsCount,
+      likesCount: keptInteractionStats.likesCount + mergedInteractionStats.likesCount,
+      messagesCount: keptInteractionStats.messagesCount + mergedInteractionStats.messagesCount,
+    },
+    lastInteractionDate: pickNewestDate(keptProspect.lastInteractionDate, mergedProspect.lastInteractionDate),
+    nextActionDate: pickMergedNextActionDate(keptProspect.nextActionDate, mergedProspect.nextActionDate),
+    conversationHistory: mergedConversationHistory,
+    notes: pickFilledText(keptProspect.notes, mergedProspect.notes),
+    createdAt: pickOldestDate(keptProspect.createdAt, mergedProspect.createdAt),
+    updatedAt: new Date().toISOString(),
+  };
+
+  return {
+    ...mergedBase,
+    score: calculateProspectScore(mergedBase),
+  };
 }
 
 function escapeCsvValue(value: string | number | boolean) {
@@ -861,6 +979,8 @@ export default function ProspectsPage () {
   const [prospectDisplayMode, setProspectDisplayMode] = useState<ProspectDisplayMode>("list");
   const [backupMessage, setBackupMessage] = useState("");
   const [isBackupError, setIsBackupError] = useState(false);
+  const [duplicateMergeState, setDuplicateMergeState] = useState<DuplicateMergeState | null>(null);
+  const [duplicateMergeMessage, setDuplicateMergeMessage] = useState("");
 
   useEffect(() => {
     const storedProspects = loadProspects();
@@ -1330,6 +1450,92 @@ export default function ProspectsPage () {
 
     if (activeFullProspectId !== prospect.id) {
       toggleFullProspectForm(prospect);
+    }
+  }
+
+  function handleOpenDuplicateMerge(duplicateGroup: PotentialDuplicateGroup) {
+    const keepProspect = duplicateGroup.prospects[0];
+    const mergeProspect = duplicateGroup.prospects[1] ?? duplicateGroup.prospects[0];
+
+    setDuplicateMergeState({
+      groupId: duplicateGroup.id,
+      keepProspectId: keepProspect.id,
+      mergeProspectId: mergeProspect.id,
+    });
+    setDuplicateMergeMessage("");
+  }
+
+  function updateDuplicateMergeField<Field extends keyof Omit<DuplicateMergeState, "groupId">>(
+    field: Field,
+    value: DuplicateMergeState[Field],
+  ) {
+    setDuplicateMergeState((currentState) => {
+      if (!currentState) {
+        return currentState;
+      }
+
+      const nextState = {
+        ...currentState,
+        [field]: value,
+      };
+
+      return nextState;
+    });
+    setDuplicateMergeMessage("");
+  }
+
+  function handleCancelDuplicateMerge() {
+    setDuplicateMergeState(null);
+  }
+
+  function handleConfirmDuplicateMerge() {
+    if (!duplicateMergeState || duplicateMergeState.keepProspectId === duplicateMergeState.mergeProspectId) {
+      return;
+    }
+
+    const keptProspect = prospects.find((prospect) => prospect.id === duplicateMergeState.keepProspectId);
+    const mergedProspect = prospects.find((prospect) => prospect.id === duplicateMergeState.mergeProspectId);
+
+    if (!keptProspect || !mergedProspect) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Fusionner ces deux fiches ? La fiche fusionnée sera supprimée après récupération des informations utiles.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const enrichedProspect = mergeProspectData(keptProspect, mergedProspect);
+    const updatedProspects = prospects
+      .filter((prospect) => prospect.id !== mergedProspect.id)
+      .map((prospect) => (prospect.id === keptProspect.id ? enrichedProspect : prospect));
+
+    saveProspects(updatedProspects);
+    setProspects(updatedProspects);
+    setDuplicateMergeState(null);
+    setDuplicateMergeMessage("Fusion effectuée avec succès.");
+
+    if (activeConversationProspectId === mergedProspect.id) {
+      setActiveConversationProspectId(null);
+      setConversationFormState(initialConversationFormState);
+    }
+
+    if (activeQualificationProspectId === mergedProspect.id) {
+      setActiveQualificationProspectId(null);
+      setQualificationFormState(initialQualificationFormState);
+    }
+
+    if (activeFullProspectId === mergedProspect.id) {
+      setActiveFullProspectId(null);
+      setFullProspectFormState(initialFullProspectFormState);
+    }
+
+    if (activeMessageAssistantProspectId === mergedProspect.id) {
+      setActiveMessageAssistantProspectId(null);
+      setMessageAssistantState(initialMessageAssistantState);
     }
   }
 
@@ -2719,21 +2925,58 @@ export default function ProspectsPage () {
                 </p>
               ) : (
                 <div className="mt-3 grid gap-3">
-                  {potentialDuplicateGroups.map((duplicateGroup) => (
-                    <article
-                      className="rounded-2xl border border-white/10 bg-slate-950/50 p-3"
-                      key={duplicateGroup.id}
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold text-white">
-                            {duplicateGroup.prospects.length} fiche{duplicateGroup.prospects.length > 1 ? "s" : ""} concernée{duplicateGroup.prospects.length > 1 ? "s" : ""}
-                          </p>
-                          <p className="mt-1 text-xs leading-5 text-slate-400">
-                            Raison : {duplicateGroup.reasons.join(", ")}
-                          </p>
+                  {duplicateMergeMessage ? (
+                    <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm font-medium text-emerald-300">
+                      {duplicateMergeMessage}
+                    </p>
+                  ) : null}
+                  {potentialDuplicateGroups.map((duplicateGroup) => {
+                    const isMergePanelVisible = duplicateMergeState?.groupId === duplicateGroup.id;
+                    const keepProspect =
+                      duplicateGroup.prospects.find(
+                        (prospect) => prospect.id === duplicateMergeState?.keepProspectId,
+                      ) ?? duplicateGroup.prospects[0];
+                    const mergeProspect =
+                      duplicateGroup.prospects.find(
+                        (prospect) => prospect.id === duplicateMergeState?.mergeProspectId,
+                      ) ?? duplicateGroup.prospects[1] ?? duplicateGroup.prospects[0];
+                    const previewSocialLinks = [
+                      keepProspect.socialLinks.facebook || mergeProspect.socialLinks.facebook,
+                      keepProspect.socialLinks.instagram || mergeProspect.socialLinks.instagram,
+                      keepProspect.socialLinks.linkedin || mergeProspect.socialLinks.linkedin,
+                      keepProspect.socialLinks.tiktok || mergeProspect.socialLinks.tiktok,
+                      keepProspect.socialLinks.youtube || mergeProspect.socialLinks.youtube,
+                      keepProspect.socialLinks.other || mergeProspect.socialLinks.other,
+                    ].filter(Boolean);
+                    const previewTags = Array.from(
+                      new Set([...(keepProspect.tags ?? []), ...(mergeProspect.tags ?? [])]),
+                    );
+                    const previewConversationCount =
+                      (keepProspect.conversationHistory ?? []).length +
+                      (mergeProspect.conversationHistory ?? []).length;
+
+                    return (
+                      <article
+                        className="rounded-2xl border border-white/10 bg-slate-950/50 p-3"
+                        key={duplicateGroup.id}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-white">
+                              {duplicateGroup.prospects.length} fiche{duplicateGroup.prospects.length > 1 ? "s" : ""} concernée{duplicateGroup.prospects.length > 1 ? "s" : ""}
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-slate-400">
+                              Raison : {duplicateGroup.reasons.join(", ")}
+                            </p>
+                          </div>
+                          <button
+                            className="min-h-9 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                            type="button"
+                            onClick={() => handleOpenDuplicateMerge(duplicateGroup)}
+                          >
+                            Fusionner deux fiches
+                          </button>
                         </div>
-                      </div>
 
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
                         {duplicateGroup.prospects.map((duplicateProspect) => (
@@ -2768,8 +3011,86 @@ export default function ProspectsPage () {
                           </div>
                         ))}
                       </div>
-                    </article>
-                  ))}
+
+                        {isMergePanelVisible ? (
+                          <div className="mt-3 grid gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <label className="grid gap-1 text-xs text-slate-300">
+                                Fiche à conserver
+                                <select
+                                  className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                  value={duplicateMergeState.keepProspectId}
+                                  onChange={(event) =>
+                                    updateDuplicateMergeField("keepProspectId", event.target.value)
+                                  }
+                                >
+                                  {duplicateGroup.prospects.map((prospect) => (
+                                    <option
+                                      disabled={prospect.id === duplicateMergeState.mergeProspectId}
+                                      key={prospect.id}
+                                      value={prospect.id}
+                                    >
+                                      {getProspectDisplayName(prospect)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <label className="grid gap-1 text-xs text-slate-300">
+                                Fiche à fusionner
+                                <select
+                                  className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                  value={duplicateMergeState.mergeProspectId}
+                                  onChange={(event) =>
+                                    updateDuplicateMergeField("mergeProspectId", event.target.value)
+                                  }
+                                >
+                                  {duplicateGroup.prospects.map((prospect) => (
+                                    <option
+                                      disabled={prospect.id === duplicateMergeState.keepProspectId}
+                                      key={prospect.id}
+                                      value={prospect.id}
+                                    >
+                                      {getProspectDisplayName(prospect)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            </div>
+
+                            <div className="grid gap-2 rounded-xl border border-white/10 bg-slate-950/50 p-3 text-xs text-slate-300 sm:grid-cols-2 lg:grid-cols-3">
+                              <p><span className="text-slate-500">Conservée :</span> <span className="font-medium text-white">{getProspectDisplayName(keepProspect)}</span></p>
+                              <p><span className="text-slate-500">Fusionnée :</span> <span className="font-medium text-white">{getProspectDisplayName(mergeProspect)}</span></p>
+                              <p><span className="text-slate-500">Email :</span> <span className="font-medium text-white">{keepProspect.email || mergeProspect.email || "—"}</span></p>
+                              <p><span className="text-slate-500">Téléphone :</span> <span className="font-medium text-white">{keepProspect.phone || mergeProspect.phone || "—"}</span></p>
+                              <p><span className="text-slate-500">WhatsApp :</span> <span className="font-medium text-white">{keepProspect.whatsapp || mergeProspect.whatsapp || "—"}</span></p>
+                              <p><span className="text-slate-500">Réseaux sociaux :</span> <span className="font-medium text-white">{previewSocialLinks.length}</span></p>
+                              <p><span className="text-slate-500">Tags :</span> <span className="font-medium text-white">{previewTags.length ? previewTags.join(", ") : "—"}</span></p>
+                              <p><span className="text-slate-500">Échanges :</span> <span className="font-medium text-white">{previewConversationCount}</span></p>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                className="min-h-10 rounded-full bg-emerald-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+                                type="button"
+                                disabled={keepProspect.id === mergeProspect.id}
+                                onClick={handleConfirmDuplicateMerge}
+                              >
+                                Confirmer la fusion
+                              </button>
+                              <button
+                                className="min-h-10 rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                                type="button"
+                                onClick={handleCancelDuplicateMerge}
+                              >
+                                Annuler
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </article>
+                    );
+                  })}
                 </div>
               )}
             </section>
