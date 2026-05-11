@@ -7,6 +7,11 @@ import {
   saveProspects,
 } from "../lib/prospectStorage";
 import {
+  MESSAGE_TUNNEL_STEPS,
+  type MessageStyle,
+  type MessageTunnelStep,
+} from "../lib/messageTemplates";
+import {
   PROSPECT_CATEGORIES,
   PROSPECT_COLOR_TYPES,
   PROSPECT_STATUSES,
@@ -102,23 +107,14 @@ type ProspectViewMode = "compact" | "detailed";
 
 type ProspectDisplayMode = "list" | "pipeline";
 
-const MESSAGE_ASSISTANT_SITUATIONS = [
-  "Commentaire public",
-  "Demande d’ajout / connexion",
-  "Premier message privé",
-  "Relance après silence",
-  "Question de qualification voyage",
-  "Transition vers le club privé",
-  "Invitation présentation",
-  "Suivi après présentation",
-  "Relance pas maintenant",
-  "Message de clôture propre",
-] as const;
+const MESSAGE_ASSISTANT_SITUATIONS = MESSAGE_TUNNEL_STEPS.map(
+  (messageStep) => messageStep.step,
+);
 
-const MESSAGE_ASSISTANT_STYLES = ["Doux", "Naturel", "Direct"] as const;
+const MESSAGE_ASSISTANT_STYLES = ["Doux", "Naturel", "Direct"] satisfies MessageStyle[];
 
-type MessageAssistantSituation = (typeof MESSAGE_ASSISTANT_SITUATIONS)[number];
-type MessageAssistantStyle = (typeof MESSAGE_ASSISTANT_STYLES)[number];
+type MessageAssistantSituation = MessageTunnelStep;
+type MessageAssistantStyle = MessageStyle;
 
 const PROSPECT_CSV_COLUMNS = [
   "firstName",
@@ -814,76 +810,30 @@ function buildMessageAssistantContext(prospect: Prospect) {
     displayName,
     location,
     platform: prospect.mainPlatform,
-    temperature: prospect.temperature,
+    isWarmContact: prospect.temperature === "Chaud" || prospect.temperature === "Tiède",
     hasAvoidTag: hasTag("À éviter"),
     qualificationHint: tagInsights.length > 0 ? tagInsights.join(", ") : "",
     naturalNoteHint: getNaturalNoteHint(notes),
   };
 }
 
-function adaptMessageTone(message: string, style: MessageAssistantStyle) {
-  if (style === "Doux") {
-    return `${message} Bien sûr, aucun souci si ce n’est pas le moment.`;
-  }
-
-  if (style === "Direct") {
-    return message
-      .replace("je me permets de", "je")
-      .replace("Si tu veux,", "Si ça t’intéresse,");
-  }
-
-  return message;
+function getMessageTunnelStepTemplate(situation: MessageAssistantSituation) {
+  return (
+    MESSAGE_TUNNEL_STEPS.find((messageStep) => messageStep.step === situation) ??
+    MESSAGE_TUNNEL_STEPS[0]
+  );
 }
 
 function getMessageAssistantObjective(situation: MessageAssistantSituation) {
-  const objectiveBySituation: Record<MessageAssistantSituation, string> = {
-    "Commentaire public": "Objectif : ouvrir la conversation sans vendre.",
-    "Demande d’ajout / connexion": "Objectif : créer un premier lien naturel.",
-    "Premier message privé": "Objectif : démarrer l’échange simplement.",
-    "Relance après silence": "Objectif : relancer sans pression.",
-    "Question de qualification voyage": "Objectif : qualifier l’intérêt voyage.",
-    "Transition vers le club privé": "Objectif : faire le lien avec le club privé.",
-    "Invitation présentation": "Objectif : proposer une présentation simple.",
-    "Suivi après présentation": "Objectif : recueillir un retour à chaud.",
-    "Relance pas maintenant": "Objectif : respecter le timing et garder le contact.",
-    "Message de clôture propre": "Objectif : clore sans tension.",
-  };
-
-  return objectiveBySituation[situation];
+  return `Objectif : ${getMessageTunnelStepTemplate(situation).objective}`;
 }
 
 function getMessageAssistantNextAction(situation: MessageAssistantSituation) {
-  const nextActionBySituation: Record<MessageAssistantSituation, string> = {
-    "Commentaire public": "Surveiller si la personne répond ou interagit, puis envisager une demande d’ajout.",
-    "Demande d’ajout / connexion": "Attendre l’acceptation, puis envoyer un premier message privé.",
-    "Premier message privé": "Attendre une réponse, puis qualifier l’intérêt voyage.",
-    "Relance après silence": "Relancer une dernière fois plus tard si aucun retour, puis clôturer proprement.",
-    "Question de qualification voyage": "Selon la réponse, proposer une transition douce vers le club privé.",
-    "Transition vers le club privé": "Si la personne est curieuse, proposer une présentation simple.",
-    "Invitation présentation": "Programmer ou envoyer la présentation, puis prévoir un suivi.",
-    "Suivi après présentation": "Noter son retour et classer la personne : intéressée, pas maintenant ou refus.",
-    "Relance pas maintenant": "Prévoir une relance plus tard sans pression.",
-    "Message de clôture propre": "Ne plus relancer sauf si la personne revient d’elle-même.",
-  };
-
-  return nextActionBySituation[situation];
+  return getMessageTunnelStepTemplate(situation).nextAction;
 }
 
 function getMessageAssistantSuggestedFollowUpDays(situation: MessageAssistantSituation) {
-  const suggestedFollowUpDaysBySituation: Record<MessageAssistantSituation, number | null> = {
-    "Commentaire public": null,
-    "Demande d’ajout / connexion": 3,
-    "Premier message privé": 3,
-    "Relance après silence": 7,
-    "Question de qualification voyage": 3,
-    "Transition vers le club privé": 3,
-    "Invitation présentation": 1,
-    "Suivi après présentation": 3,
-    "Relance pas maintenant": 30,
-    "Message de clôture propre": null,
-  };
-
-  return suggestedFollowUpDaysBySituation[situation];
+  return getMessageTunnelStepTemplate(situation).suggestedFollowUpDays;
 }
 
 function formatSuggestedFollowUpLabel(daysToAdd: number | null) {
@@ -895,20 +845,28 @@ function formatSuggestedFollowUpLabel(daysToAdd: number | null) {
 }
 
 function getMessageAssistantSuggestedStatus(situation: MessageAssistantSituation) {
-  const suggestedStatusBySituation: Record<MessageAssistantSituation, Prospect["status"] | null> = {
-    "Commentaire public": null,
-    "Demande d’ajout / connexion": "Contact lancé",
-    "Premier message privé": "Contact lancé",
-    "Relance après silence": "À relancer",
-    "Question de qualification voyage": "Conversation ouverte",
-    "Transition vers le club privé": "Intérêt voyage détecté",
-    "Invitation présentation": "Présentation proposée",
-    "Suivi après présentation": "Présentation faite",
-    "Relance pas maintenant": "Pas maintenant",
-    "Message de clôture propre": "Refus",
-  };
+  return getMessageTunnelStepTemplate(situation).suggestedStatus;
+}
 
-  return suggestedStatusBySituation[situation];
+function applyMessageAssistantContext(
+  message: string,
+  context: ReturnType<typeof buildMessageAssistantContext>,
+) {
+  const greeting = context.greetingName ? `Salut ${context.greetingName}, ` : "Salut, ";
+  const platformMention = context.platform ? ` sur ${context.platform}` : "";
+  const warmTemperatureMention = context.isWarmContact
+    ? "Comme le sujet voyage semble déjà te parler, "
+    : "";
+  const qualificationQuestion = context.qualificationHint
+    ? `Quand tu voyages, tu es plutôt sensible à ${context.qualificationHint}, ou tu cherches autre chose en priorité ?`
+    : "Quand tu voyages, tu cherches plutôt les bons plans, le confort, ou les expériences qui sortent un peu du classique ?";
+
+  return message
+    .replaceAll("{greeting}", greeting)
+    .replaceAll("{platformMention}", platformMention)
+    .replaceAll("{naturalNoteHint}", context.naturalNoteHint)
+    .replaceAll("{qualificationQuestion}", qualificationQuestion)
+    .replaceAll("{warmTemperatureMention}", warmTemperatureMention);
 }
 
 function generateProspectMessage(
@@ -917,35 +875,15 @@ function generateProspectMessage(
   style: MessageAssistantStyle,
 ) {
   const context = buildMessageAssistantContext(prospect);
-  const greeting = context.greetingName ? `Salut ${context.greetingName}, ` : "Salut, ";
-  const platformMention = context.platform ? ` sur ${context.platform}` : "";
-  const warmTemperatureMention =
-    context.temperature === "Chaud" || context.temperature === "Tiède"
-      ? "Comme le sujet voyage semble déjà te parler, "
-      : "";
-  const qualificationQuestion = context.qualificationHint
-    ? `Quand tu voyages, tu es plutôt sensible à ${context.qualificationHint}, ou tu cherches autre chose en priorité ?`
-    : "Quand tu voyages, tu cherches plutôt les bons plans, le confort, ou les expériences qui sortent un peu du classique ?";
-  const privateOpeningByStyle: Record<MessageAssistantStyle, string> = {
-    Doux: `${greeting}j’ai vu que tu partageais pas mal de choses autour du voyage. Tu voyages souvent en ce moment ou c’est plutôt un projet que tu prépares tranquillement ?`,
-    Naturel: `${greeting}j’ai vu passer ton contenu autour du voyage. Tu es plutôt du genre à partir dès que possible ou à préparer tes voyages longtemps à l’avance ?`,
-    Direct: `${greeting}je t’écris parce que j’ai vu que le voyage semblait t’intéresser. Tu voyages souvent ou tu cherches plutôt de nouvelles idées pour tes prochains départs ?`,
-  };
+  const messageStep = getMessageTunnelStepTemplate(situation);
+  const messageVariant =
+    messageStep.variants.find((variant) => variant.tone === style) ??
+    messageStep.variants[0];
 
-  const messageBySituation: Record<MessageAssistantSituation, string> = {
-    "Commentaire public": "Super spot, ça donne clairement envie de préparer le prochain départ.",
-    "Demande d’ajout / connexion": `Je suis tombé sur ton contenu autour du voyage${platformMention}, j’aime bien ton univers. Je t’ajoute ici, au plaisir d’échanger.`,
-    "Premier message privé": `${privateOpeningByStyle[style]}${context.naturalNoteHint}`,
-    "Relance après silence": `${greeting}je me permets de te relancer tranquillement, aucune pression. Le sujet voyage t’intéresse toujours ou ce n’est plus trop le moment ?`,
-    "Question de qualification voyage": `${greeting}${qualificationQuestion}`,
-    "Transition vers le club privé": `${greeting}je te demande parce que je travaille aussi autour d’un club privé lié au voyage. L’idée, c’est d’aider les gens à voyager plus intelligemment avec des avantages membres. Si tu es curieux/curieuse, je peux t’expliquer simplement.`,
-    "Invitation présentation": `${greeting}${warmTemperatureMention}si tu veux, je peux te montrer rapidement comment ça fonctionne. Ce n’est pas un engagement, juste une présentation simple pour voir si ça peut te parler.`,
-    "Suivi après présentation": `${greeting}merci d’avoir pris le temps de regarder. À chaud, qu’est-ce que tu en as pensé ? Tu te vois plutôt l’utiliser pour voyager, ou tu veux prendre le temps d’y réfléchir ?`,
-    "Relance pas maintenant": `${greeting}je comprends totalement. Je garde le contact, et si le sujet voyage redevient d’actualité pour toi plus tard, on en reparlera simplement.`,
-    "Message de clôture propre": `${greeting}merci pour ton retour. Je ne vais pas insister, le plus important c’est que ça reste fluide. Au plaisir d’échanger une prochaine fois.`,
-  };
-
-  return adaptMessageTone(messageBySituation[situation], style);
+  return applyMessageAssistantContext(
+    messageVariant.assistantTemplate ?? messageVariant.message,
+    context,
+  );
 }
 
 export default function ProspectsPage () {
