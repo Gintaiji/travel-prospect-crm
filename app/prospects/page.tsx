@@ -6,6 +6,7 @@ import {
   loadProspects,
   saveProspects,
 } from "../lib/prospectStorage";
+import { loadResources } from "../lib/resourceStorage";
 import {
   MESSAGE_TUNNEL_STEPS,
   type MessageStyle,
@@ -20,6 +21,7 @@ import {
   SOCIAL_PLATFORMS,
   type ConversationEntry,
   type Prospect,
+  type Resource,
 } from "../lib/types";
 
 type ProspectFormState = {
@@ -158,8 +160,11 @@ type MessageAssistantState = {
   situation: MessageAssistantSituation;
   style: MessageAssistantStyle;
   generatedMessage: string;
+  selectedResourceId: string;
   copiedProspectId: string | null;
   addedHistoryProspectId: string | null;
+  copiedResourceProspectId: string | null;
+  copiedMessageWithResourceProspectId: string | null;
   suggestedFollowUpAppliedProspectId: string | null;
   suggestedStatusAppliedProspectId: string | null;
 };
@@ -624,6 +629,32 @@ function getProspectDisplayName(prospect: Prospect) {
   return prospect.displayName.trim() || fullName || "Prospect sans nom";
 }
 
+function getSortedResources(resources: Resource[]) {
+  return [...resources].sort((firstResource, secondResource) => {
+    if (firstResource.isFavorite !== secondResource.isFavorite) {
+      return firstResource.isFavorite ? -1 : 1;
+    }
+
+    return firstResource.title.localeCompare(secondResource.title, "fr", {
+      sensitivity: "base",
+    });
+  });
+}
+
+function buildMessageWithResource(message: string, resource: Resource) {
+  const cleanMessage = message.trim();
+
+  return cleanMessage ? `${cleanMessage}\n\n${resource.url}` : resource.url;
+}
+
+function buildConversationContentWithResource(message: string, resource: Resource) {
+  const cleanMessage = message.trim();
+
+  return cleanMessage
+    ? `${cleanMessage}\n\nRessource partagée : ${resource.url}`
+    : `Ressource partagée : ${resource.url}`;
+}
+
 function getTemperatureSortRank(temperature: Prospect["temperature"]) {
   if (temperature === "Chaud") {
     return 0;
@@ -727,8 +758,11 @@ const initialMessageAssistantState: MessageAssistantState = {
   situation: MESSAGE_ASSISTANT_SITUATIONS[0],
   style: MESSAGE_ASSISTANT_STYLES[1],
   generatedMessage: "",
+  selectedResourceId: "",
   copiedProspectId: null,
   addedHistoryProspectId: null,
+  copiedResourceProspectId: null,
+  copiedMessageWithResourceProspectId: null,
   suggestedFollowUpAppliedProspectId: null,
   suggestedStatusAppliedProspectId: null,
 };
@@ -888,6 +922,7 @@ function generateProspectMessage(
 
 export default function ProspectsPage () {
   const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
   const [isFormVisible, setIsFormVisible] = useState(false);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const csvImportFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -919,10 +954,14 @@ export default function ProspectsPage () {
   const [isBackupError, setIsBackupError] = useState(false);
   const [duplicateMergeState, setDuplicateMergeState] = useState<DuplicateMergeState | null>(null);
   const [duplicateMergeMessage, setDuplicateMergeMessage] = useState("");
+  const [resourceShareSelections, setResourceShareSelections] = useState<Record<string, string>>({});
+  const [copiedSharedResourceProspectId, setCopiedSharedResourceProspectId] = useState<string | null>(null);
+  const [addedSharedResourceProspectId, setAddedSharedResourceProspectId] = useState<string | null>(null);
 
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
       setProspects(loadProspects());
+      setResources(loadResources());
     }, 0);
 
     return () => window.clearTimeout(loadStoredProspects);
@@ -987,9 +1026,29 @@ export default function ProspectsPage () {
       [field]: value,
       copiedProspectId: null,
       addedHistoryProspectId: null,
+      copiedResourceProspectId: null,
+      copiedMessageWithResourceProspectId: null,
       suggestedFollowUpAppliedProspectId: null,
       suggestedStatusAppliedProspectId: null,
     }));
+  }
+
+  function updateMessageAssistantResource(resourceId: string) {
+    setMessageAssistantState((currentState) => ({
+      ...currentState,
+      selectedResourceId: resourceId,
+      copiedResourceProspectId: null,
+      copiedMessageWithResourceProspectId: null,
+    }));
+  }
+
+  function updateResourceShareSelection(prospectId: string, resourceId: string) {
+    setResourceShareSelections((currentSelections) => ({
+      ...currentSelections,
+      [prospectId]: resourceId,
+    }));
+    setCopiedSharedResourceProspectId(null);
+    setAddedSharedResourceProspectId(null);
   }
 
   function resetFilters() {
@@ -1570,9 +1629,55 @@ export default function ProspectsPage () {
       ),
       copiedProspectId: null,
       addedHistoryProspectId: null,
+      copiedResourceProspectId: null,
+      copiedMessageWithResourceProspectId: null,
       suggestedFollowUpAppliedProspectId: null,
       suggestedStatusAppliedProspectId: null,
     }));
+  }
+
+  async function handleCopyAssistantResourceLink(prospectId: string, resource: Resource) {
+    if (!resource.url || !navigator.clipboard?.writeText) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(resource.url);
+    setMessageAssistantState((currentState) => ({
+      ...currentState,
+      copiedResourceProspectId: prospectId,
+    }));
+    window.setTimeout(() => {
+      setMessageAssistantState((currentState) => ({
+        ...currentState,
+        copiedResourceProspectId:
+          currentState.copiedResourceProspectId === prospectId
+            ? null
+            : currentState.copiedResourceProspectId,
+      }));
+    }, 1800);
+  }
+
+  async function handleCopyMessageWithResource(prospectId: string, resource: Resource) {
+    if (!navigator.clipboard?.writeText) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(
+      buildMessageWithResource(messageAssistantState.generatedMessage, resource),
+    );
+    setMessageAssistantState((currentState) => ({
+      ...currentState,
+      copiedMessageWithResourceProspectId: prospectId,
+    }));
+    window.setTimeout(() => {
+      setMessageAssistantState((currentState) => ({
+        ...currentState,
+        copiedMessageWithResourceProspectId:
+          currentState.copiedMessageWithResourceProspectId === prospectId
+            ? null
+            : currentState.copiedMessageWithResourceProspectId,
+      }));
+    }, 1800);
   }
 
   function handleApplySuggestedFollowUp(prospect: Prospect) {
@@ -1700,12 +1805,20 @@ export default function ProspectsPage () {
       return;
     }
 
+    const selectedResource = resources.find(
+      (resource) => resource.id === messageAssistantState.selectedResourceId,
+    );
     const today = formatFutureLocalDate(0);
     const newConversationEntry: ConversationEntry = {
       id: createProspectId(),
       date: today,
       channel: prospect.mainPlatform,
-      content: messageAssistantState.generatedMessage.trim(),
+      content: selectedResource
+        ? buildConversationContentWithResource(
+            messageAssistantState.generatedMessage,
+            selectedResource,
+          )
+        : messageAssistantState.generatedMessage.trim(),
       nextAction: getMessageAssistantNextAction(messageAssistantState.situation),
     };
     const updatedProspects = prospects.map((currentProspect) => {
@@ -1765,6 +1878,55 @@ export default function ProspectsPage () {
     window.setTimeout(() => {
       setCopiedEmailProspectId((currentProspectId) =>
         currentProspectId === prospectId ? null : currentProspectId,
+      );
+    }, 1800);
+  }
+
+  async function handleCopySharedResourceLink(prospectId: string, resource: Resource) {
+    if (!resource.url || !navigator.clipboard?.writeText) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(resource.url);
+    setCopiedSharedResourceProspectId(prospectId);
+    window.setTimeout(() => {
+      setCopiedSharedResourceProspectId((currentProspectId) =>
+        currentProspectId === prospectId ? null : currentProspectId,
+      );
+    }, 1800);
+  }
+
+  function handleAddSharedResourceToHistory(prospect: Prospect, resource: Resource) {
+    const today = formatFutureLocalDate(0);
+    const newConversationEntry: ConversationEntry = {
+      id: createProspectId(),
+      date: today,
+      channel: prospect.mainPlatform,
+      content: `Ressource partagée : ${resource.title} - ${resource.url}`,
+      nextAction: "",
+    };
+    const updatedProspects = prospects.map((currentProspect) => {
+      if (currentProspect.id !== prospect.id) {
+        return currentProspect;
+      }
+
+      return {
+        ...currentProspect,
+        conversationHistory: [
+          ...(currentProspect.conversationHistory ?? []),
+          newConversationEntry,
+        ],
+        lastInteractionDate: today,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    saveProspects(updatedProspects);
+    setProspects(updatedProspects);
+    setAddedSharedResourceProspectId(prospect.id);
+    window.setTimeout(() => {
+      setAddedSharedResourceProspectId((currentProspectId) =>
+        currentProspectId === prospect.id ? null : currentProspectId,
       );
     }, 1800);
   }
@@ -2276,6 +2438,7 @@ export default function ProspectsPage () {
   const isDetailedView = prospectViewMode === "detailed";
   const isPipelineView = prospectDisplayMode === "pipeline";
   const potentialDuplicateGroups = findPotentialDuplicates(prospects);
+  const sortedResources = getSortedResources(resources);
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-slate-950 px-4 py-6 text-white sm:px-6 sm:py-10">
@@ -3480,6 +3643,13 @@ export default function ProspectsPage () {
                 const isQualificationFormVisible = activeQualificationProspectId === prospect.id;
                 const isFullProspectFormVisible = activeFullProspectId === prospect.id;
                 const isMessageAssistantVisible = activeMessageAssistantProspectId === prospect.id;
+                const selectedAssistantResource = sortedResources.find(
+                  (resource) => resource.id === messageAssistantState.selectedResourceId,
+                );
+                const selectedSharedResourceId = resourceShareSelections[prospect.id] ?? "";
+                const selectedSharedResource = sortedResources.find(
+                  (resource) => resource.id === selectedSharedResourceId,
+                );
                 const messageAssistantNextAction = getMessageAssistantNextAction(messageAssistantState.situation);
                 const messageAssistantSuggestedFollowUpDays = getMessageAssistantSuggestedFollowUpDays(
                   messageAssistantState.situation,
@@ -3714,6 +3884,88 @@ export default function ProspectsPage () {
                       ) : null}
                     </div>
 
+                    <div className="mb-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                        Partager une ressource
+                      </p>
+                      {sortedResources.length === 0 ? (
+                        <p className="mt-3 text-sm leading-6 text-slate-300">
+                          Aucune ressource disponible. Ajoute d’abord tes liens dans la page Ressources.
+                        </p>
+                      ) : (
+                        <div className="mt-3 grid gap-3">
+                          <select
+                            className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                            value={selectedSharedResourceId}
+                            onChange={(event) =>
+                              updateResourceShareSelection(prospect.id, event.target.value)
+                            }
+                          >
+                            <option value="">Aucune ressource</option>
+                            {sortedResources.map((resource) => (
+                              <option key={resource.id} value={resource.id}>
+                                {resource.title} · {resource.type}
+                              </option>
+                            ))}
+                          </select>
+
+                          {selectedSharedResource ? (
+                            <div className="grid gap-3 rounded-xl border border-white/10 bg-slate-950/50 p-3">
+                              <div>
+                                <p className="text-sm font-semibold text-white">
+                                  {selectedSharedResource.title}
+                                </p>
+                                <p className="mt-1 text-xs text-emerald-300">
+                                  {selectedSharedResource.type}
+                                </p>
+                                <p className="mt-2 break-all text-xs text-sky-200">
+                                  {selectedSharedResource.url}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  className="min-h-10 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
+                                  type="button"
+                                  onClick={() =>
+                                    handleCopySharedResourceLink(prospect.id, selectedSharedResource)
+                                  }
+                                >
+                                  Copier le lien
+                                </button>
+                                <a
+                                  className="min-h-10 rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/20"
+                                  href={selectedSharedResource.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Ouvrir
+                                </a>
+                                <button
+                                  className="min-h-10 rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                                  type="button"
+                                  onClick={() =>
+                                    handleAddSharedResourceToHistory(prospect, selectedSharedResource)
+                                  }
+                                >
+                                  Ajouter à l’historique
+                                </button>
+                              </div>
+                              {copiedSharedResourceProspectId === prospect.id ? (
+                                <p className="text-xs font-medium text-emerald-300">
+                                  Lien copié.
+                                </p>
+                              ) : null}
+                              {addedSharedResourceProspectId === prospect.id ? (
+                                <p className="text-xs font-medium text-emerald-300">
+                                  Ressource ajoutée à l’historique.
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+
                     {renderQuickFollowUpControls(prospect)}
 
                     {isMessageAssistantVisible ? (
@@ -3814,6 +4066,85 @@ export default function ProspectsPage () {
                             </span>
                           )}
                         </div>
+
+                        {sortedResources.length > 0 ? (
+                          <div className="grid gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
+                            <label className="grid gap-1 text-xs text-slate-300">
+                              Ressource à joindre
+                              <select
+                                className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                                value={messageAssistantState.selectedResourceId}
+                                onChange={(event) => updateMessageAssistantResource(event.target.value)}
+                              >
+                                <option value="">Aucune ressource</option>
+                                {sortedResources.map((resource) => (
+                                  <option key={resource.id} value={resource.id}>
+                                    {resource.title} · {resource.type}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+
+                            {selectedAssistantResource ? (
+                              <div className="grid gap-3 rounded-xl border border-white/10 bg-slate-950/50 p-3">
+                                <div>
+                                  <p className="text-sm font-semibold text-white">
+                                    {selectedAssistantResource.title}
+                                  </p>
+                                  <p className="mt-1 text-xs text-emerald-300">
+                                    {selectedAssistantResource.type}
+                                  </p>
+                                  <p className="mt-2 break-all text-xs text-sky-200">
+                                    {selectedAssistantResource.url}
+                                  </p>
+                                  {selectedAssistantResource.notes ? (
+                                    <p className="mt-2 text-xs leading-5 text-slate-300">
+                                      {selectedAssistantResource.notes}
+                                    </p>
+                                  ) : null}
+                                </div>
+
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    className="min-h-10 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+                                    type="button"
+                                    onClick={() =>
+                                      handleCopyAssistantResourceLink(
+                                        prospect.id,
+                                        selectedAssistantResource,
+                                      )
+                                    }
+                                  >
+                                    Copier le lien ressource
+                                  </button>
+                                  <button
+                                    className="min-h-10 rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/20"
+                                    type="button"
+                                    onClick={() =>
+                                      handleCopyMessageWithResource(
+                                        prospect.id,
+                                        selectedAssistantResource,
+                                      )
+                                    }
+                                  >
+                                    Copier message + ressource
+                                  </button>
+                                </div>
+
+                                {messageAssistantState.copiedResourceProspectId === prospect.id ? (
+                                  <p className="text-xs font-medium text-emerald-300">
+                                    Lien ressource copié.
+                                  </p>
+                                ) : null}
+                                {messageAssistantState.copiedMessageWithResourceProspectId === prospect.id ? (
+                                  <p className="text-xs font-medium text-emerald-300">
+                                    Message copié.
+                                  </p>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
 
                         {messageAssistantState.generatedMessage ? (
                           <div className="grid gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
