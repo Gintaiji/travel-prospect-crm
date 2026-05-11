@@ -51,6 +51,27 @@ export type ProspectTag =
   | "Bien-être"
   | "À éviter";
 
+export type ResourceType =
+  | "Présentation"
+  | "Site"
+  | "QR code"
+  | "Vidéo"
+  | "Document"
+  | "Groupe WhatsApp"
+  | "Réservation"
+  | "Autre";
+
+export type Resource = {
+  id: string;
+  title: string;
+  type: ResourceType;
+  url: string;
+  notes: string;
+  isFavorite: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type SocialLinks = {
   facebook: string;
   instagram: string;
@@ -183,4 +204,15 @@ export const PROSPECT_TAGS: ProspectTag[] = [
   "Revenus complémentaires",
   "Bien-être",
   "À éviter",
+];
+
+export const RESOURCE_TYPES: ResourceType[] = [
+  "Présentation",
+  "Site",
+  "QR code",
+  "Vidéo",
+  "Document",
+  "Groupe WhatsApp",
+  "Réservation",
+  "Autre",
 ];
