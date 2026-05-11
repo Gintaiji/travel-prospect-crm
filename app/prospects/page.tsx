@@ -983,8 +983,11 @@ export default function ProspectsPage () {
   const [duplicateMergeMessage, setDuplicateMergeMessage] = useState("");
 
   useEffect(() => {
-    const storedProspects = loadProspects();
-    setProspects(storedProspects);
+    const loadStoredProspects = window.setTimeout(() => {
+      setProspects(loadProspects());
+    }, 0);
+
+    return () => window.clearTimeout(loadStoredProspects);
   }, []);
 
   function updateFormField<Field extends keyof ProspectFormState>(
@@ -2792,7 +2795,7 @@ export default function ProspectsPage () {
                   </label>
 
                   <label className="grid gap-2 text-sm text-slate-300">
-                    Date d'inscription / follow
+                    Date d&apos;inscription / follow
                     <input
                       className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
                       value={formState.followerSinceDate}
@@ -2813,7 +2816,7 @@ export default function ProspectsPage () {
                   </label>
 
                   <label className="grid gap-2 text-sm text-slate-300">
-                    Nombre d'interactions
+                    Nombre d&apos;interactions
                     <input
                       className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
                       min="0"
@@ -3135,7 +3138,7 @@ export default function ProspectsPage () {
                       dateComparison < 0
                         ? "En retard"
                         : dateComparison === 0
-                          ? "Aujourd'hui"
+                          ? "Aujourd’hui"
                           : "À venir";
                     const followUpBadgeClass =
                       dateComparison < 0
@@ -3528,7 +3531,7 @@ export default function ProspectsPage () {
                 const conversationHistory = prospect.conversationHistory ?? [];
                 const prospectTags = prospect.tags ?? [];
                 const hasAvoidTag = prospectTags.some((tag) =>
-                  String(tag) === "À éviter" || String(tag) === "Ã€ Ã©viter",
+                  normalizeText(String(tag)).includes("eviter"),
                 );
                 const messageAssistantObjective = getMessageAssistantObjective(messageAssistantState.situation);
                 const lastConversationEntry =
@@ -4150,7 +4153,7 @@ export default function ProspectsPage () {
                               Message reçu oui/non
                             </label>
                             <label className="grid gap-1 text-xs text-slate-300 md:col-span-2">
-                              Date d'inscription / follow
+                              Date d&apos;inscription / follow
                               <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.followerSinceDate} onChange={(event) => updateFullProspectFormField("followerSinceDate", event.target.value)} type="date" />
                             </label>
                             <label className="grid gap-1 text-xs text-slate-300">
@@ -4158,7 +4161,7 @@ export default function ProspectsPage () {
                               <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" min="0" value={fullProspectFormState.commentsCount} onChange={(event) => updateFullProspectFormField("commentsCount", event.target.value)} type="number" />
                             </label>
                             <label className="grid gap-1 text-xs text-slate-300">
-                              Nombre d'interactions
+                              Nombre d&apos;interactions
                               <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" min="0" value={fullProspectFormState.interactionsCount} onChange={(event) => updateFullProspectFormField("interactionsCount", event.target.value)} type="number" />
                             </label>
                             <label className="grid gap-1 text-xs text-slate-300">
@@ -4366,7 +4369,7 @@ export default function ProspectsPage () {
                               </label>
 
                               <label className="grid gap-1 text-xs text-slate-300 md:col-span-2">
-                                Date d'inscription / follow
+                                Date d&apos;inscription / follow
                                 <input
                                   className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
                                   value={qualificationFormState.followerSinceDate}
@@ -4583,7 +4586,7 @@ export default function ProspectsPage () {
                             onSubmit={(event) => handleConversationSubmit(prospect.id, event)}
                           >
                             <label className="grid gap-1 text-xs text-slate-300">
-                              Date de l'échange
+                              Date de l&apos;échange
                               <input
                                 className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
                                 value={conversationFormState.date}
@@ -4614,7 +4617,7 @@ export default function ProspectsPage () {
                             </label>
 
                             <label className="grid gap-1 text-xs text-slate-300">
-                              Résumé de l'échange
+                              Résumé de l&apos;échange
                               <textarea
                                 className="min-h-20 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
                                 value={conversationFormState.content}

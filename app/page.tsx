@@ -30,9 +30,13 @@ export default function HomePage() {
   const [hasLoadedProspects, setHasLoadedProspects] = useState(false);
 
   useEffect(() => {
-    setProspects(loadProspects());
-    setTodayDate(new Date().toISOString().slice(0, 10));
-    setHasLoadedProspects(true);
+    const loadDashboardData = window.setTimeout(() => {
+      setProspects(loadProspects());
+      setTodayDate(new Date().toISOString().slice(0, 10));
+      setHasLoadedProspects(true);
+    }, 0);
+
+    return () => window.clearTimeout(loadDashboardData);
   }, []);
 
   const dashboardStats = useMemo(() => {
@@ -169,7 +173,7 @@ export default function HomePage() {
           <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.25em] text-emerald-300">
-                Vue d'ensemble du pipeline
+                Vue d&apos;ensemble du pipeline
               </p>
               <p className="mt-2 text-sm text-slate-400">
                 Répartition des prospects par statut.
