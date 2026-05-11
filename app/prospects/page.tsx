@@ -193,6 +193,18 @@ function compareDateStrings(firstDate: string, secondDate: string) {
   return firstDate < secondDate ? -1 : 1;
 }
 
+function formatFutureLocalDate(daysToAdd: number) {
+  const futureDate = new Date();
+  futureDate.setHours(12, 0, 0, 0);
+  futureDate.setDate(futureDate.getDate() + daysToAdd);
+
+  const year = futureDate.getFullYear();
+  const month = String(futureDate.getMonth() + 1).padStart(2, "0");
+  const day = String(futureDate.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 function toggleProspectTag(currentTags: Prospect["tags"], tag: Prospect["tags"][number]) {
   if (currentTags.includes(tag)) {
     return currentTags.filter((currentTag) => currentTag !== tag);
@@ -870,6 +882,37 @@ export default function ProspectsPage () {
     setProspects(updatedProspects);
   }
 
+  function updateQuickFollowUpDate(prospectId: string, nextActionDate: string) {
+    const updatedProspects = prospects.map((prospect) => {
+      if (prospect.id !== prospectId) {
+        return prospect;
+      }
+
+      return {
+        ...prospect,
+        nextActionDate,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    saveProspects(updatedProspects);
+    setProspects(updatedProspects);
+
+    if (activeQualificationProspectId === prospectId) {
+      setQualificationFormState((currentFormState) => ({
+        ...currentFormState,
+        nextActionDate,
+      }));
+    }
+
+    if (activeFullProspectId === prospectId) {
+      setFullProspectFormState((currentFormState) => ({
+        ...currentFormState,
+        nextActionDate,
+      }));
+    }
+  }
+
   function updateProspectStatus(prospectId: string, nextStatus: Prospect["status"]) {
     const updatedProspects = prospects.map((prospect) => {
       if (prospect.id !== prospectId) {
@@ -1045,8 +1088,62 @@ export default function ProspectsPage () {
     fileReader.readAsText(selectedFile);
   }
 
+  function renderQuickFollowUpControls(prospect: Prospect, isCompact = false) {
+    return (
+      <div
+        className={
+          isCompact
+            ? "mt-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3"
+            : "mb-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3"
+        }
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+            Relance rapide
+          </p>
+          {prospect.nextActionDate ? (
+            <p className="text-xs font-semibold text-sky-200">
+              Relance prévue : {prospect.nextActionDate}
+            </p>
+          ) : null}
+        </div>
+
+        <div className={isCompact ? "mt-2 grid grid-cols-2 gap-2" : "mt-3 flex flex-wrap gap-2"}>
+          <button
+            className="min-h-10 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+            type="button"
+            onClick={() => updateQuickFollowUpDate(prospect.id, formatFutureLocalDate(1))}
+          >
+            Demain
+          </button>
+          <button
+            className="min-h-10 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+            type="button"
+            onClick={() => updateQuickFollowUpDate(prospect.id, formatFutureLocalDate(3))}
+          >
+            +3 jours
+          </button>
+          <button
+            className="min-h-10 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+            type="button"
+            onClick={() => updateQuickFollowUpDate(prospect.id, formatFutureLocalDate(7))}
+          >
+            +7 jours
+          </button>
+          <button
+            className="min-h-10 rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+            type="button"
+            onClick={() => updateQuickFollowUpDate(prospect.id, "")}
+          >
+            Effacer
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
-  const todayDate = new Date().toISOString().slice(0, 10);
+  const todayDate = formatFutureLocalDate(0);
   const followUpProspects = prospects
     .filter((prospect) => prospect.nextActionDate.trim())
     .sort((firstProspect, secondProspect) =>
@@ -2011,10 +2108,12 @@ export default function ProspectsPage () {
                                   </span>
                                   {prospect.nextActionDate ? (
                                     <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-sky-200">
-                                      Relance : {prospect.nextActionDate}
+                                      Relance prévue : {prospect.nextActionDate}
                                     </span>
                                   ) : null}
                                 </div>
+
+                                {renderQuickFollowUpControls(prospect, true)}
 
                                 {prospectTags.length > 0 ? (
                                   <div className="mt-3 flex flex-wrap gap-2">
@@ -2343,6 +2442,8 @@ export default function ProspectsPage () {
                         </p>
                       ) : null}
                     </div>
+
+                    {renderQuickFollowUpControls(prospect)}
 
                     {isMessageAssistantVisible ? (
                       <div className="mb-4 grid gap-3 rounded-2xl border border-sky-400/20 bg-slate-950/70 p-4">
