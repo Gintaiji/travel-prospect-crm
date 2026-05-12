@@ -29,7 +29,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   defaultPresentationLink: "",
   messageSignature: "",
   publicWording: "plateforme voyage avec avantages membres",
-  updatedAt: new Date().toISOString(),
+  updatedAt: "",
 };
 
 export function loadSettings(): AppSettings {

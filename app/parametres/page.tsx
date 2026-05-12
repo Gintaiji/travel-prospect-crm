@@ -40,9 +40,11 @@ function buildPreviewMessage(settings: AppSettings) {
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [savedMessage, setSavedMessage] = useState("");
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     const loadStoredSettings = window.setTimeout(() => {
+      setIsMounted(true);
       setSettings(loadSettings());
     }, 0);
 
@@ -110,6 +112,10 @@ export default function SettingsPage() {
   }
 
   const previewMessage = buildPreviewMessage(settings);
+  const formattedUpdatedAt =
+    isMounted && settings.updatedAt
+      ? new Date(settings.updatedAt).toLocaleString("fr-FR")
+      : "Jamais";
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-6 text-white sm:px-6 sm:py-10">
@@ -257,9 +263,7 @@ export default function SettingsPage() {
               <div className="text-sm text-slate-400">
                 Dernière mise à jour :{" "}
                 <span className="font-medium text-slate-200">
-                  {settings.updatedAt
-                    ? new Date(settings.updatedAt).toLocaleString("fr-FR")
-                    : "Jamais"}
+                  {formattedUpdatedAt}
                 </span>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
