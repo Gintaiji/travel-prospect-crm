@@ -8,6 +8,12 @@ import {
 } from "../lib/prospectStorage";
 import { loadResources } from "../lib/resourceStorage";
 import {
+  calculateProspectScore,
+  getFutureDateString,
+  getProspectDisplayName,
+  getTodayDateString,
+} from "../lib/prospectUtils";
+import {
   MESSAGE_TUNNEL_STEPS,
   type MessageStyle,
   type MessageTunnelStep,
@@ -189,86 +195,12 @@ type DuplicateMergeState = {
   mergeProspectId: string;
 };
 
-function calculateProspectScore(prospect: Prospect) {
-  const interactionStats = prospect.interactionStats ?? {
-    followerSinceDate: "",
-    commentsCount: 0,
-    interactionsCount: 0,
-    likesCount: 0,
-    messagesCount: 0,
-  };
-  let score = 0;
-
-  if (prospect.isFollower) {
-    score += 10;
-  }
-
-  if (prospect.hasSentMessage) {
-    score += 15;
-  }
-
-  score += Math.min(interactionStats.commentsCount * 3, 15);
-  score += Math.min(interactionStats.interactionsCount * 2, 20);
-  score += Math.min(interactionStats.likesCount, 10);
-  score += Math.min(interactionStats.messagesCount * 5, 20);
-
-  if (prospect.temperature === "Tiède") {
-    score += 10;
-  }
-
-  if (prospect.temperature === "Chaud") {
-    score += 20;
-  }
-
-  if (prospect.status === "Conversation ouverte") {
-    score += 10;
-  }
-
-  if (prospect.status === "Intérêt voyage détecté") {
-    score += 15;
-  }
-
-  if (prospect.status === "Présentation proposée") {
-    score += 20;
-  }
-
-  if (prospect.status === "Présentation faite") {
-    score += 25;
-  }
-
-  if (prospect.status === "Intéressé") {
-    score += 30;
-  }
-
-  if (prospect.status === "Client" || prospect.status === "Partenaire") {
-    score += 35;
-  }
-
-  if ((prospect.tags ?? []).includes("À éviter")) {
-    score -= 30;
-  }
-
-  return Math.min(Math.max(score, 0), 100);
-}
-
 function compareDateStrings(firstDate: string, secondDate: string) {
   if (firstDate === secondDate) {
     return 0;
   }
 
   return firstDate < secondDate ? -1 : 1;
-}
-
-function formatFutureLocalDate(daysToAdd: number) {
-  const futureDate = new Date();
-  futureDate.setHours(12, 0, 0, 0);
-  futureDate.setDate(futureDate.getDate() + daysToAdd);
-
-  const year = futureDate.getFullYear();
-  const month = String(futureDate.getMonth() + 1).padStart(2, "0");
-  const day = String(futureDate.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
 }
 
 function toggleProspectTag(currentTags: Prospect["tags"], tag: Prospect["tags"][number]) {
@@ -453,7 +385,7 @@ function pickNewestDate(firstDate: string, secondDate: string) {
 }
 
 function pickMergedNextActionDate(firstDate: string, secondDate: string) {
-  const today = formatFutureLocalDate(0);
+  const today = getTodayDateString();
   const futureDates = [firstDate, secondDate]
     .filter((date) => date && compareDateStrings(date, today) >= 0)
     .sort(compareDateStrings);
@@ -621,12 +553,6 @@ function pickAllowedCsvValue<T extends string>(
   fallbackValue: T,
 ) {
   return allowedValues.includes(value as T) ? (value as T) : fallbackValue;
-}
-
-function getProspectDisplayName(prospect: Prospect) {
-  const fullName = `${prospect.firstName} ${prospect.lastName}`.trim();
-
-  return prospect.displayName.trim() || fullName || "Prospect sans nom";
 }
 
 function getSortedResources(resources: Resource[]) {
@@ -1704,7 +1630,7 @@ export default function ProspectsPage () {
       return;
     }
 
-    const nextActionDate = formatFutureLocalDate(suggestedFollowUpDays);
+    const nextActionDate = getFutureDateString(suggestedFollowUpDays);
     const updatedProspects = prospects.map((currentProspect) => {
       if (currentProspect.id !== prospect.id) {
         return currentProspect;
@@ -1825,7 +1751,7 @@ export default function ProspectsPage () {
     const selectedResource = resources.find(
       (resource) => resource.id === messageAssistantState.selectedResourceId,
     );
-    const today = formatFutureLocalDate(0);
+    const today = getTodayDateString();
     const newConversationEntry: ConversationEntry = {
       id: createProspectId(),
       date: today,
@@ -1914,7 +1840,7 @@ export default function ProspectsPage () {
   }
 
   function handleAddSharedResourceToHistory(prospect: Prospect, resource: Resource) {
-    const today = formatFutureLocalDate(0);
+    const today = getTodayDateString();
     const newConversationEntry: ConversationEntry = {
       id: createProspectId(),
       date: today,
@@ -1949,7 +1875,7 @@ export default function ProspectsPage () {
   }
 
   function handleExportProspects() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayDateString();
     const backupJson = JSON.stringify(prospects, null, 2);
     const backupBlob = new Blob([backupJson], { type: "application/json" });
     const backupUrl = URL.createObjectURL(backupBlob);
@@ -1966,7 +1892,7 @@ export default function ProspectsPage () {
   }
 
   function handleExportProspectsCsv() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayDateString();
     const csvRows = prospects.map((prospect) => {
       const interactionStats = prospect.interactionStats ?? {
         followerSinceDate: "",
@@ -2320,21 +2246,21 @@ export default function ProspectsPage () {
           <button
             className="min-h-10 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
             type="button"
-            onClick={() => updateQuickFollowUpDate(prospect.id, formatFutureLocalDate(1))}
+            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(1))}
           >
             Demain
           </button>
           <button
             className="min-h-10 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
             type="button"
-            onClick={() => updateQuickFollowUpDate(prospect.id, formatFutureLocalDate(3))}
+            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(3))}
           >
             +3 jours
           </button>
           <button
             className="min-h-10 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
             type="button"
-            onClick={() => updateQuickFollowUpDate(prospect.id, formatFutureLocalDate(7))}
+            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(7))}
           >
             +7 jours
           </button>
@@ -2351,7 +2277,7 @@ export default function ProspectsPage () {
   }
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
-  const todayDate = formatFutureLocalDate(0);
+  const todayDate = getTodayDateString();
   const followUpProspects = prospects
     .filter((prospect) => prospect.nextActionDate.trim())
     .sort((firstProspect, secondProspect) =>
@@ -3290,9 +3216,7 @@ export default function ProspectsPage () {
               ) : (
                 <div className="grid max-h-96 gap-3 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
                   {followUpProspects.map((prospect) => {
-                    const name = prospect.displayName?.trim()
-                      ? prospect.displayName
-                      : `${prospect.firstName} ${prospect.lastName}`;
+                    const name = getProspectDisplayName(prospect);
                     const lastConversationEntry =
                       prospect.conversationHistory.length > 0
                         ? prospect.conversationHistory[prospect.conversationHistory.length - 1]

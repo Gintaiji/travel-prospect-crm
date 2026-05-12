@@ -4,17 +4,17 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { loadProspects } from "./lib/prospectStorage";
 import {
+  getProspectDisplayName,
+  getTodayDateString,
+  isDateBeforeToday,
+  isDateToday,
+} from "./lib/prospectUtils";
+import {
   PROSPECT_STATUSES,
   PROSPECT_TEMPERATURES,
   SOCIAL_PLATFORMS,
   type Prospect,
 } from "./lib/types";
-
-function getProspectName(prospect: Prospect) {
-  const fullName = `${prospect.firstName} ${prospect.lastName}`.trim();
-
-  return prospect.displayName.trim() || fullName || "Prospect sans nom";
-}
 
 function compareDateStrings(firstDate: string, secondDate: string) {
   if (firstDate === secondDate) {
@@ -32,7 +32,7 @@ export default function HomePage() {
   useEffect(() => {
     const loadDashboardData = window.setTimeout(() => {
       setProspects(loadProspects());
-      setTodayDate(new Date().toISOString().slice(0, 10));
+      setTodayDate(getTodayDateString());
       setHasLoadedProspects(true);
     }, 0);
 
@@ -53,7 +53,7 @@ export default function HomePage() {
       ).length,
       plannedFollowUps: prospectsWithFollowUp.length,
       lateFollowUps: todayDate
-        ? prospectsWithFollowUp.filter((prospect) => prospect.nextActionDate < todayDate).length
+        ? prospectsWithFollowUp.filter((prospect) => isDateBeforeToday(prospect.nextActionDate)).length
         : 0,
     };
   }, [prospects, todayDate]);
@@ -86,8 +86,8 @@ export default function HomePage() {
           return secondProspect.score - firstProspect.score;
         }
 
-        return getProspectName(firstProspect).localeCompare(
-          getProspectName(secondProspect),
+        return getProspectDisplayName(firstProspect).localeCompare(
+          getProspectDisplayName(secondProspect),
           "fr",
           { sensitivity: "base" },
         );
@@ -104,7 +104,7 @@ export default function HomePage() {
       .filter(
         (prospect) =>
           Boolean(prospect.nextActionDate.trim()) &&
-          compareDateStrings(prospect.nextActionDate, todayDate) <= 0,
+          isDateBeforeToday(prospect.nextActionDate) || isDateToday(prospect.nextActionDate),
       )
       .sort((firstProspect, secondProspect) =>
         compareDateStrings(firstProspect.nextActionDate, secondProspect.nextActionDate),
@@ -277,7 +277,7 @@ export default function HomePage() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
                         <h2 className="truncate text-base font-semibold text-white">
-                          {getProspectName(prospect)}
+                          {getProspectDisplayName(prospect)}
                         </h2>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium">
                           <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-200">
@@ -339,7 +339,7 @@ export default function HomePage() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
                         <h2 className="truncate text-base font-semibold text-white">
-                          {getProspectName(prospect)}
+                          {getProspectDisplayName(prospect)}
                         </h2>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium">
                           <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-sky-200">

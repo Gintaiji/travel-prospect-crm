@@ -3,6 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
+import {
+  calculateProspectScore,
+  getFutureDateString,
+  getProspectDisplayName,
+  getTodayDateString,
+  isDateBeforeToday,
+  isDateToday,
+} from "../lib/prospectUtils";
 import type { ConversationEntry, Prospect } from "../lib/types";
 
 type FollowUpFilter = "Toutes les relances" | "En retard" | "Aujourd’hui" | "À venir";
@@ -61,86 +69,6 @@ const followUpResultStatusMap: Partial<Record<FollowUpResult, Prospect["status"]
   Refus: "Refus",
 };
 
-function calculateProspectScore(prospect: Prospect) {
-  const interactionStats = prospect.interactionStats ?? {
-    followerSinceDate: "",
-    commentsCount: 0,
-    interactionsCount: 0,
-    likesCount: 0,
-    messagesCount: 0,
-  };
-  let score = 0;
-
-  if (prospect.isFollower) {
-    score += 10;
-  }
-
-  if (prospect.hasSentMessage) {
-    score += 15;
-  }
-
-  score += Math.min(interactionStats.commentsCount * 3, 15);
-  score += Math.min(interactionStats.interactionsCount * 2, 20);
-  score += Math.min(interactionStats.likesCount, 10);
-  score += Math.min(interactionStats.messagesCount * 5, 20);
-
-  if (prospect.temperature === "Tiède") {
-    score += 10;
-  }
-
-  if (prospect.temperature === "Chaud") {
-    score += 20;
-  }
-
-  if (prospect.status === "Conversation ouverte") {
-    score += 10;
-  }
-
-  if (prospect.status === "Intérêt voyage détecté") {
-    score += 15;
-  }
-
-  if (prospect.status === "Présentation proposée") {
-    score += 20;
-  }
-
-  if (prospect.status === "Présentation faite") {
-    score += 25;
-  }
-
-  if (prospect.status === "Intéressé") {
-    score += 30;
-  }
-
-  if (prospect.status === "Client" || prospect.status === "Partenaire") {
-    score += 35;
-  }
-
-  if ((prospect.tags ?? []).includes("À éviter")) {
-    score -= 30;
-  }
-
-  return Math.min(Math.max(score, 0), 100);
-}
-
-function getProspectName(prospect: Prospect) {
-  const fullName = `${prospect.firstName} ${prospect.lastName}`.trim();
-
-  return prospect.displayName.trim() || fullName || "Prospect sans nom";
-}
-
-function formatFutureLocalDate(daysToAdd: number) {
-  const futureDate = new Date();
-  futureDate.setHours(12, 0, 0, 0);
-  futureDate.setDate(futureDate.getDate() + daysToAdd);
-
-  const year = futureDate.getFullYear();
-  const month = String(futureDate.getMonth() + 1).padStart(2, "0");
-  const day = String(futureDate.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
 function compareDateStrings(firstDate: string, secondDate: string) {
   if (firstDate === secondDate) {
     return 0;
@@ -176,7 +104,7 @@ export default function FollowUpsPage() {
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
       setProspects(loadProspects());
-      setTodayDate(formatFutureLocalDate(0));
+      setTodayDate(getTodayDateString());
     }, 0);
 
     return () => window.clearTimeout(loadStoredProspects);
@@ -199,10 +127,10 @@ export default function FollowUpsPage() {
 
   const followUpGroups = useMemo(() => {
     const lateProspects = followUpProspects.filter(
-      (prospect) => todayDate && compareDateStrings(prospect.nextActionDate, todayDate) < 0,
+      (prospect) => todayDate && isDateBeforeToday(prospect.nextActionDate),
     );
     const todayProspects = followUpProspects.filter(
-      (prospect) => todayDate && compareDateStrings(prospect.nextActionDate, todayDate) === 0,
+      (prospect) => todayDate && isDateToday(prospect.nextActionDate),
     );
     const upcomingProspects = followUpProspects.filter(
       (prospect) => todayDate && compareDateStrings(prospect.nextActionDate, todayDate) > 0,
@@ -300,7 +228,7 @@ export default function FollowUpsPage() {
   }
 
   function saveFollowUpTreatment(prospectId: string) {
-    const today = formatFutureLocalDate(0);
+    const today = getTodayDateString();
     const now = new Date().toISOString();
     const result = followUpTreatmentForm.result;
     const summary = followUpTreatmentForm.summary.trim();
@@ -366,7 +294,7 @@ export default function FollowUpsPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <h3 className="truncate text-lg font-semibold text-white">
-              {getProspectName(prospect)}
+              {getProspectDisplayName(prospect)}
             </h3>
             <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium">
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-200">
@@ -521,21 +449,21 @@ export default function FollowUpsPage() {
           <button
             className="min-h-10 rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
             type="button"
-            onClick={() => updateProspectFollowUpDate(prospect.id, formatFutureLocalDate(1))}
+            onClick={() => updateProspectFollowUpDate(prospect.id, getFutureDateString(1))}
           >
             Reporter demain
           </button>
           <button
             className="min-h-10 rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
             type="button"
-            onClick={() => updateProspectFollowUpDate(prospect.id, formatFutureLocalDate(3))}
+            onClick={() => updateProspectFollowUpDate(prospect.id, getFutureDateString(3))}
           >
             Reporter +3 jours
           </button>
           <button
             className="min-h-10 rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
             type="button"
-            onClick={() => updateProspectFollowUpDate(prospect.id, formatFutureLocalDate(7))}
+            onClick={() => updateProspectFollowUpDate(prospect.id, getFutureDateString(7))}
           >
             Reporter +7 jours
           </button>
