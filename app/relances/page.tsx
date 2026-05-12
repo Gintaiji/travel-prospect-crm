@@ -3,9 +3,25 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
-import type { Prospect } from "../lib/types";
+import type { ConversationEntry, Prospect } from "../lib/types";
 
 type FollowUpFilter = "Toutes les relances" | "En retard" | "Aujourd’hui" | "À venir";
+
+type FollowUpResult =
+  | "Aucune réponse"
+  | "Réponse reçue"
+  | "Intérêt voyage détecté"
+  | "Présentation proposée"
+  | "Pas maintenant"
+  | "Refus"
+  | "Autre";
+
+type FollowUpTreatmentFormState = {
+  result: FollowUpResult;
+  summary: string;
+  nextAction: string;
+  nextActionDate: string;
+};
 
 type FollowUpSection = {
   title: Exclude<FollowUpFilter, "Toutes les relances">;
@@ -18,6 +34,94 @@ const followUpFilters: FollowUpFilter[] = [
   "Aujourd’hui",
   "À venir",
 ];
+
+const followUpResults: FollowUpResult[] = [
+  "Aucune réponse",
+  "Réponse reçue",
+  "Intérêt voyage détecté",
+  "Présentation proposée",
+  "Pas maintenant",
+  "Refus",
+  "Autre",
+];
+
+const initialFollowUpTreatmentForm: FollowUpTreatmentFormState = {
+  result: "Aucune réponse",
+  summary: "",
+  nextAction: "",
+  nextActionDate: "",
+};
+
+const followUpResultStatusMap: Partial<Record<FollowUpResult, Prospect["status"]>> = {
+  "Aucune réponse": "À relancer",
+  "Réponse reçue": "Conversation ouverte",
+  "Intérêt voyage détecté": "Intérêt voyage détecté",
+  "Présentation proposée": "Présentation proposée",
+  "Pas maintenant": "Pas maintenant",
+  Refus: "Refus",
+};
+
+function calculateProspectScore(prospect: Prospect) {
+  const interactionStats = prospect.interactionStats ?? {
+    followerSinceDate: "",
+    commentsCount: 0,
+    interactionsCount: 0,
+    likesCount: 0,
+    messagesCount: 0,
+  };
+  let score = 0;
+
+  if (prospect.isFollower) {
+    score += 10;
+  }
+
+  if (prospect.hasSentMessage) {
+    score += 15;
+  }
+
+  score += Math.min(interactionStats.commentsCount * 3, 15);
+  score += Math.min(interactionStats.interactionsCount * 2, 20);
+  score += Math.min(interactionStats.likesCount, 10);
+  score += Math.min(interactionStats.messagesCount * 5, 20);
+
+  if (prospect.temperature === "Tiède") {
+    score += 10;
+  }
+
+  if (prospect.temperature === "Chaud") {
+    score += 20;
+  }
+
+  if (prospect.status === "Conversation ouverte") {
+    score += 10;
+  }
+
+  if (prospect.status === "Intérêt voyage détecté") {
+    score += 15;
+  }
+
+  if (prospect.status === "Présentation proposée") {
+    score += 20;
+  }
+
+  if (prospect.status === "Présentation faite") {
+    score += 25;
+  }
+
+  if (prospect.status === "Intéressé") {
+    score += 30;
+  }
+
+  if (prospect.status === "Client" || prospect.status === "Partenaire") {
+    score += 35;
+  }
+
+  if ((prospect.tags ?? []).includes("À éviter")) {
+    score -= 30;
+  }
+
+  return Math.min(Math.max(score, 0), 100);
+}
 
 function getProspectName(prospect: Prospect) {
   const fullName = `${prospect.firstName} ${prospect.lastName}`.trim();
@@ -64,6 +168,10 @@ export default function FollowUpsPage() {
   const [todayDate, setTodayDate] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [followUpFilter, setFollowUpFilter] = useState<FollowUpFilter>("Toutes les relances");
+  const [activeTreatmentProspectId, setActiveTreatmentProspectId] = useState<string | null>(null);
+  const [followUpTreatmentForm, setFollowUpTreatmentForm] =
+    useState<FollowUpTreatmentFormState>(initialFollowUpTreatmentForm);
+  const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
@@ -152,6 +260,95 @@ export default function FollowUpsPage() {
     setProspects(updatedProspects);
   }
 
+  function createConversationEntryId() {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+
+    return `conversation-${Date.now()}`;
+  }
+
+  function resetFollowUpTreatmentForm() {
+    setActiveTreatmentProspectId(null);
+    setFollowUpTreatmentForm(initialFollowUpTreatmentForm);
+  }
+
+  function showSuccessMessage() {
+    setSuccessMessage("Relance traitée et ajoutée à l’historique.");
+
+    window.setTimeout(() => {
+      setSuccessMessage("");
+    }, 3500);
+  }
+
+  function updateFollowUpTreatmentFormField<Field extends keyof FollowUpTreatmentFormState>(
+    field: Field,
+    value: FollowUpTreatmentFormState[Field],
+  ) {
+    setFollowUpTreatmentForm((currentForm) => ({
+      ...currentForm,
+      [field]: value,
+    }));
+  }
+
+  function openFollowUpTreatmentForm(prospect: Prospect) {
+    setActiveTreatmentProspectId(prospect.id);
+    setFollowUpTreatmentForm({
+      ...initialFollowUpTreatmentForm,
+      nextActionDate: prospect.nextActionDate,
+    });
+  }
+
+  function saveFollowUpTreatment(prospectId: string) {
+    const today = formatFutureLocalDate(0);
+    const now = new Date().toISOString();
+    const result = followUpTreatmentForm.result;
+    const summary = followUpTreatmentForm.summary.trim();
+    const nextAction = followUpTreatmentForm.nextAction.trim();
+    const nextActionDate = followUpTreatmentForm.nextActionDate.trim();
+    const contentLines = [`Résultat : ${result}`];
+
+    if (summary) {
+      contentLines.push(`Résumé : ${summary}`);
+    }
+
+    const updatedProspects = prospects.map((prospect) => {
+      if (prospect.id !== prospectId) {
+        return prospect;
+      }
+
+      const nextStatus = followUpResultStatusMap[result] ?? prospect.status;
+      const conversationEntry: ConversationEntry = {
+        id: createConversationEntryId(),
+        date: today,
+        channel: prospect.mainPlatform,
+        content: contentLines.join("\n"),
+        nextAction,
+      };
+      const updatedProspect: Prospect = {
+        ...prospect,
+        status: nextStatus,
+        conversationHistory: [
+          ...(prospect.conversationHistory ?? []),
+          conversationEntry,
+        ],
+        lastInteractionDate: today,
+        nextActionDate,
+        updatedAt: now,
+      };
+
+      return {
+        ...updatedProspect,
+        score: calculateProspectScore(updatedProspect),
+      };
+    });
+
+    saveProspects(updatedProspects);
+    setProspects(updatedProspects);
+    resetFollowUpTreatmentForm();
+    showSuccessMessage();
+  }
+
   function renderProspectCard(prospect: Prospect) {
     const conversationHistory = prospect.conversationHistory ?? [];
     const lastConversationEntry =
@@ -159,6 +356,7 @@ export default function FollowUpsPage() {
         ? conversationHistory[conversationHistory.length - 1]
         : null;
     const prospectTags = prospect.tags ?? [];
+    const isTreatmentFormOpen = activeTreatmentProspectId === prospect.id;
 
     return (
       <article
@@ -221,7 +419,98 @@ export default function FollowUpsPage() {
           </div>
         ) : null}
 
+        {isTreatmentFormOpen ? (
+          <form
+            className="mt-4 grid gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              saveFollowUpTreatment(prospect.id);
+            }}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1.5 text-xs font-medium text-slate-300">
+                Résultat de la relance
+                <select
+                  className="min-h-10 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                  value={followUpTreatmentForm.result}
+                  onChange={(event) =>
+                    updateFollowUpTreatmentFormField(
+                      "result",
+                      event.target.value as FollowUpResult,
+                    )
+                  }
+                >
+                  {followUpResults.map((result) => (
+                    <option key={result} value={result}>
+                      {result}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="grid gap-1.5 text-xs font-medium text-slate-300">
+                Prochaine relance
+                <input
+                  className="min-h-10 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                  type="date"
+                  value={followUpTreatmentForm.nextActionDate}
+                  onChange={(event) =>
+                    updateFollowUpTreatmentFormField("nextActionDate", event.target.value)
+                  }
+                />
+              </label>
+            </div>
+
+            <label className="grid gap-1.5 text-xs font-medium text-slate-300">
+              Résumé de l’échange
+              <textarea
+                className="min-h-24 resize-y rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm leading-6 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                value={followUpTreatmentForm.summary}
+                onChange={(event) =>
+                  updateFollowUpTreatmentFormField("summary", event.target.value)
+                }
+                placeholder="Notes rapides sur la relance..."
+              />
+            </label>
+
+            <label className="grid gap-1.5 text-xs font-medium text-slate-300">
+              Prochaine action
+              <input
+                className="min-h-10 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                value={followUpTreatmentForm.nextAction}
+                onChange={(event) =>
+                  updateFollowUpTreatmentFormField("nextAction", event.target.value)
+                }
+                placeholder="Ex : envoyer la présentation voyage"
+              />
+            </label>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="min-h-10 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
+                type="submit"
+              >
+                Enregistrer le suivi
+              </button>
+              <button
+                className="min-h-10 rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                type="button"
+                onClick={resetFollowUpTreatmentForm}
+              >
+                Annuler
+              </button>
+            </div>
+          </form>
+        ) : null}
+
         <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            className="min-h-10 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
+            type="button"
+            onClick={() => openFollowUpTreatmentForm(prospect)}
+          >
+            Traiter la relance
+          </button>
           <button
             className="min-h-10 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
             type="button"
@@ -318,6 +607,12 @@ export default function FollowUpsPage() {
             </label>
           </div>
         </section>
+
+        {successMessage ? (
+          <p className="mb-6 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-medium text-emerald-200">
+            {successMessage}
+          </p>
+        ) : null}
 
         {totalPlannedFollowUps === 0 ? (
           <section className="rounded-3xl border border-white/10 bg-white/5 p-6 text-center shadow-xl">
