@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  loadCustomMessageTemplates,
+  saveCustomMessageTemplates,
+  type CustomMessageTemplates,
+} from "../lib/messageTemplateStorage";
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
 import { getTodayDateString } from "../lib/prospectUtils";
 import { loadResources, saveResources } from "../lib/resourceStorage";
@@ -13,11 +18,12 @@ import type { AppSettings, Prospect, Resource } from "../lib/types";
 
 type BackupFile = {
   appName: "Travel Prospect CRM";
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   exportedAt: string;
   prospects: Prospect[];
   resources: Resource[];
   settings?: AppSettings;
+  customMessageTemplates?: CustomMessageTemplates;
 };
 
 const backupAppName = "Travel Prospect CRM";
@@ -46,6 +52,15 @@ function isBackupFile(value: unknown): value is BackupFile {
 
 function hasBackupSettings(value: BackupFile): value is BackupFile & { settings: Partial<AppSettings> } {
   return Boolean(value.settings && typeof value.settings === "object");
+}
+
+function hasBackupCustomMessageTemplates(
+  value: BackupFile,
+): value is BackupFile & { customMessageTemplates: CustomMessageTemplates } {
+  return Boolean(
+    value.customMessageTemplates &&
+      typeof value.customMessageTemplates === "object",
+  );
 }
 
 function normalizeImportedSettings(importedSettings: Partial<AppSettings>): AppSettings {
@@ -79,10 +94,20 @@ function hasCustomSettings(settings: AppSettings) {
   );
 }
 
+function hasCustomMessageTemplates(customMessageTemplates: CustomMessageTemplates) {
+  return Object.values(customMessageTemplates).some((stepTemplates) =>
+    stepTemplates
+      ? Object.values(stepTemplates).some((message) => typeof message === "string")
+      : false,
+  );
+}
+
 export default function BackupPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [customMessageTemplates, setCustomMessageTemplates] =
+    useState<CustomMessageTemplates>({});
   const [lastReadAt, setLastReadAt] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [importError, setImportError] = useState("");
@@ -92,6 +117,7 @@ export default function BackupPage() {
       setProspects(loadProspects());
       setResources(loadResources());
       setSettings(loadSettings());
+      setCustomMessageTemplates(loadCustomMessageTemplates());
       setLastReadAt(new Date().toLocaleString("fr-FR"));
     }, 0);
 
@@ -100,15 +126,19 @@ export default function BackupPage() {
 
   const totalConversationCount = getTotalConversationCount(prospects);
   const customSettingsLabel = hasCustomSettings(settings) ? "Oui" : "Non";
+  const customMessageTemplatesLabel = hasCustomMessageTemplates(customMessageTemplates)
+    ? "Oui"
+    : "Non";
 
   function exportCompleteBackup() {
     const backup: BackupFile = {
       appName: backupAppName,
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       prospects,
       resources,
       settings,
+      customMessageTemplates,
     };
     const backupBlob = new Blob([JSON.stringify(backup, null, 2)], {
       type: "application/json",
@@ -151,7 +181,7 @@ export default function BackupPage() {
         }
 
         const shouldImport = window.confirm(
-          "Importer cette sauvegarde complète ? Les prospects, ressources et paramètres actuels seront remplacés si la sauvegarde contient des paramètres.",
+          "Importer cette sauvegarde complète ? Les prospects, ressources, paramètres et modèles personnalisés seront remplacés si la sauvegarde les contient.",
         );
 
         if (!shouldImport) {
@@ -165,6 +195,10 @@ export default function BackupPage() {
 
           saveSettings(importedSettings);
           setSettings(importedSettings);
+        }
+        if (hasBackupCustomMessageTemplates(parsedBackup)) {
+          saveCustomMessageTemplates(parsedBackup.customMessageTemplates);
+          setCustomMessageTemplates(parsedBackup.customMessageTemplates);
         }
         setProspects(parsedBackup.prospects);
         setResources(parsedBackup.resources);
@@ -217,7 +251,7 @@ export default function BackupPage() {
             </button>
           </div>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
             <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Prospects</p>
               <p className="mt-2 text-3xl font-bold text-white">{prospects.length}</p>
@@ -235,6 +269,14 @@ export default function BackupPage() {
                 Paramètres personnalisés
               </p>
               <p className="mt-2 text-3xl font-bold text-white">{customSettingsLabel}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                Modèles personnalisés
+              </p>
+              <p className="mt-2 text-3xl font-bold text-white">
+                {customMessageTemplatesLabel}
+              </p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
@@ -274,7 +316,7 @@ export default function BackupPage() {
             <h2 className="text-xl font-bold text-white">Quand exporter ?</h2>
             <p className="mt-4 text-sm leading-6 text-slate-300">
               La sauvegarde complète contient les prospects, l’historique d’échanges,
-              les ressources et les paramètres.
+              les ressources, les paramètres et les modèles de messages personnalisés.
             </p>
             <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
               <li>Avant une grosse modification</li>
