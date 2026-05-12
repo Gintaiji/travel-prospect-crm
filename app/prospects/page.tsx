@@ -18,6 +18,10 @@ import {
   type MessageStyle,
   type MessageTunnelStep,
 } from "../lib/messageTemplates";
+import {
+  loadCustomMessageTemplates,
+  type CustomMessageTemplates,
+} from "../lib/messageTemplateStorage";
 import { DEFAULT_APP_SETTINGS, loadSettings } from "../lib/settingsStorage";
 import {
   PROSPECT_CATEGORIES,
@@ -790,6 +794,14 @@ function getMessageTunnelStepTemplate(situation: MessageAssistantSituation) {
   );
 }
 
+function getCustomTemplateMessage(
+  customTemplates: CustomMessageTemplates,
+  step: MessageAssistantSituation,
+  style: MessageAssistantStyle,
+) {
+  return customTemplates[step]?.[style];
+}
+
 function getMessageAssistantObjective(situation: MessageAssistantSituation) {
   return `Objectif : ${getMessageTunnelStepTemplate(situation).objective}`;
 }
@@ -903,15 +915,17 @@ function generateProspectMessage(
   situation: MessageAssistantSituation,
   style: MessageAssistantStyle,
   settings: AppSettings,
+  customTemplates: CustomMessageTemplates,
 ) {
   const context = buildMessageAssistantContext(prospect);
   const messageStep = getMessageTunnelStepTemplate(situation);
   const messageVariant =
     messageStep.variants.find((variant) => variant.tone === style) ??
     messageStep.variants[0];
+  const customMessage = getCustomTemplateMessage(customTemplates, situation, style);
 
   const message = applyMessageAssistantContext(
-    messageVariant.assistantTemplate ?? messageVariant.message,
+    customMessage ?? messageVariant.assistantTemplate ?? messageVariant.message,
     context,
   );
 
@@ -956,6 +970,7 @@ export default function ProspectsPage () {
   const [copiedSharedResourceProspectId, setCopiedSharedResourceProspectId] = useState<string | null>(null);
   const [addedSharedResourceProspectId, setAddedSharedResourceProspectId] = useState<string | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [customMessageTemplates, setCustomMessageTemplates] = useState<CustomMessageTemplates>({});
   const [hasLoadedProspects, setHasLoadedProspects] = useState(false);
   const [focusedProspectId, setFocusedProspectId] = useState<string | null>(null);
   const [highlightedProspectId, setHighlightedProspectId] = useState<string | null>(null);
@@ -967,6 +982,7 @@ export default function ProspectsPage () {
       setProspects(loadProspects());
       setResources(loadResources());
       setAppSettings(loadedSettings);
+      setCustomMessageTemplates(loadCustomMessageTemplates());
       setMessageAssistantState((currentState) => ({
         ...currentState,
         style: loadedSettings.defaultMessageStyle,
@@ -1688,6 +1704,7 @@ export default function ProspectsPage () {
         currentState.situation,
         currentState.style,
         appSettings,
+        customMessageTemplates,
       ),
       copiedProspectId: null,
       addedHistoryProspectId: null,
