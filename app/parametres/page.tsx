@@ -21,6 +21,22 @@ function createDefaultSettings() {
   };
 }
 
+function buildPreviewMessage(settings: AppSettings) {
+  const displayName = settings.userDisplayName.trim();
+  const clubName = settings.clubName.trim() || DEFAULT_APP_SETTINGS.clubName;
+  const publicWording =
+    settings.publicWording.trim() || DEFAULT_APP_SETTINGS.publicWording;
+  const signature = settings.messageSignature.trim();
+  const message = [
+    "Salut,",
+    `je voulais te partager une idée autour de ${clubName}.`,
+    `L’idée, c’est une ${publicWording}, simple à découvrir si le sujet voyage te parle.`,
+    displayName ? `Je peux t’envoyer les infos tranquillement. ${displayName}` : "Je peux t’envoyer les infos tranquillement.",
+  ].join("\n");
+
+  return signature ? `${message}\n\n${signature}` : message;
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [savedMessage, setSavedMessage] = useState("");
@@ -92,6 +108,8 @@ export default function SettingsPage() {
     setSettings(defaultSettings);
     showSavedMessage("Paramètres enregistrés.");
   }
+
+  const previewMessage = buildPreviewMessage(settings);
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-6 text-white sm:px-6 sm:py-10">
@@ -275,6 +293,15 @@ export default function SettingsPage() {
             <p className="mt-4 text-sm leading-6 text-slate-300">
               Ils permettront ensuite de préremplir tes fiches prospects, personnaliser tes messages et harmoniser l’utilisation du CRM avec ton équipe.
             </p>
+
+            <div className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                Prévisualisation
+              </p>
+              <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-100">
+                {previewMessage}
+              </p>
+            </div>
           </aside>
         </div>
       </section>

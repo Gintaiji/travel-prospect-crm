@@ -1,10 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MESSAGE_TUNNEL_STEPS } from "../lib/messageTemplates";
+import { DEFAULT_APP_SETTINGS, loadSettings } from "../lib/settingsStorage";
+import type { AppSettings } from "../lib/types";
+
+function getConfiguredMessage(message: string, settings: AppSettings) {
+  const clubName = settings.clubName.trim() || DEFAULT_APP_SETTINGS.clubName;
+  const publicWording =
+    settings.publicWording.trim() || DEFAULT_APP_SETTINGS.publicWording;
+
+  return message
+    .replaceAll("club privé lié au voyage", clubName)
+    .replaceAll("club privé avec des avantages membres", clubName)
+    .replaceAll("plateforme voyage avec avantages membres", publicWording)
+    .replaceAll("plateforme voyage", publicWording)
+    .replace(/\bCRM\b/gi, "outil")
+    .replace(/\bprospect\b/gi, "contact")
+    .replace(/\btunnel\b/gi, "parcours")
+    .replace(/\bstatut\b/gi, "situation")
+    .replace(/\btempérature\b/gi, "ressenti")
+    .replace(/dans mon suivi/gi, "de mon côté")
+    .replace(/j[’']ai noté/gi, "je me souviens")
+    .replace(/\bétape\b/gi, "moment");
+}
 
 export default function MessagesPage() {
   const [copiedMessageKey, setCopiedMessageKey] = useState<string | null>(null);
+  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+
+  useEffect(() => {
+    const loadStoredSettings = window.setTimeout(() => {
+      setAppSettings(loadSettings());
+    }, 0);
+
+    return () => window.clearTimeout(loadStoredSettings);
+  }, []);
 
   async function handleCopyMessage(message: string, messageKey: string) {
     if (!navigator.clipboard?.writeText) {
@@ -42,6 +73,11 @@ export default function MessagesPage() {
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-200">
             Le message doit ouvrir une conversation, pas donner l’impression de vendre dès la première phrase.
           </p>
+          {appSettings.messageSignature.trim() ? (
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-emerald-100">
+              Ta signature personnalisée pourra être ajoutée depuis l’assistant prospect.
+            </p>
+          ) : null}
         </section>
 
         <section className="grid gap-5">
@@ -62,6 +98,7 @@ export default function MessagesPage() {
               <div className="grid gap-3 lg:grid-cols-3">
                 {templateSection.variants.map((variant) => {
                   const messageKey = `${templateSection.step}-${variant.tone}`;
+                  const configuredMessage = getConfiguredMessage(variant.message, appSettings);
 
                   return (
                     <div
@@ -73,7 +110,7 @@ export default function MessagesPage() {
                           {variant.tone}
                         </p>
                         <p className="mt-3 text-sm leading-6 text-slate-100">
-                          {variant.message}
+                          {configuredMessage}
                         </p>
                       </div>
 
@@ -81,7 +118,7 @@ export default function MessagesPage() {
                         <button
                           className="min-h-10 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
                           type="button"
-                          onClick={() => handleCopyMessage(variant.message, messageKey)}
+                          onClick={() => handleCopyMessage(configuredMessage, messageKey)}
                         >
                           Copier
                         </button>

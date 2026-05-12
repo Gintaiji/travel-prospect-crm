@@ -18,6 +18,7 @@ import {
   type MessageStyle,
   type MessageTunnelStep,
 } from "../lib/messageTemplates";
+import { DEFAULT_APP_SETTINGS, loadSettings } from "../lib/settingsStorage";
 import {
   PROSPECT_CATEGORIES,
   PROSPECT_COLOR_TYPES,
@@ -25,6 +26,7 @@ import {
   PROSPECT_TAGS,
   PROSPECT_TEMPERATURES,
   SOCIAL_PLATFORMS,
+  type AppSettings,
   type ConversationEntry,
   type Prospect,
   type Resource,
@@ -171,6 +173,8 @@ type MessageAssistantState = {
   addedHistoryProspectId: string | null;
   copiedResourceProspectId: string | null;
   copiedMessageWithResourceProspectId: string | null;
+  copiedPresentationLinkProspectId: string | null;
+  copiedMessageWithPresentationLinkProspectId: string | null;
   suggestedFollowUpAppliedProspectId: string | null;
   suggestedStatusAppliedProspectId: string | null;
 };
@@ -689,6 +693,8 @@ const initialMessageAssistantState: MessageAssistantState = {
   addedHistoryProspectId: null,
   copiedResourceProspectId: null,
   copiedMessageWithResourceProspectId: null,
+  copiedPresentationLinkProspectId: null,
+  copiedMessageWithPresentationLinkProspectId: null,
   suggestedFollowUpAppliedProspectId: null,
   suggestedStatusAppliedProspectId: null,
 };
@@ -792,8 +798,15 @@ function getMessageAssistantNextAction(situation: MessageAssistantSituation) {
   return getMessageTunnelStepTemplate(situation).nextAction;
 }
 
-function getMessageAssistantSuggestedFollowUpDays(situation: MessageAssistantSituation) {
-  return getMessageTunnelStepTemplate(situation).suggestedFollowUpDays;
+function getMessageAssistantSuggestedFollowUpDays(
+  situation: MessageAssistantSituation,
+  settings: AppSettings,
+) {
+  const suggestedFollowUpDays = getMessageTunnelStepTemplate(situation).suggestedFollowUpDays;
+
+  return suggestedFollowUpDays === 3
+    ? Math.max(0, Math.round(settings.defaultFollowUpDays))
+    : suggestedFollowUpDays;
 }
 
 function formatSuggestedFollowUpLabel(daysToAdd: number | null) {
@@ -829,10 +842,67 @@ function applyMessageAssistantContext(
     .replaceAll("{warmTemperatureMention}", warmTemperatureMention);
 }
 
+function getConfiguredClubName(settings: AppSettings) {
+  return settings.clubName.trim() || DEFAULT_APP_SETTINGS.clubName;
+}
+
+function getConfiguredPublicWording(settings: AppSettings) {
+  return settings.publicWording.trim() || DEFAULT_APP_SETTINGS.publicWording;
+}
+
+function sanitizeOutgoingMessage(message: string) {
+  return message
+    .replace(/\bCRM\b/gi, "outil")
+    .replace(/\bprospect\b/gi, "contact")
+    .replace(/\btunnel\b/gi, "parcours")
+    .replace(/\bstatut\b/gi, "situation")
+    .replace(/\btempérature\b/gi, "ressenti")
+    .replace(/dans mon suivi/gi, "de mon côté")
+    .replace(/j[’']ai noté/gi, "je me souviens")
+    .replace(/\bétape\b/gi, "moment");
+}
+
+function applyAppSettingsToMessage(message: string, settings: AppSettings) {
+  const configuredClubName = getConfiguredClubName(settings);
+  const configuredPublicWording = getConfiguredPublicWording(settings);
+  const cleanSignature = sanitizeOutgoingMessage(settings.messageSignature.trim());
+  const configuredMessage = message
+    .replaceAll("club privé lié au voyage", configuredClubName)
+    .replaceAll("club privé avec des avantages membres", configuredClubName)
+    .replaceAll("plateforme voyage avec avantages membres", configuredPublicWording)
+    .replaceAll("plateforme voyage", configuredPublicWording);
+  const cleanMessage = sanitizeOutgoingMessage(configuredMessage).trim();
+
+  return cleanSignature ? `${cleanMessage}\n\n${cleanSignature}` : cleanMessage;
+}
+
+function shouldShowPresentationLink(situation: MessageAssistantSituation) {
+  return situation === "Invitation présentation" || situation === "Suivi après présentation";
+}
+
+function buildMessageWithPresentationLink(message: string, presentationLink: string) {
+  const cleanMessage = message.trim();
+  const cleanPresentationLink = presentationLink.trim();
+
+  return cleanMessage
+    ? `${cleanMessage}\n\n${cleanPresentationLink}`
+    : cleanPresentationLink;
+}
+
+function buildConversationContentWithPresentationLink(message: string, presentationLink: string) {
+  const cleanMessage = message.trim();
+  const cleanPresentationLink = presentationLink.trim();
+
+  return cleanMessage
+    ? `${cleanMessage}\n\nLien de présentation : ${cleanPresentationLink}`
+    : `Lien de présentation : ${cleanPresentationLink}`;
+}
+
 function generateProspectMessage(
   prospect: Prospect,
   situation: MessageAssistantSituation,
   style: MessageAssistantStyle,
+  settings: AppSettings,
 ) {
   const context = buildMessageAssistantContext(prospect);
   const messageStep = getMessageTunnelStepTemplate(situation);
@@ -840,10 +910,12 @@ function generateProspectMessage(
     messageStep.variants.find((variant) => variant.tone === style) ??
     messageStep.variants[0];
 
-  return applyMessageAssistantContext(
+  const message = applyMessageAssistantContext(
     messageVariant.assistantTemplate ?? messageVariant.message,
     context,
   );
+
+  return applyAppSettingsToMessage(message, settings);
 }
 
 export default function ProspectsPage () {
@@ -883,14 +955,22 @@ export default function ProspectsPage () {
   const [resourceShareSelections, setResourceShareSelections] = useState<Record<string, string>>({});
   const [copiedSharedResourceProspectId, setCopiedSharedResourceProspectId] = useState<string | null>(null);
   const [addedSharedResourceProspectId, setAddedSharedResourceProspectId] = useState<string | null>(null);
+  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [hasLoadedProspects, setHasLoadedProspects] = useState(false);
   const [focusedProspectId, setFocusedProspectId] = useState<string | null>(null);
   const [highlightedProspectId, setHighlightedProspectId] = useState<string | null>(null);
 
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
+      const loadedSettings = loadSettings();
+
       setProspects(loadProspects());
       setResources(loadResources());
+      setAppSettings(loadedSettings);
+      setMessageAssistantState((currentState) => ({
+        ...currentState,
+        style: loadedSettings.defaultMessageStyle,
+      }));
       setHasLoadedProspects(true);
     }, 0);
 
@@ -971,6 +1051,8 @@ export default function ProspectsPage () {
       addedHistoryProspectId: null,
       copiedResourceProspectId: null,
       copiedMessageWithResourceProspectId: null,
+      copiedPresentationLinkProspectId: null,
+      copiedMessageWithPresentationLinkProspectId: null,
       suggestedFollowUpAppliedProspectId: null,
       suggestedStatusAppliedProspectId: null,
     }));
@@ -982,6 +1064,8 @@ export default function ProspectsPage () {
       selectedResourceId: resourceId,
       copiedResourceProspectId: null,
       copiedMessageWithResourceProspectId: null,
+      copiedPresentationLinkProspectId: null,
+      copiedMessageWithPresentationLinkProspectId: null,
     }));
   }
 
@@ -999,11 +1083,39 @@ export default function ProspectsPage () {
     setProspectFilters(initialProspectFilters);
   }
 
+  function getFormStateWithDefaultLocation(currentFormState: ProspectFormState) {
+    return {
+      ...currentFormState,
+      country: currentFormState.country.trim()
+        ? currentFormState.country
+        : appSettings.defaultCountry,
+      region: currentFormState.region.trim()
+        ? currentFormState.region
+        : appSettings.defaultRegion,
+      city: currentFormState.city.trim()
+        ? currentFormState.city
+        : appSettings.defaultCity,
+    };
+  }
+
+  function toggleNewProspectForm() {
+    setIsFormVisible((currentValue) => {
+      if (!currentValue) {
+        setFormState((currentFormState) => getFormStateWithDefaultLocation(currentFormState));
+      }
+
+      return !currentValue;
+    });
+  }
+
   function toggleMessageAssistant(prospectId: string) {
     setActiveMessageAssistantProspectId((currentProspectId) =>
       currentProspectId === prospectId ? null : prospectId,
     );
-    setMessageAssistantState(initialMessageAssistantState);
+    setMessageAssistantState({
+      ...initialMessageAssistantState,
+      style: appSettings.defaultMessageStyle,
+    });
   }
 
   function toggleConversationForm(prospectId: string) {
@@ -1369,7 +1481,10 @@ export default function ProspectsPage () {
 
     if (activeMessageAssistantProspectId === prospectId) {
       setActiveMessageAssistantProspectId(null);
-      setMessageAssistantState(initialMessageAssistantState);
+      setMessageAssistantState({
+        ...initialMessageAssistantState,
+        style: appSettings.defaultMessageStyle,
+      });
     }
   }
 
@@ -1478,7 +1593,10 @@ export default function ProspectsPage () {
 
     if (activeMessageAssistantProspectId === mergedProspect.id) {
       setActiveMessageAssistantProspectId(null);
-      setMessageAssistantState(initialMessageAssistantState);
+      setMessageAssistantState({
+        ...initialMessageAssistantState,
+        style: appSettings.defaultMessageStyle,
+      });
     }
   }
 
@@ -1569,11 +1687,14 @@ export default function ProspectsPage () {
         prospect,
         currentState.situation,
         currentState.style,
+        appSettings,
       ),
       copiedProspectId: null,
       addedHistoryProspectId: null,
       copiedResourceProspectId: null,
       copiedMessageWithResourceProspectId: null,
+      copiedPresentationLinkProspectId: null,
+      copiedMessageWithPresentationLinkProspectId: null,
       suggestedFollowUpAppliedProspectId: null,
       suggestedStatusAppliedProspectId: null,
     }));
@@ -1623,8 +1744,62 @@ export default function ProspectsPage () {
     }, 1800);
   }
 
+  async function handleCopyPresentationLink(prospectId: string) {
+    const presentationLink = appSettings.defaultPresentationLink.trim();
+
+    if (!presentationLink || !navigator.clipboard?.writeText) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(presentationLink);
+    setMessageAssistantState((currentState) => ({
+      ...currentState,
+      copiedPresentationLinkProspectId: prospectId,
+    }));
+    window.setTimeout(() => {
+      setMessageAssistantState((currentState) => ({
+        ...currentState,
+        copiedPresentationLinkProspectId:
+          currentState.copiedPresentationLinkProspectId === prospectId
+            ? null
+            : currentState.copiedPresentationLinkProspectId,
+      }));
+    }, 1800);
+  }
+
+  async function handleCopyMessageWithPresentationLink(prospectId: string) {
+    const presentationLink = appSettings.defaultPresentationLink.trim();
+
+    if (!presentationLink || !navigator.clipboard?.writeText) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(
+      buildMessageWithPresentationLink(
+        messageAssistantState.generatedMessage,
+        presentationLink,
+      ),
+    );
+    setMessageAssistantState((currentState) => ({
+      ...currentState,
+      copiedMessageWithPresentationLinkProspectId: prospectId,
+    }));
+    window.setTimeout(() => {
+      setMessageAssistantState((currentState) => ({
+        ...currentState,
+        copiedMessageWithPresentationLinkProspectId:
+          currentState.copiedMessageWithPresentationLinkProspectId === prospectId
+            ? null
+            : currentState.copiedMessageWithPresentationLinkProspectId,
+      }));
+    }, 1800);
+  }
+
   function handleApplySuggestedFollowUp(prospect: Prospect) {
-    const suggestedFollowUpDays = getMessageAssistantSuggestedFollowUpDays(messageAssistantState.situation);
+    const suggestedFollowUpDays = getMessageAssistantSuggestedFollowUpDays(
+      messageAssistantState.situation,
+      appSettings,
+    );
 
     if (suggestedFollowUpDays === null) {
       return;
@@ -1751,6 +1926,15 @@ export default function ProspectsPage () {
     const selectedResource = resources.find(
       (resource) => resource.id === messageAssistantState.selectedResourceId,
     );
+    const presentationLink = appSettings.defaultPresentationLink.trim();
+    const shouldAddPresentationLink =
+      messageAssistantState.situation === "Invitation présentation" && presentationLink;
+    const messageWithPresentationLink = shouldAddPresentationLink
+      ? buildConversationContentWithPresentationLink(
+          messageAssistantState.generatedMessage,
+          presentationLink,
+        )
+      : messageAssistantState.generatedMessage.trim();
     const today = getTodayDateString();
     const newConversationEntry: ConversationEntry = {
       id: createProspectId(),
@@ -1758,10 +1942,10 @@ export default function ProspectsPage () {
       channel: prospect.mainPlatform,
       content: selectedResource
         ? buildConversationContentWithResource(
-            messageAssistantState.generatedMessage,
+            messageWithPresentationLink,
             selectedResource,
           )
-        : messageAssistantState.generatedMessage.trim(),
+        : messageWithPresentationLink,
       nextAction: getMessageAssistantNextAction(messageAssistantState.situation),
     };
     const updatedProspects = prospects.map((currentProspect) => {
@@ -2141,7 +2325,10 @@ export default function ProspectsPage () {
         setActiveFullProspectId(null);
         setFullProspectFormState(initialFullProspectFormState);
         setActiveMessageAssistantProspectId(null);
-        setMessageAssistantState(initialMessageAssistantState);
+        setMessageAssistantState({
+          ...initialMessageAssistantState,
+          style: appSettings.defaultMessageStyle,
+        });
         setBackupMessage("CSV importé avec succès.");
         setIsBackupError(false);
         resetCsvImportFileInput();
@@ -2204,7 +2391,10 @@ export default function ProspectsPage () {
         setActiveFullProspectId(null);
         setFullProspectFormState(initialFullProspectFormState);
         setActiveMessageAssistantProspectId(null);
-        setMessageAssistantState(initialMessageAssistantState);
+        setMessageAssistantState({
+          ...initialMessageAssistantState,
+          style: appSettings.defaultMessageStyle,
+        });
         setBackupMessage("Sauvegarde importée avec succès.");
         setIsBackupError(false);
         resetImportFileInput();
@@ -2451,7 +2641,7 @@ export default function ProspectsPage () {
           <button
             className="w-full rounded-full bg-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 sm:w-auto"
             type="button"
-            onClick={() => setIsFormVisible((currentValue) => !currentValue)}
+            onClick={toggleNewProspectForm}
           >
             {isFormVisible ? "Masquer le formulaire" : "Ajouter un prospect"}
           </button>
@@ -3657,6 +3847,7 @@ export default function ProspectsPage () {
                 const messageAssistantNextAction = getMessageAssistantNextAction(messageAssistantState.situation);
                 const messageAssistantSuggestedFollowUpDays = getMessageAssistantSuggestedFollowUpDays(
                   messageAssistantState.situation,
+                  appSettings,
                 );
                 const messageAssistantSuggestedFollowUpLabel = formatSuggestedFollowUpLabel(
                   messageAssistantSuggestedFollowUpDays,
@@ -3666,6 +3857,9 @@ export default function ProspectsPage () {
                 );
                 const messageAssistantSuggestedStatusLabel =
                   messageAssistantSuggestedStatus ?? "garder le statut actuel";
+                const defaultPresentationLink = appSettings.defaultPresentationLink.trim();
+                const shouldDisplayDefaultPresentationLink =
+                  defaultPresentationLink && shouldShowPresentationLink(messageAssistantState.situation);
                 const priorityLabel =
                   prospect.score >= 75
                     ? "Priorité haute"
@@ -3999,7 +4193,10 @@ export default function ProspectsPage () {
                             type="button"
                             onClick={() => {
                               setActiveMessageAssistantProspectId(null);
-                              setMessageAssistantState(initialMessageAssistantState);
+                              setMessageAssistantState({
+                                ...initialMessageAssistantState,
+                                style: appSettings.defaultMessageStyle,
+                              });
                             }}
                           >
                             Fermer
@@ -4157,6 +4354,46 @@ export default function ProspectsPage () {
                                   </p>
                                 ) : null}
                               </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {shouldDisplayDefaultPresentationLink ? (
+                          <div className="grid gap-3 rounded-2xl border border-sky-400/20 bg-sky-400/5 p-3">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-300">
+                                Lien de présentation par défaut
+                              </p>
+                              <p className="mt-2 break-all text-xs text-sky-100">
+                                {defaultPresentationLink}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                className="min-h-10 rounded-full border border-sky-400/30 px-4 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/10"
+                                type="button"
+                                onClick={() => handleCopyPresentationLink(prospect.id)}
+                              >
+                                Copier le lien
+                              </button>
+                              <button
+                                className="min-h-10 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+                                type="button"
+                                disabled={!messageAssistantState.generatedMessage}
+                                onClick={() => handleCopyMessageWithPresentationLink(prospect.id)}
+                              >
+                                Copier message + lien
+                              </button>
+                            </div>
+                            {messageAssistantState.copiedPresentationLinkProspectId === prospect.id ? (
+                              <p className="text-xs font-medium text-sky-300">
+                                Lien copié.
+                              </p>
+                            ) : null}
+                            {messageAssistantState.copiedMessageWithPresentationLinkProspectId === prospect.id ? (
+                              <p className="text-xs font-medium text-emerald-300">
+                                Message et lien copiés.
+                              </p>
                             ) : null}
                           </div>
                         ) : null}
