@@ -121,6 +121,8 @@ type ProspectViewMode = "compact" | "detailed";
 
 type ProspectDisplayMode = "list" | "pipeline";
 
+type ProspectActionMode = "standard" | "quick";
+
 const MESSAGE_ASSISTANT_SITUATIONS = MESSAGE_TUNNEL_STEPS.map(
   (messageStep) => messageStep.step,
 );
@@ -962,6 +964,7 @@ export default function ProspectsPage () {
   const [prospectSortOption, setProspectSortOption] = useState<ProspectSortOption>("createdAtDesc");
   const [prospectViewMode, setProspectViewMode] = useState<ProspectViewMode>("compact");
   const [prospectDisplayMode, setProspectDisplayMode] = useState<ProspectDisplayMode>("list");
+  const [prospectActionMode, setProspectActionMode] = useState<ProspectActionMode>("standard");
   const [backupMessage, setBackupMessage] = useState("");
   const [isBackupError, setIsBackupError] = useState(false);
   const [duplicateMergeState, setDuplicateMergeState] = useState<DuplicateMergeState | null>(null);
@@ -1139,6 +1142,27 @@ export default function ProspectsPage () {
       currentProspectId === prospectId ? null : prospectId,
     );
     setConversationFormState(initialConversationFormState);
+  }
+
+  function openQuickMessageAssistant(prospectId: string) {
+    setProspectActionMode("standard");
+    setProspectDisplayMode("list");
+    setProspectViewMode("compact");
+    setActiveMessageAssistantProspectId(prospectId);
+    setMessageAssistantState({
+      ...initialMessageAssistantState,
+      style: appSettings.defaultMessageStyle,
+    });
+    setHighlightedProspectId(prospectId);
+  }
+
+  function openQuickConversationForm(prospectId: string) {
+    setProspectActionMode("standard");
+    setProspectDisplayMode("list");
+    setProspectViewMode("compact");
+    setActiveConversationProspectId(prospectId);
+    setConversationFormState(initialConversationFormState);
+    setHighlightedProspectId(prospectId);
   }
 
   function toggleQualificationForm(prospect: Prospect) {
@@ -2586,7 +2610,8 @@ export default function ProspectsPage () {
     {} as Record<Prospect["status"], Prospect[]>,
   );
   const isDetailedView = prospectViewMode === "detailed";
-  const isPipelineView = prospectDisplayMode === "pipeline";
+  const isQuickActionView = prospectActionMode === "quick";
+  const isPipelineView = prospectDisplayMode === "pipeline" && !isQuickActionView;
   const potentialDuplicateGroups = findPotentialDuplicates(prospects);
   const sortedResources = getSortedResources(resources);
   const filteredProspectIds = filteredProspects
@@ -3647,6 +3672,18 @@ export default function ProspectsPage () {
                     <option value="pipeline">Pipeline</option>
                   </select>
                 </label>
+
+                <label className="grid gap-2 text-sm text-slate-300">
+                  Mode
+                  <select
+                    className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                    value={prospectActionMode}
+                    onChange={(event) => setProspectActionMode(event.target.value as ProspectActionMode)}
+                  >
+                    <option value="standard">Standard</option>
+                    <option value="quick">Action rapide</option>
+                  </select>
+                </label>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -3674,7 +3711,182 @@ export default function ProspectsPage () {
               ) : null}
             </section>
 
-            {isPipelineView ? (
+            {isQuickActionView ? (
+              sortedProspects.length === 0 ? (
+                <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-6 text-center text-slate-300">
+                  Aucun prospect ne correspond à ta recherche.
+                </div>
+              ) : (
+                <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {sortedProspects.map((prospect) => {
+                    const name = getProspectDisplayName(prospect);
+                    const prospectTags = prospect.tags ?? [];
+                    const profileUrl = prospect.profileUrl.trim();
+                    const whatsappNumber = buildWhatsAppNumber(prospect.whatsapp.trim());
+                    const phoneNumber = cleanPhoneNumber(prospect.phone.trim());
+                    const emailAddress = prospect.email.trim();
+                    const emailHref = emailAddress ? `mailto:${encodeURIComponent(emailAddress)}` : "";
+                    const isHighlightedProspect = highlightedProspectId === prospect.id;
+
+                    return (
+                      <article
+                        id={`prospect-${prospect.id}`}
+                        className={`min-w-0 scroll-mt-8 rounded-3xl border p-4 shadow-xl transition hover:border-emerald-400/30 ${
+                          isHighlightedProspect
+                            ? "border-emerald-300 bg-emerald-400/15 shadow-emerald-950/40"
+                            : "border-white/10 bg-slate-900/70"
+                        }`}
+                        key={prospect.id}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            {isHighlightedProspect ? (
+                              <span className="mb-2 inline-flex rounded-full border border-emerald-300/40 bg-emerald-400/20 px-3 py-1 text-xs font-semibold text-emerald-100">
+                                Prospect sélectionné
+                              </span>
+                            ) : null}
+                            <h3 className="truncate text-lg font-semibold text-white">{name}</h3>
+                            <p className="mt-1 text-xs text-slate-400">
+                              {prospect.mainPlatform}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-center">
+                            <p className="text-[10px] uppercase tracking-[0.16em] text-emerald-300">
+                              Score
+                            </p>
+                            <p className="text-xl font-bold text-white">{prospect.score}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium">
+                          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-200">
+                            {prospect.status}
+                          </span>
+                          <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-emerald-200">
+                            {prospect.temperature}
+                          </span>
+                          {prospect.nextActionDate ? (
+                            <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-sky-200">
+                              Relance : {prospect.nextActionDate}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {prospectTags.length > 0 ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {prospectTags.map((tag) => (
+                              <span
+                                className="rounded-full border border-white/10 bg-slate-950/60 px-2 py-1 text-xs text-slate-300"
+                                key={tag}
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        <div className="mt-4 grid grid-cols-2 gap-2">
+                          {profileUrl ? (
+                            <a
+                              className="flex min-h-12 items-center justify-center rounded-2xl border border-emerald-400/30 px-3 py-2 text-center text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+                              href={profileUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Ouvrir profil
+                            </a>
+                          ) : null}
+                          {whatsappNumber ? (
+                            <a
+                              className="flex min-h-12 items-center justify-center rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-center text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
+                              href={`https://wa.me/${whatsappNumber}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              WhatsApp
+                            </a>
+                          ) : null}
+                          {phoneNumber ? (
+                            <a
+                              className="flex min-h-12 items-center justify-center rounded-2xl border border-white/10 px-3 py-2 text-center text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              href={`tel:${phoneNumber}`}
+                            >
+                              Appeler
+                            </a>
+                          ) : null}
+                          {emailAddress ? (
+                            <a
+                              className="flex min-h-12 items-center justify-center rounded-2xl border border-white/10 px-3 py-2 text-center text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                              href={emailHref}
+                            >
+                              Email
+                            </a>
+                          ) : null}
+                          {emailAddress ? (
+                            <button
+                              className="min-h-12 rounded-2xl border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/20"
+                              type="button"
+                              onClick={() => handleCopyEmail(prospect.id, emailAddress)}
+                            >
+                              Copier email
+                            </button>
+                          ) : null}
+                          <button
+                            className="min-h-12 rounded-2xl border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/20"
+                            type="button"
+                            onClick={() => openQuickMessageAssistant(prospect.id)}
+                          >
+                            Préparer un message
+                          </button>
+                          <button
+                            className="min-h-12 rounded-2xl border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+                            type="button"
+                            onClick={() => openQuickConversationForm(prospect.id)}
+                          >
+                            Ajouter un échange
+                          </button>
+                        </div>
+
+                        {(copiedEmailProspectId === prospect.id || copiedQuickActionProspectId === prospect.id) ? (
+                          <p className="mt-2 text-xs font-medium text-emerald-300">
+                            Copié.
+                          </p>
+                        ) : null}
+
+                        <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                            Relance rapide
+                          </p>
+                          <div className="mt-2 grid grid-cols-3 gap-2">
+                            <button
+                              className="min-h-12 rounded-2xl border border-emerald-400/30 px-2 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+                              type="button"
+                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(1))}
+                            >
+                              Demain
+                            </button>
+                            <button
+                              className="min-h-12 rounded-2xl border border-emerald-400/30 px-2 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+                              type="button"
+                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(3))}
+                            >
+                              +3 jours
+                            </button>
+                            <button
+                              className="min-h-12 rounded-2xl border border-emerald-400/30 px-2 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+                              type="button"
+                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(7))}
+                            >
+                              +7 jours
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </section>
+              )
+            ) : isPipelineView ? (
               <section className="grid gap-4 lg:flex lg:overflow-x-auto lg:pb-2">
                 {PROSPECT_STATUSES.map((status) => {
                   const statusProspects = pipelineProspectsByStatus[status];
