@@ -72,6 +72,21 @@ export type Resource = {
   updatedAt: string;
 };
 
+export type AppSettings = {
+  userDisplayName: string;
+  businessName: string;
+  clubName: string;
+  defaultCountry: string;
+  defaultRegion: string;
+  defaultCity: string;
+  defaultMessageStyle: "Doux" | "Naturel" | "Direct";
+  defaultFollowUpDays: number;
+  defaultPresentationLink: string;
+  messageSignature: string;
+  publicWording: string;
+  updatedAt: string;
+};
+
 export type SocialLinks = {
   facebook: string;
   instagram: string;

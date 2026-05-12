@@ -86,6 +86,12 @@ export default function RootLayout({
               >
                 Sauvegarde
               </Link>
+              <Link
+                href="/parametres"
+                className="rounded-full border border-white/10 px-3 py-2 text-sm font-semibold text-slate-200 transition hover:border-emerald-400/40 hover:bg-emerald-400/10 hover:text-emerald-200 sm:px-4"
+              >
+                Paramètres
+              </Link>
             </div>
           </div>
         </nav>
