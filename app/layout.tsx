@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import MobileBottomNav from "./components/MobileBottomNav";
 import Navigation from "./components/Navigation";
 import ServiceWorkerRegister from "./components/ServiceWorkerRegister";
 import "./globals.css";
@@ -41,10 +42,11 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-slate-950 text-white">
+      <body className="min-h-full flex flex-col bg-slate-950 pb-20 text-white md:pb-0">
         <ServiceWorkerRegister />
         <Navigation />
         {children}
+        <MobileBottomNav />
       </body>
     </html>
   );
