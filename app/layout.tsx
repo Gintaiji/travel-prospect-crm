@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import MobileBottomNav from "./components/MobileBottomNav";
 import Navigation from "./components/Navigation";
+import PwaInstallPrompt from "./components/PwaInstallPrompt";
 import ServiceWorkerRegister from "./components/ServiceWorkerRegister";
 import "./globals.css";
 
@@ -46,6 +47,7 @@ export default function RootLayout({
         <ServiceWorkerRegister />
         <Navigation />
         {children}
+        <PwaInstallPrompt />
         <MobileBottomNav />
       </body>
     </html>

@@ -166,6 +166,7 @@ export default function HomePage() {
           </p>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-200">
             Sur téléphone, tu peux ajouter ce CRM à ton écran d’accueil depuis le menu du navigateur.
+            Tu peux installer cette application sur ton téléphone depuis le navigateur.
           </p>
         </section>
 
