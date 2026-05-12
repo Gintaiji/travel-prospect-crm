@@ -160,6 +160,15 @@ export default function HomePage() {
           ))}
         </section>
 
+        <section className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-5 shadow-xl">
+          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-emerald-200">
+            Utilisation mobile
+          </p>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-200">
+            Sur téléphone, tu peux ajouter ce CRM à ton écran d’accueil depuis le menu du navigateur.
+          </p>
+        </section>
+
         {!hasProspectData ? (
           <section className="mt-8 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl">
             <p className="text-lg font-semibold text-white">Aucune donnée pour le moment.</p>
