@@ -4,14 +4,20 @@ import { useEffect, useState } from "react";
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
 import { getTodayDateString } from "../lib/prospectUtils";
 import { loadResources, saveResources } from "../lib/resourceStorage";
-import type { Prospect, Resource } from "../lib/types";
+import {
+  DEFAULT_APP_SETTINGS,
+  loadSettings,
+  saveSettings,
+} from "../lib/settingsStorage";
+import type { AppSettings, Prospect, Resource } from "../lib/types";
 
 type BackupFile = {
   appName: "Travel Prospect CRM";
-  version: 1;
+  version: 1 | 2;
   exportedAt: string;
   prospects: Prospect[];
   resources: Resource[];
+  settings?: AppSettings;
 };
 
 const backupAppName = "Travel Prospect CRM";
@@ -38,9 +44,45 @@ function isBackupFile(value: unknown): value is BackupFile {
   );
 }
 
+function hasBackupSettings(value: BackupFile): value is BackupFile & { settings: Partial<AppSettings> } {
+  return Boolean(value.settings && typeof value.settings === "object");
+}
+
+function normalizeImportedSettings(importedSettings: Partial<AppSettings>): AppSettings {
+  return {
+    ...DEFAULT_APP_SETTINGS,
+    ...importedSettings,
+    defaultFollowUpDays:
+      typeof importedSettings.defaultFollowUpDays === "number"
+        ? importedSettings.defaultFollowUpDays
+        : DEFAULT_APP_SETTINGS.defaultFollowUpDays,
+    updatedAt:
+      typeof importedSettings.updatedAt === "string"
+        ? importedSettings.updatedAt
+        : new Date().toISOString(),
+  };
+}
+
+function hasCustomSettings(settings: AppSettings) {
+  return (
+    settings.userDisplayName.trim() !== DEFAULT_APP_SETTINGS.userDisplayName ||
+    settings.businessName.trim() !== DEFAULT_APP_SETTINGS.businessName ||
+    settings.clubName.trim() !== DEFAULT_APP_SETTINGS.clubName ||
+    settings.defaultCountry.trim() !== DEFAULT_APP_SETTINGS.defaultCountry ||
+    settings.defaultRegion.trim() !== DEFAULT_APP_SETTINGS.defaultRegion ||
+    settings.defaultCity.trim() !== DEFAULT_APP_SETTINGS.defaultCity ||
+    settings.defaultMessageStyle !== DEFAULT_APP_SETTINGS.defaultMessageStyle ||
+    settings.defaultFollowUpDays !== DEFAULT_APP_SETTINGS.defaultFollowUpDays ||
+    settings.defaultPresentationLink.trim() !== DEFAULT_APP_SETTINGS.defaultPresentationLink ||
+    settings.messageSignature.trim() !== DEFAULT_APP_SETTINGS.messageSignature ||
+    settings.publicWording.trim() !== DEFAULT_APP_SETTINGS.publicWording
+  );
+}
+
 export default function BackupPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [lastReadAt, setLastReadAt] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [importError, setImportError] = useState("");
@@ -49,6 +91,7 @@ export default function BackupPage() {
     const loadStoredData = window.setTimeout(() => {
       setProspects(loadProspects());
       setResources(loadResources());
+      setSettings(loadSettings());
       setLastReadAt(new Date().toLocaleString("fr-FR"));
     }, 0);
 
@@ -56,14 +99,16 @@ export default function BackupPage() {
   }, []);
 
   const totalConversationCount = getTotalConversationCount(prospects);
+  const customSettingsLabel = hasCustomSettings(settings) ? "Oui" : "Non";
 
   function exportCompleteBackup() {
     const backup: BackupFile = {
       appName: backupAppName,
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       prospects,
       resources,
+      settings,
     };
     const backupBlob = new Blob([JSON.stringify(backup, null, 2)], {
       type: "application/json",
@@ -106,7 +151,7 @@ export default function BackupPage() {
         }
 
         const shouldImport = window.confirm(
-          "Importer cette sauvegarde complète ? Les prospects et ressources actuels seront remplacés.",
+          "Importer cette sauvegarde complète ? Les prospects, ressources et paramètres actuels seront remplacés si la sauvegarde contient des paramètres.",
         );
 
         if (!shouldImport) {
@@ -115,6 +160,12 @@ export default function BackupPage() {
 
         saveProspects(parsedBackup.prospects);
         saveResources(parsedBackup.resources);
+        if (hasBackupSettings(parsedBackup)) {
+          const importedSettings = normalizeImportedSettings(parsedBackup.settings);
+
+          saveSettings(importedSettings);
+          setSettings(importedSettings);
+        }
         setProspects(parsedBackup.prospects);
         setResources(parsedBackup.resources);
         setLastReadAt(new Date().toLocaleString("fr-FR"));
@@ -166,7 +217,7 @@ export default function BackupPage() {
             </button>
           </div>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Prospects</p>
               <p className="mt-2 text-3xl font-bold text-white">{prospects.length}</p>
@@ -178,6 +229,12 @@ export default function BackupPage() {
             <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Ressources</p>
               <p className="mt-2 text-3xl font-bold text-white">{resources.length}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                Paramètres personnalisés
+              </p>
+              <p className="mt-2 text-3xl font-bold text-white">{customSettingsLabel}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
@@ -215,6 +272,10 @@ export default function BackupPage() {
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
             <h2 className="text-xl font-bold text-white">Quand exporter ?</h2>
+            <p className="mt-4 text-sm leading-6 text-slate-300">
+              La sauvegarde complète contient les prospects, l’historique d’échanges,
+              les ressources et les paramètres.
+            </p>
             <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
               <li>Avant une grosse modification</li>
               <li>Après une session de prospection importante</li>
