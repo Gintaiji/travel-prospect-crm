@@ -252,7 +252,7 @@ export default function FollowUpsPage() {
           </button>
           <Link
             className="min-h-10 rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/20"
-            href="/prospects"
+            href={`/prospects?focus=${encodeURIComponent(prospect.id)}`}
           >
             Voir dans Prospects
           </Link>

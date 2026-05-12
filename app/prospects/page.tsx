@@ -957,14 +957,31 @@ export default function ProspectsPage () {
   const [resourceShareSelections, setResourceShareSelections] = useState<Record<string, string>>({});
   const [copiedSharedResourceProspectId, setCopiedSharedResourceProspectId] = useState<string | null>(null);
   const [addedSharedResourceProspectId, setAddedSharedResourceProspectId] = useState<string | null>(null);
+  const [hasLoadedProspects, setHasLoadedProspects] = useState(false);
+  const [focusedProspectId, setFocusedProspectId] = useState<string | null>(null);
+  const [highlightedProspectId, setHighlightedProspectId] = useState<string | null>(null);
 
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
       setProspects(loadProspects());
       setResources(loadResources());
+      setHasLoadedProspects(true);
     }, 0);
 
     return () => window.clearTimeout(loadStoredProspects);
+  }, []);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const prospectIdToFocus = searchParams.get("focus")?.trim();
+
+    if (prospectIdToFocus) {
+      const applyUrlFocus = window.setTimeout(() => {
+        setFocusedProspectId(prospectIdToFocus);
+      }, 0);
+
+      return () => window.clearTimeout(applyUrlFocus);
+    }
   }, []);
 
   function updateFormField<Field extends keyof ProspectFormState>(
@@ -2439,6 +2456,52 @@ export default function ProspectsPage () {
   const isPipelineView = prospectDisplayMode === "pipeline";
   const potentialDuplicateGroups = findPotentialDuplicates(prospects);
   const sortedResources = getSortedResources(resources);
+  const filteredProspectIds = filteredProspects
+    .map((prospect) => prospect.id)
+    .join("\u0000");
+  const focusedProspect = focusedProspectId
+    ? prospects.find((prospect) => prospect.id === focusedProspectId)
+    : undefined;
+  const isFocusedProspectVisible = Boolean(
+    focusedProspectId &&
+      filteredProspectIds.split("\u0000").includes(focusedProspectId),
+  );
+  const focusMessage =
+    focusedProspectId && hasLoadedProspects && !focusedProspect
+      ? "Prospect introuvable."
+      : focusedProspectId && hasLoadedProspects && !isFocusedProspectVisible
+        ? "Le prospect sélectionné est peut-être masqué par les filtres."
+        : "";
+
+  useEffect(() => {
+    if (!focusedProspectId || !hasLoadedProspects) {
+      return;
+    }
+
+    if (!focusedProspect || !isFocusedProspectVisible) {
+      return;
+    }
+
+    const applyHighlight = window.setTimeout(() => {
+      setHighlightedProspectId(focusedProspectId);
+    }, 0);
+    const scrollToFocusedProspect = window.setTimeout(() => {
+      document
+        .getElementById(`prospect-${focusedProspectId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+    const clearHighlight = window.setTimeout(() => {
+      setHighlightedProspectId((currentProspectId) =>
+        currentProspectId === focusedProspectId ? null : currentProspectId,
+      );
+    }, 4200);
+
+    return () => {
+      window.clearTimeout(applyHighlight);
+      window.clearTimeout(scrollToFocusedProspect);
+      window.clearTimeout(clearHighlight);
+    };
+  }, [focusedProspect, focusedProspectId, hasLoadedProspects, isFocusedProspectVisible]);
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-slate-950 px-4 py-6 text-white sm:px-6 sm:py-10">
@@ -3472,6 +3535,12 @@ export default function ProspectsPage () {
                   Réinitialiser les filtres
                 </button>
               </div>
+
+              {focusMessage ? (
+                <p className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
+                  {focusMessage}
+                </p>
+              ) : null}
             </section>
 
             {isPipelineView ? (
@@ -3501,14 +3570,25 @@ export default function ProspectsPage () {
                         <div className="grid gap-3">
                           {statusProspects.map((prospect) => {
                             const prospectTags = prospect.tags ?? [];
+                            const isHighlightedProspect = highlightedProspectId === prospect.id;
 
                             return (
                               <article
-                                className="min-w-0 rounded-2xl border border-white/10 bg-slate-900/80 p-4"
+                                id={`prospect-${prospect.id}`}
+                                className={`min-w-0 scroll-mt-8 rounded-2xl border p-4 transition ${
+                                  isHighlightedProspect
+                                    ? "border-emerald-300 bg-emerald-400/15 shadow-xl shadow-emerald-950/40"
+                                    : "border-white/10 bg-slate-900/80"
+                                }`}
                                 key={prospect.id}
                               >
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="min-w-0">
+                                    {isHighlightedProspect ? (
+                                      <span className="mb-2 inline-flex rounded-full border border-emerald-300/40 bg-emerald-400/20 px-3 py-1 text-xs font-semibold text-emerald-100">
+                                        Prospect sélectionné
+                                      </span>
+                                    ) : null}
                                     <h4 className="truncate font-semibold text-white">
                                       {getProspectDisplayName(prospect)}
                                     </h4>
@@ -3689,14 +3769,25 @@ export default function ProspectsPage () {
                     phoneNumber ||
                     emailAddress,
                 );
+                const isHighlightedProspect = highlightedProspectId === prospect.id;
 
                 return (
                   <article
+                    id={`prospect-${prospect.id}`}
                     key={prospect.id}
-                    className="min-w-0 rounded-3xl border border-white/10 bg-slate-900/70 p-4 shadow-xl transition hover:border-emerald-400/30 sm:p-5"
+                    className={`min-w-0 scroll-mt-8 rounded-3xl border p-4 shadow-xl transition hover:border-emerald-400/30 sm:p-5 ${
+                      isHighlightedProspect
+                        ? "border-emerald-300 bg-emerald-400/15 shadow-emerald-950/40"
+                        : "border-white/10 bg-slate-900/70"
+                    }`}
                   >
                     <div className="mb-4 flex items-start justify-between gap-3">
                       <div>
+                        {isHighlightedProspect ? (
+                          <span className="mb-2 inline-flex rounded-full border border-emerald-300/40 bg-emerald-400/20 px-3 py-1 text-xs font-semibold text-emerald-100">
+                            Prospect sélectionné
+                          </span>
+                        ) : null}
                         <h3 className="text-xl font-semibold text-white">{name}</h3>
                         {isDetailedView && prospect.jobTitle ? (
                           <p className="mt-1 text-sm text-slate-400">{prospect.jobTitle}</p>
