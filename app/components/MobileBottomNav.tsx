@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const bottomNavigationLinks = [
-  { href: "/", label: "Dashboard" },
+  { href: "/aujourdhui", label: "Aujourd’hui" },
   { href: "/prospects", label: "Prospects" },
   { href: "/relances", label: "Relances" },
   { href: "/activite", label: "Activité" },
