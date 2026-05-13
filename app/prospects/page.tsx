@@ -938,6 +938,9 @@ export default function ProspectsPage () {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [isFormVisible, setIsFormVisible] = useState(false);
+  const [isQuickAddMode, setIsQuickAddMode] = useState(false);
+  const newProspectFormRef = useRef<HTMLFormElement | null>(null);
+  const hasHandledInitialUrlRef = useRef(false);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const csvImportFileInputRef = useRef<HTMLInputElement | null>(null);
   const [formState, setFormState] = useState<ProspectFormState>(initialFormState);
@@ -997,8 +1000,32 @@ export default function ProspectsPage () {
   }, []);
 
   useEffect(() => {
+    if (!hasLoadedProspects || hasHandledInitialUrlRef.current) {
+      return;
+    }
+
+    hasHandledInitialUrlRef.current = true;
+
     const searchParams = new URLSearchParams(window.location.search);
+    const requestedAction = searchParams.get("action")?.trim();
     const prospectIdToFocus = searchParams.get("focus")?.trim();
+
+    if (requestedAction === "add") {
+      const openQuickAddForm = window.setTimeout(() => {
+        openNewProspectForm(true);
+      }, 0);
+      const scrollToQuickAddForm = window.setTimeout(() => {
+        newProspectFormRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 150);
+
+      return () => {
+        window.clearTimeout(openQuickAddForm);
+        window.clearTimeout(scrollToQuickAddForm);
+      };
+    }
 
     if (prospectIdToFocus) {
       const applyUrlFocus = window.setTimeout(() => {
@@ -1007,7 +1034,7 @@ export default function ProspectsPage () {
 
       return () => window.clearTimeout(applyUrlFocus);
     }
-  }, []);
+  }, [hasLoadedProspects]);
 
   function updateFormField<Field extends keyof ProspectFormState>(
     field: Field,
@@ -1117,10 +1144,25 @@ export default function ProspectsPage () {
     };
   }
 
+  function openNewProspectForm(isQuickAdd = false) {
+    setIsQuickAddMode(isQuickAdd);
+    setIsFormVisible(true);
+    setFormState((currentFormState) => getFormStateWithDefaultLocation(currentFormState));
+    window.setTimeout(() => {
+      newProspectFormRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 0);
+  }
+
   function toggleNewProspectForm() {
     setIsFormVisible((currentValue) => {
       if (!currentValue) {
+        setIsQuickAddMode(false);
         setFormState((currentFormState) => getFormStateWithDefaultLocation(currentFormState));
+      } else {
+        setIsQuickAddMode(false);
       }
 
       return !currentValue;
@@ -1337,6 +1379,7 @@ export default function ProspectsPage () {
     saveProspects(updatedProspects);
     setProspects(updatedProspects);
     setFormState(initialFormState);
+    setIsQuickAddMode(false);
     setIsFormVisible(false);
   }
 
@@ -2680,13 +2723,22 @@ export default function ProspectsPage () {
             </p>
           </div>
 
-          <button
-            className="w-full rounded-full bg-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 sm:w-auto"
-            type="button"
-            onClick={toggleNewProspectForm}
-          >
-            {isFormVisible ? "Masquer le formulaire" : "Ajouter un prospect"}
-          </button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <button
+              className="min-h-12 w-full rounded-full bg-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 sm:w-auto"
+              type="button"
+              onClick={toggleNewProspectForm}
+            >
+              {isFormVisible ? "Masquer le formulaire" : "Ajouter un prospect"}
+            </button>
+            <button
+              className="min-h-12 w-full rounded-full border border-emerald-400/30 bg-emerald-400/10 px-5 py-3 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20 sm:w-auto"
+              type="button"
+              onClick={() => openNewProspectForm(true)}
+            >
+              Ajout rapide
+            </button>
+          </div>
         </header>
 
         <section className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-4 sm:mb-8">
@@ -2769,12 +2821,20 @@ export default function ProspectsPage () {
         {isFormVisible ? (
           <form
             className="mb-8 rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-6"
+            ref={newProspectFormRef}
             onSubmit={handleSubmit}
           >
             <div className="mb-6">
-              <p className="text-sm uppercase tracking-[0.3em] text-emerald-400">
-                Nouveau prospect
-              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm uppercase tracking-[0.3em] text-emerald-400">
+                  Nouveau prospect
+                </p>
+                {isQuickAddMode ? (
+                  <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                    Ajout rapide
+                  </span>
+                ) : null}
+              </div>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
                 Pour la V1, on ajoute les prospects manuellement afin de garder un suivi propre et naturel.
               </p>
@@ -3200,6 +3260,7 @@ export default function ProspectsPage () {
                 type="button"
                 onClick={() => {
                   setFormState(initialFormState);
+                  setIsQuickAddMode(false);
                   setIsFormVisible(false);
                 }}
               >

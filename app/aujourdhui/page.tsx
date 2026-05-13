@@ -19,7 +19,7 @@ type StatCard = {
 };
 
 const quickLinks = [
-  { href: "/prospects", label: "Ajouter un prospect" },
+  { href: "/prospects?action=add", label: "Ajouter un prospect" },
   { href: "/relances", label: "Voir les relances" },
   { href: "/messages", label: "Ouvrir les messages" },
   { href: "/ressources", label: "Ouvrir les ressources" },
@@ -128,7 +128,8 @@ export default function TodayPage() {
   return (
     <main className="min-h-screen bg-slate-950 px-4 pb-28 pt-6 text-white sm:px-6 sm:py-10">
       <section className="mx-auto grid max-w-6xl gap-6">
-        <header>
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
           <p className="text-sm uppercase tracking-[0.3em] text-emerald-400">
             Focus quotidien
           </p>
@@ -138,6 +139,13 @@ export default function TodayPage() {
           <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
             Les actions importantes à traiter maintenant.
           </p>
+          </div>
+          <Link
+            className="flex min-h-12 w-full items-center justify-center rounded-full bg-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 sm:w-auto"
+            href="/prospects?action=add"
+          >
+            Ajouter un prospect
+          </Link>
         </header>
 
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
