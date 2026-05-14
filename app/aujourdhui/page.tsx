@@ -19,6 +19,7 @@ type StatCard = {
 };
 
 const quickLinks = [
+  { href: "/prospects?action=quick-add", label: "Ajout express" },
   { href: "/prospects?action=add", label: "Ajouter un prospect" },
   { href: "/relances", label: "Voir les relances" },
   { href: "/messages", label: "Ouvrir les messages" },
@@ -142,9 +143,9 @@ export default function TodayPage() {
           </div>
           <Link
             className="flex min-h-12 w-full items-center justify-center rounded-full bg-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 sm:w-auto"
-            href="/prospects?action=add"
+            href="/prospects?action=quick-add"
           >
-            Ajouter un prospect
+            Ajout express
           </Link>
         </header>
 

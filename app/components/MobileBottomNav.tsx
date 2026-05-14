@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 const bottomNavigationLinks = [
   { href: "/aujourdhui", label: "Aujourd’hui" },
   { href: "/prospects", label: "Prospects" },
-  { href: "/prospects?action=add", label: "+", ariaLabel: "Ajout rapide", isQuickAdd: true },
+  { href: "/prospects?action=quick-add", label: "+", ariaLabel: "Ajout express", isQuickAdd: true },
   { href: "/relances", label: "Relances" },
   { href: "/activite", label: "Activité" },
   { href: "/ressources", label: "Ressources" },

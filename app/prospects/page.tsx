@@ -99,6 +99,18 @@ type FullProspectFormState = ProspectFormState & {
   nextActionDate: string;
 };
 
+type QuickAddFollowUpOption = "none" | "tomorrow" | "plus3" | "plus7";
+
+type QuickAddFormState = {
+  displayName: string;
+  mainPlatform: Prospect["mainPlatform"];
+  profileUrl: string;
+  temperature: Prospect["temperature"];
+  tags: Prospect["tags"];
+  notes: string;
+  nextActionOption: QuickAddFollowUpOption;
+};
+
 type FilterValue<T extends string> = "Tous" | T;
 
 type ProspectFilters = {
@@ -681,6 +693,16 @@ const initialFullProspectFormState: FullProspectFormState = {
   nextActionDate: "",
 };
 
+const initialQuickAddFormState: QuickAddFormState = {
+  displayName: "",
+  mainPlatform: SOCIAL_PLATFORMS[0],
+  profileUrl: "",
+  temperature: PROSPECT_TEMPERATURES[0],
+  tags: [],
+  notes: "",
+  nextActionOption: "none",
+};
+
 const initialProspectFilters: ProspectFilters = {
   platform: "Tous",
   status: "Tous",
@@ -939,11 +961,16 @@ export default function ProspectsPage () {
   const [resources, setResources] = useState<Resource[]>([]);
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [isQuickAddMode, setIsQuickAddMode] = useState(false);
+  const [isQuickAddFormVisible, setIsQuickAddFormVisible] = useState(false);
   const newProspectFormRef = useRef<HTMLFormElement | null>(null);
+  const quickAddFormRef = useRef<HTMLFormElement | null>(null);
   const hasHandledInitialUrlRef = useRef(false);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const csvImportFileInputRef = useRef<HTMLInputElement | null>(null);
   const [formState, setFormState] = useState<ProspectFormState>(initialFormState);
+  const [quickAddFormState, setQuickAddFormState] = useState<QuickAddFormState>(
+    initialQuickAddFormState,
+  );
   const [activeConversationProspectId, setActiveConversationProspectId] = useState<string | null>(null);
   const [conversationFormState, setConversationFormState] = useState<ConversationFormState>(
     initialConversationFormState,
@@ -972,6 +999,7 @@ export default function ProspectsPage () {
   const [isBackupError, setIsBackupError] = useState(false);
   const [duplicateMergeState, setDuplicateMergeState] = useState<DuplicateMergeState | null>(null);
   const [duplicateMergeMessage, setDuplicateMergeMessage] = useState("");
+  const [quickAddMessage, setQuickAddMessage] = useState("");
   const [resourceShareSelections, setResourceShareSelections] = useState<Record<string, string>>({});
   const [copiedSharedResourceProspectId, setCopiedSharedResourceProspectId] = useState<string | null>(null);
   const [addedSharedResourceProspectId, setAddedSharedResourceProspectId] = useState<string | null>(null);
@@ -1010,11 +1038,28 @@ export default function ProspectsPage () {
     const requestedAction = searchParams.get("action")?.trim();
     const prospectIdToFocus = searchParams.get("focus")?.trim();
 
-    if (requestedAction === "add") {
-      const openQuickAddForm = window.setTimeout(() => {
-        openNewProspectForm(true);
+    if (requestedAction === "quick-add") {
+      const openRequestedQuickAddForm = window.setTimeout(() => {
+        openQuickAddForm();
       }, 0);
       const scrollToQuickAddForm = window.setTimeout(() => {
+        quickAddFormRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 150);
+
+      return () => {
+        window.clearTimeout(openRequestedQuickAddForm);
+        window.clearTimeout(scrollToQuickAddForm);
+      };
+    }
+
+    if (requestedAction === "add") {
+      const openFullAddForm = window.setTimeout(() => {
+        openNewProspectForm(false);
+      }, 0);
+      const scrollToFullAddForm = window.setTimeout(() => {
         newProspectFormRef.current?.scrollIntoView({
           behavior: "smooth",
           block: "start",
@@ -1022,8 +1067,8 @@ export default function ProspectsPage () {
       }, 150);
 
       return () => {
-        window.clearTimeout(openQuickAddForm);
-        window.clearTimeout(scrollToQuickAddForm);
+        window.clearTimeout(openFullAddForm);
+        window.clearTimeout(scrollToFullAddForm);
       };
     }
 
@@ -1041,6 +1086,16 @@ export default function ProspectsPage () {
     value: ProspectFormState[Field],
   ) {
     setFormState((currentFormState) => ({
+      ...currentFormState,
+      [field]: value,
+    }));
+  }
+
+  function updateQuickAddFormField<Field extends keyof QuickAddFormState>(
+    field: Field,
+    value: QuickAddFormState[Field],
+  ) {
+    setQuickAddFormState((currentFormState) => ({
       ...currentFormState,
       [field]: value,
     }));
@@ -1147,6 +1202,7 @@ export default function ProspectsPage () {
   function openNewProspectForm(isQuickAdd = false) {
     setIsQuickAddMode(isQuickAdd);
     setIsFormVisible(true);
+    setIsQuickAddFormVisible(false);
     setFormState((currentFormState) => getFormStateWithDefaultLocation(currentFormState));
     window.setTimeout(() => {
       newProspectFormRef.current?.scrollIntoView({
@@ -1160,6 +1216,7 @@ export default function ProspectsPage () {
     setIsFormVisible((currentValue) => {
       if (!currentValue) {
         setIsQuickAddMode(false);
+        setIsQuickAddFormVisible(false);
         setFormState((currentFormState) => getFormStateWithDefaultLocation(currentFormState));
       } else {
         setIsQuickAddMode(false);
@@ -1167,6 +1224,23 @@ export default function ProspectsPage () {
 
       return !currentValue;
     });
+  }
+
+  function openQuickAddForm() {
+    setIsFormVisible(false);
+    setIsQuickAddMode(false);
+    setIsQuickAddFormVisible(true);
+    window.setTimeout(() => {
+      quickAddFormRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 0);
+  }
+
+  function closeQuickAddForm() {
+    setQuickAddFormState(initialQuickAddFormState);
+    setIsQuickAddFormVisible(false);
   }
 
   function toggleMessageAssistant(prospectId: string) {
@@ -1301,6 +1375,104 @@ export default function ProspectsPage () {
     if (activeFullProspectId !== prospect.id) {
       toggleFullProspectForm(prospect);
     }
+  }
+
+  function getQuickAddNextActionDate(option: QuickAddFollowUpOption) {
+    if (option === "tomorrow") {
+      return getFutureDateString(1);
+    }
+
+    if (option === "plus3") {
+      return getFutureDateString(3);
+    }
+
+    if (option === "plus7") {
+      return getFutureDateString(7);
+    }
+
+    return "";
+  }
+
+  function handleQuickAddSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const now = new Date().toISOString();
+    const quickAddCategory =
+      PROSPECT_CATEGORIES.find((category) => category.endsWith("sociaux")) ??
+      PROSPECT_CATEGORIES[0];
+    const newProspectBase: Prospect = {
+      id: createProspectId(),
+      firstName: "",
+      lastName: "",
+      displayName: quickAddFormState.displayName.trim(),
+      jobTitle: "",
+      businessArea: "",
+      city: appSettings.defaultCity,
+      region: appSettings.defaultRegion,
+      country: appSettings.defaultCountry,
+      phone: "",
+      whatsapp: "",
+      email: "",
+      mainPlatform: quickAddFormState.mainPlatform,
+      profileUrl: quickAddFormState.profileUrl.trim(),
+      socialLinks: {
+        facebook: "",
+        instagram: "",
+        linkedin: "",
+        tiktok: "",
+        youtube: "",
+        other: "",
+      },
+      category: quickAddCategory,
+      status: PROSPECT_STATUSES[0],
+      temperature: quickAddFormState.temperature,
+      colorType: PROSPECT_COLOR_TYPES[0],
+      score: 0,
+      tags: quickAddFormState.tags,
+      isFollower: false,
+      hasSentMessage: false,
+      interactionStats: {
+        followerSinceDate: "",
+        commentsCount: 0,
+        interactionsCount: 0,
+        likesCount: 0,
+        messagesCount: 0,
+      },
+      lastInteractionDate: "",
+      nextActionDate: getQuickAddNextActionDate(quickAddFormState.nextActionOption),
+      conversationHistory: [],
+      notes: quickAddFormState.notes.trim(),
+      createdAt: now,
+      updatedAt: now,
+    };
+    const newProspect: Prospect = {
+      ...newProspectBase,
+      score: calculateProspectScore(newProspectBase),
+    };
+    const hasPotentialDuplicate = findPotentialDuplicates([newProspect, ...prospects]).some(
+      (duplicateGroup) =>
+        duplicateGroup.prospects.some((prospect) => prospect.id === newProspect.id),
+    );
+
+    if (hasPotentialDuplicate) {
+      const confirmed = window.confirm(
+        "Un doublon potentiel existe dÃ©jÃ . Ajouter quand mÃªme ce prospect ?",
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    const updatedProspects = [newProspect, ...prospects];
+    saveProspects(updatedProspects);
+    setProspects(updatedProspects);
+    setQuickAddFormState(initialQuickAddFormState);
+    setIsQuickAddFormVisible(false);
+    setQuickAddMessage("Prospect ajoutÃ© rapidement.");
+    window.setTimeout(() => {
+      setQuickAddMessage("");
+    }, 3000);
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -2705,7 +2877,7 @@ export default function ProspectsPage () {
   }, [focusedProspect, focusedProspectId, hasLoadedProspects, isFocusedProspectVisible]);
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-slate-950 px-4 py-6 text-white sm:px-6 sm:py-10">
+    <main className="min-h-screen overflow-x-hidden bg-slate-950 px-4 pb-28 pt-6 text-white sm:px-6 sm:py-10">
       <section className="mx-auto max-w-6xl">
         <header className="mb-8 flex flex-col gap-4 md:mb-10 md:flex-row md:items-end md:justify-between">
           <div>
@@ -2734,12 +2906,18 @@ export default function ProspectsPage () {
             <button
               className="min-h-12 w-full rounded-full border border-emerald-400/30 bg-emerald-400/10 px-5 py-3 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20 sm:w-auto"
               type="button"
-              onClick={() => openNewProspectForm(true)}
+              onClick={openQuickAddForm}
             >
-              Ajout rapide
+              Ajout express
             </button>
           </div>
         </header>
+
+        {quickAddMessage ? (
+          <p className="mb-6 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-200">
+            {quickAddMessage}
+          </p>
+        ) : null}
 
         <section className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-4 sm:mb-8">
           <div className="grid gap-4">
@@ -2817,6 +2995,168 @@ export default function ProspectsPage () {
             </div>
           </div>
         </section>
+
+        {isQuickAddFormVisible ? (
+          <form
+            className="mb-8 grid gap-5 rounded-3xl border border-emerald-400/20 bg-emerald-400/5 p-4 shadow-xl sm:p-6"
+            ref={quickAddFormRef}
+            onSubmit={handleQuickAddSubmit}
+          >
+            <div>
+              <p className="text-sm uppercase tracking-[0.3em] text-emerald-400">
+                Ajout express
+              </p>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+                Capture rapide depuis mobile, sans ouvrir le formulaire complet.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="grid gap-2 text-sm text-slate-300">
+                Nom / pseudo
+                <input
+                  className="min-h-12 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                  value={quickAddFormState.displayName}
+                  onChange={(event) => updateQuickAddFormField("displayName", event.target.value)}
+                  placeholder="@pseudo ou nom"
+                  required
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm text-slate-300">
+                Plateforme principale
+                <select
+                  className="min-h-12 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                  value={quickAddFormState.mainPlatform}
+                  onChange={(event) =>
+                    updateQuickAddFormField("mainPlatform", event.target.value as Prospect["mainPlatform"])
+                  }
+                >
+                  {SOCIAL_PLATFORMS.map((platform) => (
+                    <option key={platform} value={platform}>
+                      {platform}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="grid gap-2 text-sm text-slate-300 md:col-span-2">
+                Lien du profil
+                <input
+                  className="min-h-12 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                  value={quickAddFormState.profileUrl}
+                  onChange={(event) => updateQuickAddFormField("profileUrl", event.target.value)}
+                  placeholder="https://..."
+                  type="url"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm text-slate-300">
+                TempÃ©rature / marchÃ©
+                <select
+                  className="min-h-12 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
+                  value={quickAddFormState.temperature}
+                  onChange={(event) =>
+                    updateQuickAddFormField("temperature", event.target.value as Prospect["temperature"])
+                  }
+                >
+                  {PROSPECT_TEMPERATURES.map((temperature) => (
+                    <option key={temperature} value={temperature}>
+                      {temperature}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <fieldset className="grid gap-2 text-sm text-slate-300">
+                <legend>Prochaine relance</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: "none", label: "Aucune" },
+                    { value: "tomorrow", label: "Demain" },
+                    { value: "plus3", label: "+3 jours" },
+                    { value: "plus7", label: "+7 jours" },
+                  ].map((followUpOption) => (
+                    <label
+                      className={`flex min-h-12 items-center justify-center rounded-2xl border px-3 py-2 text-center text-sm font-semibold transition ${
+                        quickAddFormState.nextActionOption === followUpOption.value
+                          ? "border-emerald-400/50 bg-emerald-400/15 text-emerald-100"
+                          : "border-white/10 bg-slate-950/70 text-slate-300 hover:border-emerald-400/40"
+                      }`}
+                      key={followUpOption.value}
+                    >
+                      <input
+                        checked={quickAddFormState.nextActionOption === followUpOption.value}
+                        className="sr-only"
+                        onChange={() =>
+                          updateQuickAddFormField(
+                            "nextActionOption",
+                            followUpOption.value as QuickAddFollowUpOption,
+                          )
+                        }
+                        type="radio"
+                      />
+                      {followUpOption.label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
+
+            <fieldset className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+              <legend className="px-2 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                Tags / centres dâ€™intÃ©rÃªt
+              </legend>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {PROSPECT_TAGS.map((tag) => (
+                  <label
+                    className="flex min-h-11 items-center gap-2 rounded-full border border-white/10 bg-slate-950/70 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-emerald-400/40"
+                    key={tag}
+                  >
+                    <input
+                      checked={quickAddFormState.tags.includes(tag)}
+                      className="h-4 w-4 accent-emerald-400"
+                      onChange={() =>
+                        updateQuickAddFormField(
+                          "tags",
+                          toggleProspectTag(quickAddFormState.tags, tag),
+                        )
+                      }
+                      type="checkbox"
+                    />
+                    {tag}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <label className="grid gap-2 text-sm text-slate-300">
+              Note rapide
+              <textarea
+                className="min-h-28 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                value={quickAddFormState.notes}
+                onChange={(event) => updateQuickAddFormField("notes", event.target.value)}
+                placeholder="Contexte, centre dâ€™intÃ©rÃªt, idÃ©e de message..."
+              />
+            </label>
+
+            <div className="grid gap-3 sm:flex sm:flex-wrap">
+              <button
+                className="min-h-12 rounded-full bg-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
+                type="submit"
+              >
+                Enregistrer rapidement
+              </button>
+              <button
+                className="min-h-12 rounded-full border border-white/10 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/5"
+                type="button"
+                onClick={closeQuickAddForm}
+              >
+                Annuler
+              </button>
+            </div>
+          </form>
+        ) : null}
 
         {isFormVisible ? (
           <form
