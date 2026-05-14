@@ -111,6 +111,25 @@ type QuickAddFormState = {
   nextActionOption: QuickAddFollowUpOption;
 };
 
+type ContactPickerContact = {
+  name?: string[];
+  tel?: string[];
+  email?: string[];
+};
+
+type ContactPickerNavigator = Navigator & {
+  contacts?: {
+    select?: (
+      properties: Array<"name" | "tel" | "email">,
+      options?: { multiple?: boolean },
+    ) => Promise<ContactPickerContact[]>;
+  };
+};
+
+type ContactPickerWindow = Window & {
+  ContactsManager?: unknown;
+};
+
 type FilterValue<T extends string> = "Tous" | T;
 
 type ProspectFilters = {
@@ -1000,6 +1019,8 @@ export default function ProspectsPage () {
   const [duplicateMergeState, setDuplicateMergeState] = useState<DuplicateMergeState | null>(null);
   const [duplicateMergeMessage, setDuplicateMergeMessage] = useState("");
   const [quickAddMessage, setQuickAddMessage] = useState("");
+  const [contactImportMessage, setContactImportMessage] = useState("");
+  const [isContactImportError, setIsContactImportError] = useState(false);
   const [resourceShareSelections, setResourceShareSelections] = useState<Record<string, string>>({});
   const [copiedSharedResourceProspectId, setCopiedSharedResourceProspectId] = useState<string | null>(null);
   const [addedSharedResourceProspectId, setAddedSharedResourceProspectId] = useState<string | null>(null);
@@ -1393,6 +1414,159 @@ export default function ProspectsPage () {
     return "";
   }
 
+  function showContactImportMessage(message: string, isError = false) {
+    setContactImportMessage(message);
+    setIsContactImportError(isError);
+    window.setTimeout(() => {
+      setContactImportMessage("");
+      setIsContactImportError(false);
+    }, 4000);
+  }
+
+  function getContactPickerSelect() {
+    if (typeof window === "undefined" || !("contacts" in navigator)) {
+      return null;
+    }
+
+    const pickerNavigator = navigator as ContactPickerNavigator;
+    const pickerWindow = window as ContactPickerWindow;
+    const hasContactsManager = "ContactsManager" in pickerWindow;
+    const selectContacts = pickerNavigator.contacts?.select;
+
+    if (!hasContactsManager && typeof selectContacts !== "function") {
+      return null;
+    }
+
+    return typeof selectContacts === "function"
+      ? selectContacts.bind(pickerNavigator.contacts)
+      : null;
+  }
+
+  function buildProspectFromPhoneContact(contact: ContactPickerContact) {
+    const now = new Date().toISOString();
+    const phone = contact.tel?.find((phoneNumber) => phoneNumber.trim())?.trim() ?? "";
+    const email = contact.email?.find((emailAddress) => emailAddress.trim())?.trim() ?? "";
+    const displayName =
+      contact.name?.find((contactName) => contactName.trim())?.trim() ||
+      email ||
+      phone ||
+      "Contact téléphone";
+    const phonePlatform =
+      SOCIAL_PLATFORMS.find((platform) => platform.endsWith("phone")) ?? SOCIAL_PLATFORMS[0];
+    const acquaintanceCategory =
+      PROSPECT_CATEGORIES.find((category) => category === "Connaissance") ??
+      PROSPECT_CATEGORIES[0];
+    const newProspectBase: Prospect = {
+      id: createProspectId(),
+      firstName: "",
+      lastName: "",
+      displayName,
+      jobTitle: "",
+      businessArea: "",
+      city: appSettings.defaultCity,
+      region: appSettings.defaultRegion,
+      country: appSettings.defaultCountry,
+      phone,
+      whatsapp: phone,
+      email,
+      mainPlatform: phonePlatform,
+      profileUrl: "",
+      socialLinks: {
+        facebook: "",
+        instagram: "",
+        linkedin: "",
+        tiktok: "",
+        youtube: "",
+        other: "",
+      },
+      category: acquaintanceCategory,
+      status: PROSPECT_STATUSES[0],
+      temperature: PROSPECT_TEMPERATURES[0],
+      colorType: PROSPECT_COLOR_TYPES[0],
+      score: 0,
+      tags: [],
+      isFollower: false,
+      hasSentMessage: false,
+      interactionStats: {
+        followerSinceDate: "",
+        commentsCount: 0,
+        interactionsCount: 0,
+        likesCount: 0,
+        messagesCount: 0,
+      },
+      lastInteractionDate: "",
+      nextActionDate: "",
+      conversationHistory: [],
+      notes: "Importé depuis les contacts du téléphone",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    return {
+      ...newProspectBase,
+      score: calculateProspectScore(newProspectBase),
+    };
+  }
+
+  async function handlePhoneContactsImport() {
+    const selectContacts = getContactPickerSelect();
+
+    if (!selectContacts) {
+      showContactImportMessage(
+        "L'import direct depuis le téléphone n'est pas disponible sur ce navigateur. Tu peux utiliser l'import CSV.",
+        true,
+      );
+      return;
+    }
+
+    try {
+      const selectedContacts = await selectContacts(["name", "tel", "email"], {
+        multiple: true,
+      });
+
+      if (!selectedContacts.length) {
+        return;
+      }
+
+      const importedProspects = selectedContacts.map((contact) =>
+        buildProspectFromPhoneContact(contact),
+      );
+      const importedProspectIds = new Set(importedProspects.map((prospect) => prospect.id));
+      const hasPotentialDuplicate = findPotentialDuplicates([
+        ...importedProspects,
+        ...prospects,
+      ]).some(
+        (duplicateGroup) =>
+          duplicateGroup.prospects.some((prospect) => importedProspectIds.has(prospect.id)) &&
+          duplicateGroup.prospects.some((prospect) => !importedProspectIds.has(prospect.id)),
+      );
+
+      if (hasPotentialDuplicate) {
+        const confirmed = window.confirm(
+          "Certains contacts semblent déjà exister. Importer quand même les nouveaux contacts sélectionnés ?",
+        );
+
+        if (!confirmed) {
+          return;
+        }
+      }
+
+      const updatedProspects = [...importedProspects, ...prospects];
+      saveProspects(updatedProspects);
+      setProspects(updatedProspects);
+      showContactImportMessage("Contacts importés avec succès.");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+
+      showContactImportMessage(
+        "Impossible d'importer les contacts depuis ce navigateur. Tu peux utiliser l'import CSV.",
+        true,
+      );
+    }
+  }
+
   function handleQuickAddSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -1456,7 +1630,7 @@ export default function ProspectsPage () {
 
     if (hasPotentialDuplicate) {
       const confirmed = window.confirm(
-        "Un doublon potentiel existe dÃ©jÃ . Ajouter quand mÃªme ce prospect ?",
+        "Un doublon potentiel existe déjà. Ajouter quand même ce prospect ?",
       );
 
       if (!confirmed) {
@@ -1469,7 +1643,7 @@ export default function ProspectsPage () {
     setProspects(updatedProspects);
     setQuickAddFormState(initialQuickAddFormState);
     setIsQuickAddFormVisible(false);
-    setQuickAddMessage("Prospect ajoutÃ© rapidement.");
+    setQuickAddMessage("Prospect ajouté rapidement.");
     window.setTimeout(() => {
       setQuickAddMessage("");
     }, 3000);
@@ -2939,7 +3113,7 @@ export default function ProspectsPage () {
               ) : null}
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                   Import / export JSON
@@ -2963,6 +3137,32 @@ export default function ProspectsPage () {
                     />
                   </label>
                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                  Importer des contacts
+                </p>
+                <p className="mt-2 text-xs leading-5 text-slate-300">
+                  Sur certains téléphones, le navigateur peut te laisser choisir les contacts à importer.
+                  Rien n'est importé sans ton choix.
+                </p>
+                <button
+                  className="mt-3 min-h-12 w-full rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
+                  type="button"
+                  onClick={handlePhoneContactsImport}
+                >
+                  Importer depuis le téléphone
+                </button>
+                {contactImportMessage ? (
+                  <p
+                    className={`mt-3 text-xs font-medium leading-5 ${
+                      isContactImportError ? "text-amber-200" : "text-emerald-300"
+                    }`}
+                  >
+                    {contactImportMessage}
+                  </p>
+                ) : null}
               </div>
 
               <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
@@ -3052,7 +3252,7 @@ export default function ProspectsPage () {
               </label>
 
               <label className="grid gap-2 text-sm text-slate-300">
-                TempÃ©rature / marchÃ©
+                Température / marché
                 <select
                   className="min-h-12 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
                   value={quickAddFormState.temperature}
@@ -3105,7 +3305,7 @@ export default function ProspectsPage () {
 
             <fieldset className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
               <legend className="px-2 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
-                Tags / centres dâ€™intÃ©rÃªt
+                Tags / centres d’intérêt
               </legend>
               <div className="mt-4 flex flex-wrap gap-2">
                 {PROSPECT_TAGS.map((tag) => (
@@ -3136,7 +3336,7 @@ export default function ProspectsPage () {
                 className="min-h-28 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
                 value={quickAddFormState.notes}
                 onChange={(event) => updateQuickAddFormField("notes", event.target.value)}
-                placeholder="Contexte, centre dâ€™intÃ©rÃªt, idÃ©e de message..."
+                placeholder="Contexte, centre d’intérêt, idée de message..."
               />
             </label>
 
