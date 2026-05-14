@@ -201,6 +201,27 @@ const PROSPECT_CSV_COLUMNS = [
   "notes",
 ] as const;
 
+const SOCIAL_CONTACT_CSV_COLUMNS = [
+  "displayName",
+  "firstName",
+  "lastName",
+  "platform",
+  "profileUrl",
+  "city",
+  "region",
+  "country",
+  "jobTitle",
+  "businessArea",
+  "email",
+  "phone",
+  "whatsapp",
+  "tags",
+  "notes",
+  "temperature",
+  "status",
+  "category",
+] as const;
+
 type MessageAssistantState = {
   situation: MessageAssistantSituation;
   style: MessageAssistantStyle;
@@ -986,6 +1007,7 @@ export default function ProspectsPage () {
   const hasHandledInitialUrlRef = useRef(false);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
   const csvImportFileInputRef = useRef<HTMLInputElement | null>(null);
+  const socialContactCsvImportFileInputRef = useRef<HTMLInputElement | null>(null);
   const [formState, setFormState] = useState<ProspectFormState>(initialFormState);
   const [quickAddFormState, setQuickAddFormState] = useState<QuickAddFormState>(
     initialQuickAddFormState,
@@ -1021,6 +1043,8 @@ export default function ProspectsPage () {
   const [quickAddMessage, setQuickAddMessage] = useState("");
   const [contactImportMessage, setContactImportMessage] = useState("");
   const [isContactImportError, setIsContactImportError] = useState(false);
+  const [socialContactImportMessage, setSocialContactImportMessage] = useState("");
+  const [isSocialContactImportError, setIsSocialContactImportError] = useState(false);
   const [resourceShareSelections, setResourceShareSelections] = useState<Record<string, string>>({});
   const [copiedSharedResourceProspectId, setCopiedSharedResourceProspectId] = useState<string | null>(null);
   const [addedSharedResourceProspectId, setAddedSharedResourceProspectId] = useState<string | null>(null);
@@ -2585,6 +2609,12 @@ export default function ProspectsPage () {
     }
   }
 
+  function resetSocialContactCsvImportFileInput() {
+    if (socialContactCsvImportFileInputRef.current) {
+      socialContactCsvImportFileInputRef.current.value = "";
+    }
+  }
+
   function showInvalidImportMessage() {
     setBackupMessage("Fichier invalide. Import impossible.");
     setIsBackupError(true);
@@ -2593,6 +2623,31 @@ export default function ProspectsPage () {
   function showInvalidCsvImportMessage() {
     setBackupMessage("CSV invalide. Import impossible.");
     setIsBackupError(true);
+  }
+
+  function showSocialContactImportMessage(message: string, isError = false) {
+    setSocialContactImportMessage(message);
+    setIsSocialContactImportError(isError);
+  }
+
+  function showInvalidSocialContactCsvImportMessage() {
+    showSocialContactImportMessage("CSV réseaux sociaux invalide. Import impossible.", true);
+  }
+
+  function getSocialLinkValues(
+    platform: Prospect["mainPlatform"],
+    profileUrl: string,
+  ): Prospect["socialLinks"] {
+    return {
+      facebook: platform === "Facebook" ? profileUrl : "",
+      instagram: platform === "Instagram" ? profileUrl : "",
+      linkedin: platform === "LinkedIn" ? profileUrl : "",
+      tiktok: platform === "TikTok" ? profileUrl : "",
+      youtube: platform === "YouTube" ? profileUrl : "",
+      other: ["Facebook", "Instagram", "LinkedIn", "TikTok", "YouTube"].includes(platform)
+        ? ""
+        : profileUrl,
+    };
   }
 
   function buildProspectFromCsvRow(
@@ -2678,6 +2733,219 @@ export default function ProspectsPage () {
       ...prospectBase,
       score: calculateProspectScore(prospectBase),
     };
+  }
+
+  function buildSocialContactProspectFromCsvRow(
+    headerIndexes: Record<(typeof SOCIAL_CONTACT_CSV_COLUMNS)[number], number>,
+    row: string[],
+    now: string,
+  ) {
+    const getCell = (column: (typeof SOCIAL_CONTACT_CSV_COLUMNS)[number]) =>
+      normalizeCsvCell(row[headerIndexes[column]]);
+    const firstName = getCell("firstName");
+    const lastName = getCell("lastName");
+    const fullName = `${firstName} ${lastName}`.trim();
+    const profileUrl = getCell("profileUrl");
+    const phone = getCell("phone");
+    const mainPlatform = pickAllowedCsvValue(
+      getCell("platform"),
+      SOCIAL_PLATFORMS,
+      "Autre",
+    );
+    const importedTags = getCell("tags")
+      .split("|")
+      .map((tag) => tag.trim())
+      .filter((tag): tag is Prospect["tags"][number] =>
+        PROSPECT_TAGS.includes(tag as Prospect["tags"][number]),
+      );
+    const prospectBase: Prospect = {
+      id: createProspectId(),
+      firstName,
+      lastName,
+      displayName: getCell("displayName") || fullName || "Contact réseau social",
+      jobTitle: getCell("jobTitle"),
+      businessArea: getCell("businessArea"),
+      city: getCell("city") || appSettings.defaultCity || "",
+      region: getCell("region") || appSettings.defaultRegion || "",
+      country: getCell("country") || appSettings.defaultCountry || "France",
+      phone,
+      whatsapp: getCell("whatsapp") || phone,
+      email: getCell("email"),
+      mainPlatform,
+      profileUrl,
+      socialLinks: getSocialLinkValues(mainPlatform, profileUrl),
+      category: pickAllowedCsvValue(
+        getCell("category"),
+        PROSPECT_CATEGORIES,
+        "Réseaux sociaux",
+      ),
+      status: pickAllowedCsvValue(
+        getCell("status"),
+        PROSPECT_STATUSES,
+        "À contacter",
+      ),
+      temperature: pickAllowedCsvValue(
+        getCell("temperature"),
+        PROSPECT_TEMPERATURES,
+        "Froid",
+      ),
+      colorType: "Jaune",
+      score: 0,
+      tags: importedTags,
+      isFollower: false,
+      hasSentMessage: false,
+      interactionStats: {
+        followerSinceDate: "",
+        commentsCount: 0,
+        interactionsCount: 0,
+        likesCount: 0,
+        messagesCount: 0,
+      },
+      lastInteractionDate: "",
+      nextActionDate: "",
+      conversationHistory: [],
+      notes: getCell("notes") || "Importé depuis un CSV réseaux sociaux",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    return {
+      ...prospectBase,
+      score: calculateProspectScore(prospectBase),
+    };
+  }
+
+  function handleDownloadSocialContactCsvTemplate() {
+    const exampleValues: Record<(typeof SOCIAL_CONTACT_CSV_COLUMNS)[number], string> = {
+      displayName: "@voyage_exemple",
+      firstName: "Camille",
+      lastName: "Martin",
+      platform: "Instagram",
+      profileUrl: "https://instagram.com/voyage_exemple",
+      city: "Lyon",
+      region: "Auvergne-Rhône-Alpes",
+      country: "France",
+      jobTitle: "Créatrice de contenu",
+      businessArea: "Voyage",
+      email: "camille@example.com",
+      phone: "",
+      whatsapp: "",
+      tags: "Voyage|Créateur de contenu",
+      notes: "Contact repéré manuellement sur Instagram",
+      temperature: "Froid",
+      status: "À contacter",
+      category: "Réseaux sociaux",
+    };
+    const csvContent = [
+      SOCIAL_CONTACT_CSV_COLUMNS.join(","),
+      SOCIAL_CONTACT_CSV_COLUMNS.map((column) => escapeCsvValue(exampleValues[column])).join(","),
+    ].join("\r\n");
+    const csvBlob = new Blob([`\uFEFF${csvContent}`], { type: "text/csv;charset=utf-8" });
+    const csvUrl = URL.createObjectURL(csvBlob);
+    const downloadLink = document.createElement("a");
+
+    downloadLink.href = csvUrl;
+    downloadLink.download = "modele-import-reseaux-sociaux.csv";
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+    URL.revokeObjectURL(csvUrl);
+  }
+
+  function handleImportSocialContactCsv(event: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFile = event.target.files?.[0];
+
+    if (!selectedFile) {
+      return;
+    }
+
+    if (!selectedFile.name.toLowerCase().endsWith(".csv")) {
+      showInvalidSocialContactCsvImportMessage();
+      resetSocialContactCsvImportFileInput();
+      return;
+    }
+
+    const fileReader = new FileReader();
+
+    fileReader.onload = () => {
+      try {
+        const csvRows = parseCsvRows(String(fileReader.result).replace(/^\uFEFF/, ""));
+
+        if (!csvRows || csvRows.length < 2) {
+          showInvalidSocialContactCsvImportMessage();
+          resetSocialContactCsvImportFileInput();
+          return;
+        }
+
+        const header = csvRows[0].map((columnName) => columnName.trim());
+        const headerIndexes = SOCIAL_CONTACT_CSV_COLUMNS.reduce(
+          (indexes, columnName) => ({
+            ...indexes,
+            [columnName]: header.indexOf(columnName),
+          }),
+          {} as Record<(typeof SOCIAL_CONTACT_CSV_COLUMNS)[number], number>,
+        );
+        const hasKnownColumn = SOCIAL_CONTACT_CSV_COLUMNS.some(
+          (columnName) => headerIndexes[columnName] >= 0,
+        );
+
+        if (!hasKnownColumn) {
+          showInvalidSocialContactCsvImportMessage();
+          resetSocialContactCsvImportFileInput();
+          return;
+        }
+
+        const now = new Date().toISOString();
+        const importedProspects = csvRows
+          .slice(1)
+          .filter((row) => row.some((cell) => cell.trim()))
+          .map((row) => buildSocialContactProspectFromCsvRow(headerIndexes, row, now));
+
+        if (importedProspects.length === 0) {
+          showInvalidSocialContactCsvImportMessage();
+          resetSocialContactCsvImportFileInput();
+          return;
+        }
+
+        const importedProspectIds = new Set(importedProspects.map((prospect) => prospect.id));
+        const hasPotentialDuplicate = findPotentialDuplicates([
+          ...importedProspects,
+          ...prospects,
+        ]).some(
+          (duplicateGroup) =>
+            duplicateGroup.prospects.some((prospect) => importedProspectIds.has(prospect.id)) &&
+            duplicateGroup.prospects.some((prospect) => !importedProspectIds.has(prospect.id)),
+        );
+
+        if (hasPotentialDuplicate) {
+          const confirmed = window.confirm(
+            "Certains contacts réseaux sociaux semblent déjà exister. Importer quand même les contacts ?",
+          );
+
+          if (!confirmed) {
+            resetSocialContactCsvImportFileInput();
+            return;
+          }
+        }
+
+        const updatedProspects = [...importedProspects, ...prospects];
+
+        saveProspects(updatedProspects);
+        setProspects(updatedProspects);
+        showSocialContactImportMessage("Contacts réseaux sociaux importés avec succès.");
+        resetSocialContactCsvImportFileInput();
+      } catch {
+        showInvalidSocialContactCsvImportMessage();
+        resetSocialContactCsvImportFileInput();
+      }
+    };
+
+    fileReader.onerror = () => {
+      showInvalidSocialContactCsvImportMessage();
+      resetSocialContactCsvImportFileInput();
+    };
+
+    fileReader.readAsText(selectedFile);
   }
 
   function handleImportProspectsCsv(event: React.ChangeEvent<HTMLInputElement>) {
@@ -3163,6 +3431,44 @@ export default function ProspectsPage () {
                     {contactImportMessage}
                   </p>
                 ) : null}
+
+                <div className="mt-4 border-t border-white/10 pt-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                    Importer contacts réseaux sociaux
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-slate-300">
+                    Importe une liste préparée depuis Instagram, Facebook, LinkedIn, TikTok ou un autre réseau.
+                    Aucun compte n’est connecté automatiquement.
+                  </p>
+                  <div className="mt-3 grid gap-2">
+                    <label className="flex min-h-12 cursor-pointer items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-center text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20">
+                      Importer contacts réseaux sociaux
+                      <input
+                        ref={socialContactCsvImportFileInputRef}
+                        accept=".csv,text/csv"
+                        className="hidden"
+                        type="file"
+                        onChange={handleImportSocialContactCsv}
+                      />
+                    </label>
+                    <button
+                      className="min-h-12 rounded-full border border-white/10 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-white/20 hover:bg-white/5"
+                      type="button"
+                      onClick={handleDownloadSocialContactCsvTemplate}
+                    >
+                      Télécharger un modèle CSV réseaux sociaux
+                    </button>
+                  </div>
+                  {socialContactImportMessage ? (
+                    <p
+                      className={`mt-3 text-xs font-medium leading-5 ${
+                        isSocialContactImportError ? "text-amber-200" : "text-emerald-300"
+                      }`}
+                    >
+                      {socialContactImportMessage}
+                    </p>
+                  ) : null}
+                </div>
               </div>
 
               <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
