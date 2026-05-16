@@ -8,6 +8,7 @@ const navigationLinks = [
   { href: "/", label: "Dashboard" },
   { href: "/aujourdhui", label: "Aujourd’hui" },
   { href: "/prospects", label: "Prospects" },
+  { href: "/qualification", label: "Qualification" },
   { href: "/relances", label: "Relances" },
   { href: "/activite", label: "Activité" },
   { href: "/messages", label: "Messages" },
