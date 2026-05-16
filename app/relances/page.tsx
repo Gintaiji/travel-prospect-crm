@@ -188,12 +188,12 @@ export default function FollowUpsPage() {
     setProspects(updatedProspects);
   }
 
-  function createConversationEntryId() {
+  function createConversationEntryId(prospectId: string) {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
       return crypto.randomUUID();
     }
 
-    return `conversation-${Date.now()}`;
+    return `conversation-${prospectId}-${getTodayDateString()}`;
   }
 
   function resetFollowUpTreatmentForm() {
@@ -247,7 +247,7 @@ export default function FollowUpsPage() {
 
       const nextStatus = followUpResultStatusMap[result] ?? prospect.status;
       const conversationEntry: ConversationEntry = {
-        id: createConversationEntryId(),
+        id: createConversationEntryId(prospect.id),
         date: today,
         channel: prospect.mainPlatform,
         content: contentLines.join("\n"),

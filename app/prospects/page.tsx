@@ -3413,7 +3413,7 @@ export default function ProspectsPage () {
                 </p>
                 <p className="mt-2 text-xs leading-5 text-slate-300">
                   Sur certains téléphones, le navigateur peut te laisser choisir les contacts à importer.
-                  Rien n'est importé sans ton choix.
+                  Rien n&apos;est importé sans ton choix.
                 </p>
                 <button
                   className="mt-3 min-h-12 w-full rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20"

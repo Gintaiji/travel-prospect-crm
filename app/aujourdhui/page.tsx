@@ -57,7 +57,11 @@ export default function TodayPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
 
   useEffect(() => {
-    setProspects(loadProspects());
+    const loadStoredProspects = window.setTimeout(() => {
+      setProspects(loadProspects());
+    }, 0);
+
+    return () => window.clearTimeout(loadStoredProspects);
   }, []);
 
   const stats = useMemo<StatCard[]>(() => {

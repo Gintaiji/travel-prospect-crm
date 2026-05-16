@@ -108,7 +108,7 @@ export default function ActivityPage() {
     return () => window.clearTimeout(loadStoredProspects);
   }, []);
 
-  const activityEntries = useMemo(() => {
+  const activityEntries = useMemo<ActivityEntry[]>(() => {
     return prospects
       .flatMap((prospect) =>
         (prospect.conversationHistory ?? []).map((conversationEntry, entryIndex) => ({

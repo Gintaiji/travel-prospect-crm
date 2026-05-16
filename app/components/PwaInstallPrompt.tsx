@@ -22,9 +22,13 @@ export default function PwaInstallPrompt() {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true);
-    setIsMobile(isMobileUserAgent(navigator.userAgent));
-    setIsDismissed(localStorage.getItem(INSTALL_DISMISSED_STORAGE_KEY) === "true");
+    const loadInstallPromptState = window.setTimeout(() => {
+      setIsMounted(true);
+      setIsMobile(isMobileUserAgent(navigator.userAgent));
+      setIsDismissed(
+        localStorage.getItem(INSTALL_DISMISSED_STORAGE_KEY) === "true",
+      );
+    }, 0);
 
     function handleBeforeInstallPrompt(event: Event) {
       event.preventDefault();
@@ -34,6 +38,7 @@ export default function PwaInstallPrompt() {
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
     return () => {
+      window.clearTimeout(loadInstallPromptState);
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     };
   }, []);
