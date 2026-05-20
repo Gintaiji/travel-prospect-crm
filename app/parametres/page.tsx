@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import {
   DEFAULT_APP_SETTINGS,
@@ -305,6 +306,18 @@ export default function SettingsPage() {
               <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-100">
                 {previewMessage}
               </p>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+              <p className="text-sm leading-6 text-slate-300">
+                Les paramètres sont encore stockés localement dans ce navigateur.
+              </p>
+              <Link
+                href="/stockage"
+                className="mt-3 inline-flex text-sm font-semibold text-emerald-300 transition hover:text-emerald-200"
+              >
+                Voir l’état du stockage local
+              </Link>
             </div>
           </aside>
         </div>

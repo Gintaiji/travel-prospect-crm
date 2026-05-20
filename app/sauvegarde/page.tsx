@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   loadCustomMessageTemplates,
@@ -331,6 +332,12 @@ export default function BackupPage() {
             <p className="mt-4 text-sm leading-6 text-amber-100/90">
               Cette V1 utilise le stockage local du navigateur. La sauvegarde complète est ta ceinture de sécurité.
             </p>
+            <Link
+              href="/stockage"
+              className="mt-5 inline-flex min-h-11 items-center rounded-full border border-amber-200/30 bg-amber-200/10 px-5 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-200/20"
+            >
+              Voir l’état du stockage local
+            </Link>
           </section>
         </div>
       </section>
