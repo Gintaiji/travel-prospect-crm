@@ -15,7 +15,6 @@ const navigationLinks = [
   { href: "/tunnel", label: "Tunnel" },
   { href: "/ressources", label: "Ressources" },
   { href: "/sauvegarde", label: "Sauvegarde" },
-  { href: "/stockage", label: "Stockage" },
   { href: "/parametres", label: "Paramètres" },
 ];
 

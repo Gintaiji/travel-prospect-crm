@@ -313,7 +313,7 @@ export default function SettingsPage() {
                 Les paramètres sont encore stockés localement dans ce navigateur.
               </p>
               <Link
-                href="/stockage"
+                href="/sauvegarde"
                 className="mt-3 inline-flex text-sm font-semibold text-emerald-300 transition hover:text-emerald-200"
               >
                 Voir l’état du stockage local

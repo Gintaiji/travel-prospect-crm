@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   loadLastBackupDate,
   saveLastBackupDate,
+  shouldShowBackupReminder,
 } from "../lib/backupReminderStorage";
 import {
   loadCustomMessageTemplates,
@@ -30,6 +30,8 @@ type BackupFile = {
   settings?: AppSettings;
   customMessageTemplates?: CustomMessageTemplates;
 };
+
+type ProtectionStatus = "unknown" | "granted" | "denied";
 
 const backupAppName = "Travel Prospect CRM";
 
@@ -127,6 +129,12 @@ export default function BackupPage() {
     useState<CustomMessageTemplates>({});
   const [lastReadAt, setLastReadAt] = useState("");
   const [lastBackupDate, setLastBackupDate] = useState("");
+  const [showBackupReminder, setShowBackupReminder] = useState(false);
+  const [storageApiAvailable, setStorageApiAvailable] = useState(false);
+  const [persistApiAvailable, setPersistApiAvailable] = useState(false);
+  const [protectionStatus, setProtectionStatus] =
+    useState<ProtectionStatus>("unknown");
+  const [requestMessage, setRequestMessage] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [importError, setImportError] = useState("");
 
@@ -136,8 +144,27 @@ export default function BackupPage() {
       setResources(loadResources());
       setSettings(loadSettings());
       setCustomMessageTemplates(loadCustomMessageTemplates());
-      setLastBackupDate(loadLastBackupDate());
+      const storedLastBackupDate = loadLastBackupDate();
+
+      setLastBackupDate(storedLastBackupDate);
+      setShowBackupReminder(shouldShowBackupReminder(storedLastBackupDate));
       setLastReadAt(new Date().toLocaleString("fr-FR"));
+
+      const browserStorage = navigator.storage;
+      const hasStorageApi = Boolean(browserStorage);
+      const hasPersistApi = typeof browserStorage?.persist === "function";
+
+      setStorageApiAvailable(hasStorageApi);
+      setPersistApiAvailable(hasPersistApi);
+
+      if (typeof browserStorage?.persisted === "function") {
+        browserStorage
+          .persisted()
+          .then((isPersisted) =>
+            setProtectionStatus(isPersisted ? "granted" : "denied"),
+          )
+          .catch(() => setProtectionStatus("unknown"));
+      }
     }, 0);
 
     return () => window.clearTimeout(loadStoredData);
@@ -175,6 +202,24 @@ export default function BackupPage() {
 
     saveLastBackupDate(exportedAt);
     setLastBackupDate(exportedAt);
+    setShowBackupReminder(false);
+  }
+
+  async function requestStorageProtection() {
+    if (typeof navigator.storage?.persist !== "function") {
+      return;
+    }
+
+    setRequestMessage("");
+
+    const isPersisted = await navigator.storage.persist();
+
+    setProtectionStatus(isPersisted ? "granted" : "denied");
+    setRequestMessage(
+      isPersisted
+        ? "Protection du stockage activée."
+        : "Le navigateur n'a pas accordé la protection du stockage.",
+    );
   }
 
   function handleImportBackup(event: React.ChangeEvent<HTMLInputElement>) {
@@ -245,129 +290,232 @@ export default function BackupPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-6 text-white sm:px-6 sm:py-10">
+    <main className="min-h-screen bg-slate-950 px-4 py-6 pb-28 text-white sm:px-6 sm:py-10 md:pb-10">
       <section className="mx-auto max-w-6xl">
         <header className="mb-8">
           <p className="text-sm uppercase tracking-[0.3em] text-emerald-400">
             Données locales
           </p>
-          <h1 className="mt-3 text-3xl font-bold text-white sm:text-4xl">Sauvegarde</h1>
+          <h1 className="mt-3 text-3xl font-bold text-white sm:text-4xl">
+            Sauvegarde
+          </h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-            Exporte et restaure toutes les données locales de ton CRM.
+            Exporte, protège et prépare la synchronisation de tes données locales.
           </p>
         </header>
 
-        <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <p className="text-sm uppercase tracking-[0.25em] text-emerald-300">
-                Sauvegarde complète
-              </p>
-              <h2 className="mt-2 text-2xl font-bold text-white">
-                Exporter ou restaurer tout le CRM
-              </h2>
-              <p className="mt-3 text-sm leading-6 text-slate-300">
-                {formattedLastBackupDate
-                  ? `Dernière sauvegarde complète : ${formattedLastBackupDate}`
-                  : "Aucune sauvegarde complète enregistrée sur cet appareil."}
-              </p>
-            </div>
-            <button
-              className="min-h-11 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-5 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
-              type="button"
-              onClick={exportCompleteBackup}
-            >
-              Exporter la sauvegarde complète
-            </button>
-          </div>
-
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-            <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Prospects</p>
-              <p className="mt-2 text-3xl font-bold text-white">{prospects.length}</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Échanges</p>
-              <p className="mt-2 text-3xl font-bold text-white">{totalConversationCount}</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Ressources</p>
-              <p className="mt-2 text-3xl font-bold text-white">{resources.length}</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                Paramètres personnalisés
-              </p>
-              <p className="mt-2 text-3xl font-bold text-white">{customSettingsLabel}</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                Modèles personnalisés
-              </p>
-              <p className="mt-2 text-3xl font-bold text-white">
-                {customMessageTemplatesLabel}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                Dernière lecture
-              </p>
-              <p className="mt-2 text-sm font-semibold leading-6 text-white">
-                {lastReadAt || "Chargement..."}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-            <label className="flex flex-col gap-3 text-sm font-medium text-slate-200">
-              Importer une sauvegarde complète
-              <input
-                className="min-h-11 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-200 file:mr-4 file:rounded-full file:border-0 file:bg-emerald-400/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-emerald-200 hover:file:bg-emerald-400/20"
-                accept=".json,application/json"
-                type="file"
-                onChange={handleImportBackup}
-              />
-            </label>
-            {importMessage ? (
-              <p className="mt-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm font-medium text-emerald-200">
-                {importMessage}
-              </p>
-            ) : null}
-            {importError ? (
-              <p className="mt-3 rounded-xl border border-rose-400/30 bg-rose-400/10 p-3 text-sm font-medium text-rose-200">
-                {importError}
-              </p>
-            ) : null}
-          </div>
-        </section>
-
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-5">
           <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
-            <h2 className="text-xl font-bold text-white">Quand exporter ?</h2>
-            <p className="mt-4 text-sm leading-6 text-slate-300">
-              La sauvegarde complète contient les prospects, l’historique d’échanges,
-              les ressources, les paramètres et les modèles de messages personnalisés.
-            </p>
-            <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
-              <li>Avant une grosse modification</li>
-              <li>Après une session de prospection importante</li>
-              <li>Avant de changer de navigateur ou d’ordinateur</li>
-              <li>Régulièrement tant que l’app fonctionne en stockage local</li>
-            </ul>
+            <h2 className="text-xl font-bold text-white">Résumé des données</h2>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Prospects
+                </p>
+                <p className="mt-2 text-3xl font-bold text-white">{prospects.length}</p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Échanges
+                </p>
+                <p className="mt-2 text-3xl font-bold text-white">
+                  {totalConversationCount}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Ressources
+                </p>
+                <p className="mt-2 text-3xl font-bold text-white">{resources.length}</p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Paramètres personnalisés
+                </p>
+                <p className="mt-2 text-3xl font-bold text-white">
+                  {customSettingsLabel}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Modèles personnalisés
+                </p>
+                <p className="mt-2 text-3xl font-bold text-white">
+                  {customMessageTemplatesLabel}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Dernière sauvegarde complète
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                  {formattedLastBackupDate ||
+                    "Aucune sauvegarde complète enregistrée sur cet appareil."}
+                </p>
+              </article>
+            </div>
           </section>
 
-          <section className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 sm:p-5">
-            <h2 className="text-xl font-bold text-amber-100">Attention</h2>
-            <p className="mt-4 text-sm leading-6 text-amber-100/90">
-              Cette V1 utilise le stockage local du navigateur. La sauvegarde complète est ta ceinture de sécurité.
-            </p>
-            <Link
-              href="/stockage"
-              className="mt-5 inline-flex min-h-11 items-center rounded-full border border-amber-200/30 bg-amber-200/10 px-5 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-200/20"
-            >
-              Voir l’état du stockage local
-            </Link>
+          <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-white">Sauvegarde complète</h2>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+                  Exporte les prospects, ressources, paramètres et modèles
+                  personnalisés dans un fichier JSON complet.
+                </p>
+              </div>
+              <button
+                className="min-h-11 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-5 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
+                type="button"
+                onClick={exportCompleteBackup}
+              >
+                Exporter la sauvegarde complète
+              </button>
+            </div>
           </section>
+
+          <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
+            <h2 className="text-xl font-bold text-white">
+              Importer une sauvegarde complète
+            </h2>
+            <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+              <label className="flex flex-col gap-3 text-sm font-medium text-slate-200">
+                Fichier de sauvegarde JSON
+                <input
+                  className="min-h-11 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-200 file:mr-4 file:rounded-full file:border-0 file:bg-emerald-400/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-emerald-200 hover:file:bg-emerald-400/20"
+                  accept=".json,application/json"
+                  type="file"
+                  onChange={handleImportBackup}
+                />
+              </label>
+              {importMessage ? (
+                <p className="mt-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm font-medium text-emerald-200">
+                  {importMessage}
+                </p>
+              ) : null}
+              {importError ? (
+                <p className="mt-3 rounded-xl border border-rose-400/30 bg-rose-400/10 p-3 text-sm font-medium text-rose-200">
+                  {importError}
+                </p>
+              ) : null}
+            </div>
+          </section>
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
+              <h2 className="text-xl font-bold text-white">
+                État du stockage local
+              </h2>
+              <div className="mt-5 grid gap-3">
+                <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                    Mode actuel
+                  </p>
+                  <p className="mt-2 text-lg font-bold text-white">
+                    Stockage local du navigateur
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                    Dernière lecture
+                  </p>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                    {lastReadAt || "Chargement..."}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
+              <div className="flex flex-col gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-white">
+                    Protection du stockage local
+                  </h2>
+                  <p className="mt-3 text-sm leading-6 text-slate-300">
+                    Stockage protégé :{" "}
+                    <span className="font-semibold text-white">
+                      {protectionStatus === "granted" ? "Oui" : "Non"}
+                    </span>
+                  </p>
+                </div>
+
+                {storageApiAvailable && persistApiAvailable ? (
+                  <button
+                    className="min-h-11 w-fit rounded-full border border-emerald-400/30 bg-emerald-400/10 px-5 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
+                    type="button"
+                    onClick={requestStorageProtection}
+                  >
+                    Demander la protection du stockage
+                  </button>
+                ) : null}
+              </div>
+
+              {storageApiAvailable && persistApiAvailable ? (
+                requestMessage ? (
+                  <p className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm font-medium text-emerald-200">
+                    {requestMessage}
+                  </p>
+                ) : null
+              ) : (
+                <p className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-sm font-medium text-amber-100">
+                  Ce navigateur ne permet pas de demander la protection du stockage.
+                </p>
+              )}
+            </section>
+          </div>
+
+          <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
+            <h2 className="text-xl font-bold text-white">Rappel de sauvegarde</h2>
+            {showBackupReminder ? (
+              <p className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-sm font-medium leading-6 text-amber-100">
+                Sauvegarde recommandée : tes données sont encore locales. Pense à
+                exporter une sauvegarde complète.
+              </p>
+            ) : (
+              <p className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm font-medium leading-6 text-emerald-200">
+                Sauvegarde complète enregistrée récemment sur cet appareil.
+              </p>
+            )}
+          </section>
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            <section className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 sm:p-5">
+              <h2 className="text-xl font-bold text-amber-100">
+                Risque à connaître
+              </h2>
+              <p className="mt-4 text-sm leading-6 text-amber-100/90">
+                Cette V1 utilise encore le stockage local du navigateur. Si tu
+                supprimes les données du site, l&apos;historique ou les données de
+                navigation, tes prospects peuvent disparaître. La sauvegarde
+                complète reste indispensable tant que le cloud n&apos;est pas activé.
+              </p>
+            </section>
+
+            <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 sm:p-5">
+              <h2 className="text-xl font-bold text-emerald-100">
+                Préparation cloud
+              </h2>
+              <p className="mt-4 text-sm leading-6 text-emerald-50/90">
+                Prochaine étape : connecter une base de données en ligne pour
+                retrouver tes données même après nettoyage du téléphone ou
+                changement d&apos;appareil.
+              </p>
+
+              <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <h3 className="text-base font-bold text-white">
+                  Ce que le cloud permettra
+                </h3>
+                <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-200">
+                  <li>Retrouver les données après connexion</li>
+                  <li>Utiliser plusieurs appareils</li>
+                  <li>Préparer une version équipe</li>
+                  <li>Garder localStorage comme cache de secours</li>
+                </ul>
+              </div>
+            </section>
+          </div>
         </div>
       </section>
     </main>
