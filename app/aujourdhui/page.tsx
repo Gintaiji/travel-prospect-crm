@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import {
+  loadLastBackupDate,
+  shouldShowBackupReminder,
+} from "../lib/backupReminderStorage";
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
 import {
   calculateProspectScore,
@@ -55,10 +59,12 @@ function getLastConversationEntry(prospect: Prospect) {
 
 export default function TodayPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [showBackupReminder, setShowBackupReminder] = useState(false);
 
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
       setProspects(loadProspects());
+      setShowBackupReminder(shouldShowBackupReminder(loadLastBackupDate()));
     }, 0);
 
     return () => window.clearTimeout(loadStoredProspects);
@@ -153,6 +159,22 @@ export default function TodayPage() {
             Ajout express
           </Link>
         </header>
+
+        {showBackupReminder ? (
+          <section className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-medium leading-6 text-amber-100">
+                Sauvegarde recommandée : tes données sont encore locales.
+              </p>
+              <Link
+                className="flex min-h-11 items-center justify-center rounded-full border border-amber-200/30 bg-amber-200/10 px-4 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-200/20"
+                href="/sauvegarde"
+              >
+                Faire une sauvegarde
+              </Link>
+            </div>
+          </section>
+        ) : null}
 
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {stats.map((stat) => (

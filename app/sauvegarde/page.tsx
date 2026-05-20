@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
+  loadLastBackupDate,
+  saveLastBackupDate,
+} from "../lib/backupReminderStorage";
+import {
   loadCustomMessageTemplates,
   saveCustomMessageTemplates,
   type CustomMessageTemplates,
@@ -103,6 +107,18 @@ function hasCustomMessageTemplates(customMessageTemplates: CustomMessageTemplate
   );
 }
 
+function formatLastBackupDate(lastBackupDate: string) {
+  if (!lastBackupDate) {
+    return "";
+  }
+
+  const parsedDate = new Date(lastBackupDate);
+
+  return Number.isNaN(parsedDate.getTime())
+    ? ""
+    : parsedDate.toLocaleString("fr-FR");
+}
+
 export default function BackupPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
@@ -110,6 +126,7 @@ export default function BackupPage() {
   const [customMessageTemplates, setCustomMessageTemplates] =
     useState<CustomMessageTemplates>({});
   const [lastReadAt, setLastReadAt] = useState("");
+  const [lastBackupDate, setLastBackupDate] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [importError, setImportError] = useState("");
 
@@ -119,6 +136,7 @@ export default function BackupPage() {
       setResources(loadResources());
       setSettings(loadSettings());
       setCustomMessageTemplates(loadCustomMessageTemplates());
+      setLastBackupDate(loadLastBackupDate());
       setLastReadAt(new Date().toLocaleString("fr-FR"));
     }, 0);
 
@@ -130,6 +148,7 @@ export default function BackupPage() {
   const customMessageTemplatesLabel = hasCustomMessageTemplates(customMessageTemplates)
     ? "Oui"
     : "Non";
+  const formattedLastBackupDate = formatLastBackupDate(lastBackupDate);
 
   function exportCompleteBackup() {
     const backup: BackupFile = {
@@ -151,6 +170,11 @@ export default function BackupPage() {
     downloadLink.download = `travel-prospect-crm-sauvegarde-complete-${getTodayDateString()}.json`;
     downloadLink.click();
     URL.revokeObjectURL(backupUrl);
+
+    const exportedAt = new Date().toISOString();
+
+    saveLastBackupDate(exportedAt);
+    setLastBackupDate(exportedAt);
   }
 
   function handleImportBackup(event: React.ChangeEvent<HTMLInputElement>) {
@@ -242,6 +266,11 @@ export default function BackupPage() {
               <h2 className="mt-2 text-2xl font-bold text-white">
                 Exporter ou restaurer tout le CRM
               </h2>
+              <p className="mt-3 text-sm leading-6 text-slate-300">
+                {formattedLastBackupDate
+                  ? `Dernière sauvegarde complète : ${formattedLastBackupDate}`
+                  : "Aucune sauvegarde complète enregistrée sur cet appareil."}
+              </p>
             </div>
             <button
               className="min-h-11 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-5 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20"

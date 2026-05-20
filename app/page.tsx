@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import {
+  loadLastBackupDate,
+  shouldShowBackupReminder,
+} from "./lib/backupReminderStorage";
 import { loadProspects } from "./lib/prospectStorage";
 import {
   getProspectDisplayName,
@@ -28,11 +32,13 @@ export default function HomePage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [todayDate, setTodayDate] = useState("");
   const [hasLoadedProspects, setHasLoadedProspects] = useState(false);
+  const [showBackupReminder, setShowBackupReminder] = useState(false);
 
   useEffect(() => {
     const loadDashboardData = window.setTimeout(() => {
       setProspects(loadProspects());
       setTodayDate(getTodayDateString());
+      setShowBackupReminder(shouldShowBackupReminder(loadLastBackupDate()));
       setHasLoadedProspects(true);
     }, 0);
 
@@ -169,6 +175,28 @@ export default function HomePage() {
             Tu peux installer cette application sur ton téléphone depuis le navigateur.
           </p>
         </section>
+
+        {showBackupReminder ? (
+          <section className="mt-6 rounded-3xl border border-amber-400/20 bg-amber-400/10 p-5 shadow-xl">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-amber-100">
+                  Sauvegarde recommandée
+                </h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-amber-100/90">
+                  Tes données sont encore stockées localement. Fais une sauvegarde
+                  complète pour éviter les mauvaises surprises.
+                </p>
+              </div>
+              <Link
+                href="/sauvegarde"
+                className="inline-flex min-h-11 items-center justify-center rounded-full border border-amber-200/30 bg-amber-200/10 px-5 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-200/20"
+              >
+                Faire une sauvegarde
+              </Link>
+            </div>
+          </section>
+        ) : null}
 
         {!hasProspectData ? (
           <section className="mt-8 rounded-3xl border border-white/10 bg-slate-900/70 p-5 shadow-xl">

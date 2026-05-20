@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
+  loadLastBackupDate,
+  shouldShowBackupReminder,
+} from "../lib/backupReminderStorage";
+import {
   loadCustomMessageTemplates,
   type CustomMessageTemplates,
 } from "../lib/messageTemplateStorage";
@@ -45,6 +49,18 @@ function hasCustomMessageTemplates(customMessageTemplates: CustomMessageTemplate
   );
 }
 
+function formatLastBackupDate(lastBackupDate: string) {
+  if (!lastBackupDate) {
+    return "";
+  }
+
+  const parsedDate = new Date(lastBackupDate);
+
+  return Number.isNaN(parsedDate.getTime())
+    ? ""
+    : parsedDate.toLocaleString("fr-FR");
+}
+
 export default function StoragePage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
@@ -56,6 +72,8 @@ export default function StoragePage() {
   const [protectionStatus, setProtectionStatus] =
     useState<ProtectionStatus>("unknown");
   const [requestMessage, setRequestMessage] = useState("");
+  const [lastBackupDate, setLastBackupDate] = useState("");
+  const [showBackupReminder, setShowBackupReminder] = useState(false);
 
   useEffect(() => {
     const loadStoredData = window.setTimeout(() => {
@@ -63,6 +81,11 @@ export default function StoragePage() {
       setResources(loadResources());
       setSettings(loadSettings());
       setCustomMessageTemplates(loadCustomMessageTemplates());
+
+      const storedLastBackupDate = loadLastBackupDate();
+
+      setLastBackupDate(storedLastBackupDate);
+      setShowBackupReminder(shouldShowBackupReminder(storedLastBackupDate));
 
       const browserStorage = navigator.storage;
       const hasStorageApi = Boolean(browserStorage);
@@ -104,6 +127,7 @@ export default function StoragePage() {
     ],
     [customMessageTemplates, prospects, resources.length, settings],
   );
+  const formattedLastBackupDate = formatLastBackupDate(lastBackupDate);
 
   async function requestStorageProtection() {
     if (typeof navigator.storage?.persist !== "function") {
@@ -142,6 +166,18 @@ export default function StoragePage() {
             <h2 className="text-xl font-bold text-white">
               État actuel du stockage
             </h2>
+            <p className="mt-3 text-sm leading-6 text-slate-300">
+              Dernière sauvegarde complète :{" "}
+              <span className="font-semibold text-white">
+                {formattedLastBackupDate || "Aucune sauvegarde complète enregistrée sur cet appareil."}
+              </span>
+            </p>
+            {showBackupReminder ? (
+              <p className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-sm font-medium leading-6 text-amber-100">
+                Sauvegarde recommandée : tes données sont encore locales. Pense à
+                exporter une sauvegarde complète.
+              </p>
+            ) : null}
             <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {storageStats.map((storageStat) => (
                 <article
