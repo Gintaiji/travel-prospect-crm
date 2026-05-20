@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   loadLastBackupDate,
@@ -502,6 +503,12 @@ export default function BackupPage() {
                 retrouver tes données même après nettoyage du téléphone ou
                 changement d&apos;appareil.
               </p>
+              <Link
+                href="/cloud"
+                className="mt-5 inline-flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
+              >
+                Vérifier la préparation cloud
+              </Link>
 
               <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
                 <h3 className="text-base font-bold text-white">
