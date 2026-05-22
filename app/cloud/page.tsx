@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   createBrowserSupabaseClient,
   isSupabaseConfigured,
@@ -8,7 +9,34 @@ import {
 
 export default function CloudPage() {
   const [connectionMessage, setConnectionMessage] = useState("");
+  const [sessionMessage, setSessionMessage] = useState("Lecture de la session...");
   const supabaseConfiguredLabel = isSupabaseConfigured() ? "Oui" : "Non";
+
+  async function refreshSession() {
+    const supabase = createBrowserSupabaseClient();
+
+    if (!supabase) {
+      setSessionMessage("Aucun utilisateur connecté.");
+      return;
+    }
+
+    const { data, error } = await supabase.auth.getSession();
+
+    if (error || !data.session?.user) {
+      setSessionMessage("Aucun utilisateur connecté.");
+      return;
+    }
+
+    setSessionMessage(
+      data.session.user.email
+        ? `Utilisateur connecté : ${data.session.user.email}`
+        : "Utilisateur connecté.",
+    );
+  }
+
+  useEffect(() => {
+    refreshSession();
+  }, []);
 
   async function testSupabaseConnection() {
     setConnectionMessage("");
@@ -27,6 +55,8 @@ export default function CloudPage() {
         ? "Connexion Supabase impossible pour le moment."
         : "Connexion Supabase prête.",
     );
+
+    await refreshSession();
   }
 
   return (
@@ -66,6 +96,17 @@ export default function CloudPage() {
                 Cette page sert uniquement à vérifier la connexion Supabase.
               </li>
             </ul>
+            <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+              <p className="text-sm leading-6 text-slate-200">
+                {sessionMessage}
+              </p>
+              <Link
+                href="/connexion"
+                className="mt-4 inline-flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
+              >
+                Connexion
+              </Link>
+            </div>
           </section>
 
           <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 sm:p-5">

@@ -510,6 +510,13 @@ export default function BackupPage() {
                 Vérifier la préparation cloud
               </Link>
 
+              <Link
+                href="/connexion"
+                className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full border border-white/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:border-emerald-300/40 hover:bg-emerald-300/10"
+              >
+                Se connecter au cloud
+              </Link>
+
               <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
                 <h3 className="text-base font-bold text-white">
                   Ce que le cloud permettra

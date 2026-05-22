@@ -16,6 +16,7 @@ const navigationLinks = [
   { href: "/ressources", label: "Ressources" },
   { href: "/sauvegarde", label: "Sauvegarde" },
   { href: "/cloud", label: "Cloud" },
+  { href: "/connexion", label: "Connexion" },
   { href: "/parametres", label: "Paramètres" },
 ];
 
