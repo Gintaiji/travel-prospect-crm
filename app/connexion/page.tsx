@@ -40,7 +40,7 @@ export default function ConnexionPage() {
         isConnected: false,
         email: null,
       });
-      setMessage("Impossible de lire la session Supabase.");
+      setMessage(error.message);
       return;
     }
 
@@ -55,6 +55,17 @@ export default function ConnexionPage() {
     refreshSession();
   }, []);
 
+  function getTrimmedCredentials() {
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail || !password) {
+      setMessage("Email et mot de passe obligatoires.");
+      return null;
+    }
+
+    return { email: trimmedEmail, password };
+  }
+
   async function createAccount() {
     setMessage("");
 
@@ -65,14 +76,27 @@ export default function ConnexionPage() {
       return;
     }
 
-    const { error } = await supabase.auth.signUp({ email, password });
+    const credentials = getTrimmedCredentials();
+
+    if (!credentials) {
+      return;
+    }
+
+    const { data, error } = await supabase.auth.signUp({
+      email: credentials.email,
+      password: credentials.password,
+    });
 
     if (error) {
       setMessage(error.message);
       return;
     }
 
-    setMessage("Compte créé. Vérifie tes emails si Supabase demande une confirmation.");
+    setMessage(
+      data.user
+        ? "Compte créé. Vérifie tes emails si Supabase demande une confirmation."
+        : "Demande de création de compte envoyée.",
+    );
     await refreshSession();
   }
 
@@ -86,9 +110,15 @@ export default function ConnexionPage() {
       return;
     }
 
+    const credentials = getTrimmedCredentials();
+
+    if (!credentials) {
+      return;
+    }
+
     const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+      email: credentials.email,
+      password: credentials.password,
     });
 
     if (error) {

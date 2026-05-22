@@ -53,7 +53,7 @@ export default function CloudPage() {
     setConnectionMessage(
       error
         ? "Connexion Supabase impossible pour le moment."
-        : "Connexion Supabase prête.",
+        : "Client Supabase configuré.",
     );
 
     await refreshSession();
