@@ -509,6 +509,12 @@ export default function BackupPage() {
               >
                 Vérifier la préparation cloud
               </Link>
+              <Link
+                href="/cloud"
+                className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
+              >
+                Synchroniser avec le cloud
+              </Link>
 
               <Link
                 href="/connexion"

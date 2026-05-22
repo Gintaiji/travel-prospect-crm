@@ -1,0 +1,210 @@
+import { createBrowserSupabaseClient } from "./supabaseClient";
+import {
+  loadCustomMessageTemplates,
+  saveCustomMessageTemplates,
+  type CustomMessageTemplates,
+} from "./messageTemplateStorage";
+import { loadProspects, saveProspects } from "./prospectStorage";
+import { loadResources, saveResources } from "./resourceStorage";
+import { loadSettings, saveSettings } from "./settingsStorage";
+import type { AppSettings, Prospect, Resource } from "./types";
+
+type CloudDataRow<T> = {
+  data: T;
+};
+
+type CloudSyncStateRow = {
+  last_sync_at: string | null;
+};
+
+export type UploadCloudSummary = {
+  prospectsCount: number;
+  resourcesCount: number;
+  settingsSent: boolean;
+  customMessageTemplatesSent: boolean;
+};
+
+export type RestoreCloudSummary = {
+  prospectsCount: number;
+  resourcesCount: number;
+  settingsRestored: boolean;
+  customMessageTemplatesRestored: boolean;
+};
+
+export type CloudSyncState = {
+  lastSyncAt: string | null;
+};
+
+async function getConnectedUserId() {
+  const supabase = createBrowserSupabaseClient();
+
+  if (!supabase) {
+    throw new Error("Supabase n'est pas encore configuré.");
+  }
+
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data.user) {
+    throw new Error("Aucun utilisateur connecté.");
+  }
+
+  return { supabase, userId: data.user.id };
+}
+
+function throwIfSupabaseError(error: { message: string } | null) {
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function uploadLocalDataToCloud(): Promise<UploadCloudSummary> {
+  const { supabase, userId } = await getConnectedUserId();
+  const prospects = loadProspects();
+  const resources = loadResources();
+  const settings = loadSettings();
+  const customMessageTemplates = loadCustomMessageTemplates();
+
+  const { error: deleteProspectsError } = await supabase
+    .from("crm_prospects")
+    .delete()
+    .eq("user_id", userId);
+  throwIfSupabaseError(deleteProspectsError);
+
+  const { error: deleteResourcesError } = await supabase
+    .from("crm_resources")
+    .delete()
+    .eq("user_id", userId);
+  throwIfSupabaseError(deleteResourcesError);
+
+  if (prospects.length > 0) {
+    const { error } = await supabase.from("crm_prospects").insert(
+      prospects.map((prospect) => ({
+        user_id: userId,
+        local_id: prospect.id,
+        data: prospect,
+      })),
+    );
+    throwIfSupabaseError(error);
+  }
+
+  if (resources.length > 0) {
+    const { error } = await supabase.from("crm_resources").insert(
+      resources.map((resource) => ({
+        user_id: userId,
+        local_id: resource.id,
+        data: resource,
+      })),
+    );
+    throwIfSupabaseError(error);
+  }
+
+  const { error: settingsError } = await supabase
+    .from("crm_settings")
+    .upsert({ user_id: userId, data: settings }, { onConflict: "user_id" });
+  throwIfSupabaseError(settingsError);
+
+  const { error: templatesError } = await supabase
+    .from("crm_message_templates")
+    .upsert(
+      { user_id: userId, data: customMessageTemplates },
+      { onConflict: "user_id" },
+    );
+  throwIfSupabaseError(templatesError);
+
+  const { error: syncStateError } = await supabase
+    .from("crm_sync_state")
+    .upsert(
+      {
+        user_id: userId,
+        last_sync_at: new Date().toISOString(),
+        sync_note: "Synchronisation manuelle depuis le navigateur",
+      },
+      { onConflict: "user_id" },
+    );
+  throwIfSupabaseError(syncStateError);
+
+  return {
+    prospectsCount: prospects.length,
+    resourcesCount: resources.length,
+    settingsSent: true,
+    customMessageTemplatesSent: true,
+  };
+}
+
+export async function restoreCloudDataToLocal(): Promise<RestoreCloudSummary> {
+  const { supabase, userId } = await getConnectedUserId();
+
+  const { data: prospectRows, error: prospectsError } = await supabase
+    .from("crm_prospects")
+    .select("data")
+    .eq("user_id", userId);
+  throwIfSupabaseError(prospectsError);
+
+  const { data: resourceRows, error: resourcesError } = await supabase
+    .from("crm_resources")
+    .select("data")
+    .eq("user_id", userId);
+  throwIfSupabaseError(resourcesError);
+
+  const { data: settingsRow, error: settingsError } = await supabase
+    .from("crm_settings")
+    .select("data")
+    .eq("user_id", userId)
+    .maybeSingle();
+  throwIfSupabaseError(settingsError);
+
+  const { data: templateRow, error: templatesError } = await supabase
+    .from("crm_message_templates")
+    .select("data")
+    .eq("user_id", userId)
+    .maybeSingle();
+  throwIfSupabaseError(templatesError);
+
+  const prospects = ((prospectRows ?? []) as CloudDataRow<Prospect>[]).map(
+    (row) => row.data,
+  );
+  const resources = ((resourceRows ?? []) as CloudDataRow<Resource>[]).map(
+    (row) => row.data,
+  );
+  const settings = (settingsRow as CloudDataRow<AppSettings> | null)?.data;
+  const customMessageTemplates = (
+    templateRow as CloudDataRow<CustomMessageTemplates> | null
+  )?.data;
+
+  saveProspects(prospects);
+  saveResources(resources);
+
+  if (settings) {
+    saveSettings(settings);
+  }
+
+  if (customMessageTemplates) {
+    saveCustomMessageTemplates(customMessageTemplates);
+  }
+
+  return {
+    prospectsCount: prospects.length,
+    resourcesCount: resources.length,
+    settingsRestored: Boolean(settings),
+    customMessageTemplatesRestored: Boolean(customMessageTemplates),
+  };
+}
+
+export async function getCloudSyncState(): Promise<CloudSyncState> {
+  const { supabase, userId } = await getConnectedUserId();
+
+  const { data, error } = await supabase
+    .from("crm_sync_state")
+    .select("last_sync_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+  throwIfSupabaseError(error);
+
+  return {
+    lastSyncAt: (data as CloudSyncStateRow | null)?.last_sync_at ?? null,
+  };
+}

@@ -6,17 +6,46 @@ import {
   createBrowserSupabaseClient,
   isSupabaseConfigured,
 } from "../lib/supabaseClient";
+import {
+  getCloudSyncState,
+  restoreCloudDataToLocal,
+  uploadLocalDataToCloud,
+} from "../lib/cloudSync";
 
 export default function CloudPage() {
   const [connectionMessage, setConnectionMessage] = useState("");
   const [sessionMessage, setSessionMessage] = useState("Lecture de la session...");
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [syncMessage, setSyncMessage] = useState("");
+  const [isSyncing, setIsSyncing] = useState(false);
   const supabaseConfiguredLabel = isSupabaseConfigured() ? "Oui" : "Non";
+
+  function formatDateTime(value: string | null) {
+    if (!value) {
+      return "Aucune synchronisation cloud enregistrée.";
+    }
+
+    return new Intl.DateTimeFormat("fr-FR", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(value));
+  }
+
+  async function refreshCloudSyncState() {
+    try {
+      const cloudSyncState = await getCloudSyncState();
+      setLastSyncAt(cloudSyncState.lastSyncAt);
+    } catch {
+      setLastSyncAt(null);
+    }
+  }
 
   async function refreshSession() {
     const supabase = createBrowserSupabaseClient();
 
     if (!supabase) {
       setSessionMessage("Aucun utilisateur connecté.");
+      setLastSyncAt(null);
       return;
     }
 
@@ -24,6 +53,7 @@ export default function CloudPage() {
 
     if (error || !data.session?.user) {
       setSessionMessage("Aucun utilisateur connecté.");
+      setLastSyncAt(null);
       return;
     }
 
@@ -32,6 +62,8 @@ export default function CloudPage() {
         ? `Utilisateur connecté : ${data.session.user.email}`
         : "Utilisateur connecté.",
     );
+
+    await refreshCloudSyncState();
   }
 
   useEffect(() => {
@@ -57,6 +89,64 @@ export default function CloudPage() {
     );
 
     await refreshSession();
+  }
+
+  async function uploadToCloud() {
+    const shouldUpload = window.confirm(
+      "Envoyer les données locales vers le cloud ? Les anciennes données cloud de ce compte seront remplacées.",
+    );
+
+    if (!shouldUpload) {
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncMessage("");
+
+    try {
+      const summary = await uploadLocalDataToCloud();
+      setSyncMessage(
+        `Données envoyées vers le cloud avec succès. ${summary.prospectsCount} prospect(s), ${summary.resourcesCount} ressource(s), paramètres ${
+          summary.settingsSent ? "envoyés" : "non envoyés"
+        }, modèles personnalisés ${
+          summary.customMessageTemplatesSent ? "envoyés" : "non envoyés"
+        }.`,
+      );
+      await refreshSession();
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : "Erreur de synchronisation.");
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
+  async function restoreFromCloud() {
+    const shouldRestore = window.confirm(
+      "Restaurer les données cloud sur ce navigateur ? Les données locales actuelles seront remplacées.",
+    );
+
+    if (!shouldRestore) {
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncMessage("");
+
+    try {
+      const summary = await restoreCloudDataToLocal();
+      setSyncMessage(
+        `Données restaurées depuis le cloud avec succès. ${summary.prospectsCount} prospect(s), ${summary.resourcesCount} ressource(s), paramètres ${
+          summary.settingsRestored ? "restaurés" : "non restaurés"
+        }, modèles personnalisés ${
+          summary.customMessageTemplatesRestored ? "restaurés" : "non restaurés"
+        }.`,
+      );
+      await refreshSession();
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : "Erreur de restauration.");
+    } finally {
+      setIsSyncing(false);
+    }
   }
 
   return (
@@ -132,6 +222,47 @@ export default function CloudPage() {
             {connectionMessage ? (
               <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-medium text-white">
                 {connectionMessage}
+              </p>
+            ) : null}
+          </section>
+
+          <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 sm:p-5">
+            <h2 className="text-xl font-bold text-emerald-100">
+              Synchronisation manuelle
+            </h2>
+            <p className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm font-medium leading-6 text-amber-100">
+              Pour l'instant, la synchronisation est manuelle. Pense à envoyer
+              tes données vers le cloud après une grosse session de prospection.
+            </p>
+            <p className="mt-4 text-sm leading-6 text-emerald-50/90">
+              Dernière synchronisation cloud :{" "}
+              <span className="font-semibold text-white">
+                {formatDateTime(lastSyncAt)}
+              </span>
+            </p>
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <button
+                className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={uploadToCloud}
+                disabled={isSyncing}
+              >
+                Envoyer mes données locales vers le cloud
+              </button>
+              <button
+                className="min-h-11 rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={restoreFromCloud}
+                disabled={isSyncing}
+              >
+                Restaurer depuis le cloud vers ce navigateur
+              </button>
+            </div>
+
+            {syncMessage ? (
+              <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-medium leading-6 text-white">
+                {syncMessage}
               </p>
             ) : null}
           </section>
