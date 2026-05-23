@@ -25,6 +25,7 @@ import {
 } from "../lib/prospectUtils";
 import { createBrowserSupabaseClient } from "../lib/supabaseClient";
 import type { Prospect } from "../lib/types";
+import QuickCloudSyncButton from "../components/QuickCloudSyncButton";
 
 type StatCard = {
   label: string;
@@ -255,12 +256,7 @@ export default function TodayPage() {
               <p className="text-sm font-medium leading-6 text-emerald-100">
                 Synchronisation cloud recommandée.
               </p>
-              <Link
-                className="flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
-                href="/cloud"
-              >
-                Synchroniser
-              </Link>
+              <QuickCloudSyncButton compact />
             </div>
           </section>
         ) : null}

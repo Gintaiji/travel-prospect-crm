@@ -22,6 +22,7 @@ import {
   saveSettings,
 } from "../lib/settingsStorage";
 import type { AppSettings, Prospect, Resource } from "../lib/types";
+import QuickCloudSyncButton from "../components/QuickCloudSyncButton";
 
 type BackupFile = {
   appName: "Travel Prospect CRM";
@@ -529,34 +530,15 @@ export default function BackupPage() {
                     : "Cloud à jour"
                   : cloudSyncStatusMessage}
               </p>
-              {!cloudSyncStatus && cloudSyncStatusMessage ? (
-                <Link
-                  href="/connexion"
-                  className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full border border-white/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:border-emerald-300/40 hover:bg-emerald-300/10"
-                >
-                  Se connecter
-                </Link>
-              ) : null}
+              <div className="mt-4">
+                <QuickCloudSyncButton />
+              </div>
               <Link
                 href="/cloud"
                 className="mt-5 inline-flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
               >
                 Vérifier la préparation cloud
               </Link>
-              <Link
-                href="/cloud"
-                className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
-              >
-                Synchroniser avec le cloud
-              </Link>
-
-              <Link
-                href="/connexion"
-                className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full border border-white/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:border-emerald-300/40 hover:bg-emerald-300/10"
-              >
-                Se connecter au cloud
-              </Link>
-
               <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
                 <h3 className="text-base font-bold text-white">
                   Ce que le cloud permettra
