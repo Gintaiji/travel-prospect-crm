@@ -38,6 +38,9 @@ export default function CloudPage() {
   const shouldSuggestCloudRestore = Boolean(
     cloudDataSummary?.hasCloudData && localDataSummary && !localDataSummary.hasLocalData,
   );
+  const antiOverwriteStatusLabel = shouldSuggestCloudRestore
+    ? "Envoi bloqué pour protéger les données cloud"
+    : "Aucun risque détecté";
 
   function formatDateTime(value: string | null) {
     if (!value) {
@@ -137,6 +140,13 @@ export default function CloudPage() {
   }
 
   async function uploadToCloud() {
+    if (shouldSuggestCloudRestore) {
+      setSyncMessage(
+        "Protection activée : restaure d’abord les données cloud sur cet appareil pour éviter d’écraser ta sauvegarde.",
+      );
+      return;
+    }
+
     const shouldUpload = window.confirm(
       "Envoyer les données locales vers le cloud ? Les anciennes données cloud de ce compte seront remplacées.",
     );
@@ -400,6 +410,39 @@ export default function CloudPage() {
             ) : null}
           </section>
 
+          <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
+            <h2 className="text-xl font-bold text-white">
+              Sécurité anti-écrasement
+            </h2>
+            <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                Statut
+              </p>
+              <p className="mt-2 text-lg font-bold text-white">
+                {antiOverwriteStatusLabel}
+              </p>
+            </div>
+            {shouldSuggestCloudRestore ? (
+              <div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-medium leading-6 text-amber-100">
+                    Protection activée : ce navigateur semble vide alors que le
+                    cloud contient des données. Restaure d’abord depuis le cloud
+                    pour éviter d’écraser ta sauvegarde.
+                  </p>
+                  <button
+                    className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    onClick={restoreFromCloud}
+                    disabled={isSyncing}
+                  >
+                    Restaurer les données cloud sur cet appareil
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </section>
+
           <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 sm:p-5">
             <h2 className="text-xl font-bold text-emerald-100">
               Synchronisation manuelle
@@ -420,7 +463,7 @@ export default function CloudPage() {
                 className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
                 type="button"
                 onClick={uploadToCloud}
-                disabled={isSyncing}
+                disabled={isSyncing || shouldSuggestCloudRestore}
               >
                 Envoyer mes données locales vers le cloud
               </button>

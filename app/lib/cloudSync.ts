@@ -66,6 +66,13 @@ export type LocalDataSummary = {
   hasLocalData: boolean;
 };
 
+export type UploadSafetyCheck = {
+  canUpload: boolean;
+  reason: string;
+  localHasData: boolean;
+  cloudHasData: boolean;
+};
+
 async function getConnectedUserId() {
   const supabase = createBrowserSupabaseClient();
 
@@ -255,8 +262,38 @@ export async function getCloudDataSummary(): Promise<CloudDataSummary> {
   };
 }
 
+export async function canUploadLocalDataSafely(): Promise<UploadSafetyCheck> {
+  const localDataSummary = getLocalDataSummary();
+  const cloudDataSummary = await getCloudDataSummary();
+  const localHasData = localDataSummary.hasLocalData;
+  const cloudHasData = cloudDataSummary.hasCloudData;
+
+  if (!localHasData && cloudHasData) {
+    return {
+      canUpload: false,
+      reason:
+        "Le navigateur local est vide alors que le cloud contient des données. Restaure d’abord les données cloud sur cet appareil.",
+      localHasData,
+      cloudHasData,
+    };
+  }
+
+  return {
+    canUpload: true,
+    reason: "",
+    localHasData,
+    cloudHasData,
+  };
+}
+
 export async function uploadLocalDataToCloud(): Promise<UploadCloudSummary> {
   const { supabase, userId } = await getConnectedUserId();
+  const uploadSafetyCheck = await canUploadLocalDataSafely();
+
+  if (!uploadSafetyCheck.canUpload) {
+    throw new Error(uploadSafetyCheck.reason);
+  }
+
   const prospects = loadProspects();
   const resources = loadResources();
   const settings = loadSettings();
