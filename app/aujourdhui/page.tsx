@@ -6,7 +6,14 @@ import {
   loadLastBackupDate,
   shouldShowBackupReminder,
 } from "../lib/backupReminderStorage";
-import { getCloudSyncStatus, type CloudSyncStatus } from "../lib/cloudSync";
+import {
+  getCloudDataSummary,
+  getCloudSyncStatus,
+  getLocalDataSummary,
+  type CloudDataSummary,
+  type CloudSyncStatus,
+  type LocalDataSummary,
+} from "../lib/cloudSync";
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
 import {
   calculateProspectScore,
@@ -16,6 +23,7 @@ import {
   isDateBeforeToday,
   isDateToday,
 } from "../lib/prospectUtils";
+import { createBrowserSupabaseClient } from "../lib/supabaseClient";
 import type { Prospect } from "../lib/types";
 
 type StatCard = {
@@ -63,6 +71,10 @@ export default function TodayPage() {
   const [showBackupReminder, setShowBackupReminder] = useState(false);
   const [cloudSyncStatus, setCloudSyncStatus] =
     useState<CloudSyncStatus | null>(null);
+  const [cloudDataSummary, setCloudDataSummary] =
+    useState<CloudDataSummary | null>(null);
+  const [localDataSummary, setLocalDataSummary] =
+    useState<LocalDataSummary | null>(null);
 
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
@@ -74,9 +86,40 @@ export default function TodayPage() {
   }, []);
 
   useEffect(() => {
-    getCloudSyncStatus()
-      .then(setCloudSyncStatus)
-      .catch(() => setCloudSyncStatus(null));
+    async function refreshCloudAwareness() {
+      setLocalDataSummary(getLocalDataSummary());
+
+      const supabase = createBrowserSupabaseClient();
+
+      if (!supabase) {
+        setCloudSyncStatus(null);
+        setCloudDataSummary(null);
+        return;
+      }
+
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error || !data.session?.user) {
+        setCloudSyncStatus(null);
+        setCloudDataSummary(null);
+        return;
+      }
+
+      try {
+        const [syncStatus, dataSummary] = await Promise.all([
+          getCloudSyncStatus(),
+          getCloudDataSummary(),
+        ]);
+
+        setCloudSyncStatus(syncStatus);
+        setCloudDataSummary(dataSummary);
+      } catch {
+        setCloudSyncStatus(null);
+        setCloudDataSummary(null);
+      }
+    }
+
+    refreshCloudAwareness();
   }, []);
 
   const stats = useMemo<StatCard[]>(() => {
@@ -128,6 +171,9 @@ export default function TodayPage() {
       return calculateProspectScore(secondProspect) - calculateProspectScore(firstProspect);
     });
   }, [prospects]);
+  const shouldSuggestCloudRestore = Boolean(
+    cloudDataSummary?.hasCloudData && localDataSummary && !localDataSummary.hasLocalData,
+  );
 
   function updateProspectNextActionDate(prospectId: string, nextActionDate: string) {
     const updatedProspects = prospects.map((prospect) => {
@@ -144,9 +190,7 @@ export default function TodayPage() {
 
     saveProspects(updatedProspects);
     setProspects(updatedProspects);
-    getCloudSyncStatus()
-      .then(setCloudSyncStatus)
-      .catch(() => setCloudSyncStatus(null));
+    setLocalDataSummary(getLocalDataSummary());
   }
 
   return (
@@ -188,7 +232,24 @@ export default function TodayPage() {
           </section>
         ) : null}
 
-        {cloudSyncStatus?.needsSync ? (
+        {shouldSuggestCloudRestore ? (
+          <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-medium leading-6 text-emerald-100">
+                Données cloud disponibles : tu peux restaurer tes données sur
+                cet appareil.
+              </p>
+              <Link
+                className="flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
+                href="/cloud"
+              >
+                Restaurer depuis le cloud
+              </Link>
+            </div>
+          </section>
+        ) : null}
+
+        {cloudSyncStatus?.needsSync && !shouldSuggestCloudRestore ? (
           <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm font-medium leading-6 text-emerald-100">

@@ -7,10 +7,14 @@ import {
   isSupabaseConfigured,
 } from "../lib/supabaseClient";
 import {
+  getCloudDataSummary,
   getCloudSyncStatus,
+  getLocalDataSummary,
   restoreCloudDataToLocal,
   uploadLocalDataToCloud,
+  type CloudDataSummary,
   type CloudSyncStatus,
+  type LocalDataSummary,
 } from "../lib/cloudSync";
 
 export default function CloudPage() {
@@ -21,9 +25,19 @@ export default function CloudPage() {
   const [syncStatusMessage, setSyncStatusMessage] = useState(
     "Lecture de l'état cloud...",
   );
+  const [cloudDataSummary, setCloudDataSummary] =
+    useState<CloudDataSummary | null>(null);
+  const [localDataSummary, setLocalDataSummary] =
+    useState<LocalDataSummary | null>(null);
+  const [cloudDataMessage, setCloudDataMessage] = useState(
+    "Connecte-toi pour connaître les données cloud.",
+  );
   const [syncMessage, setSyncMessage] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
   const supabaseConfiguredLabel = isSupabaseConfigured() ? "Oui" : "Non";
+  const shouldSuggestCloudRestore = Boolean(
+    cloudDataSummary?.hasCloudData && localDataSummary && !localDataSummary.hasLocalData,
+  );
 
   function formatDateTime(value: string | null) {
     if (!value) {
@@ -45,7 +59,24 @@ export default function CloudPage() {
     } catch {
       setLastSyncAt(null);
       setSyncStatus(null);
+      setCloudDataSummary(null);
+      setLocalDataSummary(getLocalDataSummary());
+      setCloudDataMessage("Connecte-toi pour connaître les données cloud.");
       setSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
+    }
+  }
+
+  async function refreshCloudDataOverview() {
+    setLocalDataSummary(getLocalDataSummary());
+
+    try {
+      const summary = await getCloudDataSummary();
+
+      setCloudDataSummary(summary);
+      setCloudDataMessage("");
+    } catch {
+      setCloudDataSummary(null);
+      setCloudDataMessage("Connecte-toi pour connaître les données cloud.");
     }
   }
 
@@ -77,6 +108,7 @@ export default function CloudPage() {
     );
 
     await refreshCloudSyncState();
+    await refreshCloudDataOverview();
   }
 
   useEffect(() => {
@@ -135,7 +167,7 @@ export default function CloudPage() {
 
   async function restoreFromCloud() {
     const shouldRestore = window.confirm(
-      "Restaurer les données cloud sur ce navigateur ? Les données locales actuelles seront remplacées.",
+      "Restaurer les données cloud sur cet appareil ? Les données locales actuelles seront remplacées.",
     );
 
     if (!shouldRestore) {
@@ -282,6 +314,89 @@ export default function CloudPage() {
               >
                 Connexion
               </Link>
+            ) : null}
+          </section>
+
+          <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 sm:p-5">
+            <h2 className="text-xl font-bold text-emerald-100">
+              Données cloud disponibles
+            </h2>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Prospects cloud
+                </p>
+                <p className="mt-2 text-3xl font-bold text-white">
+                  {cloudDataSummary?.prospectsCount ?? "-"}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Ressources cloud
+                </p>
+                <p className="mt-2 text-3xl font-bold text-white">
+                  {cloudDataSummary?.resourcesCount ?? "-"}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Paramètres cloud
+                </p>
+                <p className="mt-2 text-lg font-bold text-white">
+                  {cloudDataSummary
+                    ? cloudDataSummary.hasSettings
+                      ? "Oui"
+                      : "Non"
+                    : "-"}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Modèles personnalisés cloud
+                </p>
+                <p className="mt-2 text-lg font-bold text-white">
+                  {cloudDataSummary
+                    ? cloudDataSummary.hasCustomMessageTemplates
+                      ? "Oui"
+                      : "Non"
+                    : "-"}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Dernière synchro cloud
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                  {cloudDataSummary
+                    ? formatDateTime(cloudDataSummary.lastCloudSyncAt)
+                    : "-"}
+                </p>
+              </article>
+            </div>
+
+            {shouldSuggestCloudRestore ? (
+              <div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-medium leading-6 text-amber-100">
+                    Des données cloud sont disponibles, mais ce navigateur ne
+                    contient pas encore de données locales.
+                  </p>
+                  <button
+                    className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    onClick={restoreFromCloud}
+                    disabled={isSyncing}
+                  >
+                    Restaurer les données cloud sur cet appareil
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {!cloudDataSummary && cloudDataMessage ? (
+              <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-medium leading-6 text-white">
+                {cloudDataMessage}
+              </p>
             ) : null}
           </section>
 

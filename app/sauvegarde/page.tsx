@@ -178,7 +178,7 @@ export default function BackupPage() {
   }, []);
 
   useEffect(() => {
-    getCloudSyncStatus()
+    void getCloudSyncStatus()
       .then((status) => {
         setCloudSyncStatus(status);
         setCloudSyncStatusMessage("");

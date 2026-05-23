@@ -6,7 +6,11 @@ import {
 } from "./messageTemplateStorage";
 import { loadProspects, saveProspects } from "./prospectStorage";
 import { loadResources, saveResources } from "./resourceStorage";
-import { loadSettings, saveSettings } from "./settingsStorage";
+import {
+  DEFAULT_APP_SETTINGS,
+  loadSettings,
+  saveSettings,
+} from "./settingsStorage";
 import type { AppSettings, Prospect, Resource } from "./types";
 
 type CloudDataRow<T> = {
@@ -43,6 +47,23 @@ export type CloudSyncStatus = {
     | "Jamais synchronisé"
     | "Synchronisation recommandée"
     | "Cloud à jour";
+};
+
+export type CloudDataSummary = {
+  prospectsCount: number;
+  resourcesCount: number;
+  hasSettings: boolean;
+  hasCustomMessageTemplates: boolean;
+  lastCloudSyncAt: string | null;
+  hasCloudData: boolean;
+};
+
+export type LocalDataSummary = {
+  prospectsCount: number;
+  resourcesCount: number;
+  hasSettings: boolean;
+  hasCustomMessageTemplates: boolean;
+  hasLocalData: boolean;
 };
 
 async function getConnectedUserId() {
@@ -95,6 +116,31 @@ function getMostRecentIsoDate(values: string[]) {
   return mostRecentTime === null ? null : new Date(mostRecentTime).toISOString();
 }
 
+function hasCustomSettings(settings: AppSettings) {
+  return (
+    settings.userDisplayName.trim() !== DEFAULT_APP_SETTINGS.userDisplayName ||
+    settings.businessName.trim() !== DEFAULT_APP_SETTINGS.businessName ||
+    settings.clubName.trim() !== DEFAULT_APP_SETTINGS.clubName ||
+    settings.defaultCountry.trim() !== DEFAULT_APP_SETTINGS.defaultCountry ||
+    settings.defaultRegion.trim() !== DEFAULT_APP_SETTINGS.defaultRegion ||
+    settings.defaultCity.trim() !== DEFAULT_APP_SETTINGS.defaultCity ||
+    settings.defaultMessageStyle !== DEFAULT_APP_SETTINGS.defaultMessageStyle ||
+    settings.defaultFollowUpDays !== DEFAULT_APP_SETTINGS.defaultFollowUpDays ||
+    settings.defaultPresentationLink.trim() !==
+      DEFAULT_APP_SETTINGS.defaultPresentationLink ||
+    settings.messageSignature.trim() !== DEFAULT_APP_SETTINGS.messageSignature ||
+    settings.publicWording.trim() !== DEFAULT_APP_SETTINGS.publicWording
+  );
+}
+
+function hasCustomMessageTemplates(customMessageTemplates: CustomMessageTemplates) {
+  return Object.values(customMessageTemplates).some((stepTemplates) =>
+    stepTemplates
+      ? Object.values(stepTemplates).some((message) => typeof message === "string")
+      : false,
+  );
+}
+
 export function getLocalDataLastUpdatedAt(): string | null {
   const prospects = loadProspects();
   const resources = loadResources();
@@ -107,6 +153,27 @@ export function getLocalDataLastUpdatedAt(): string | null {
     ...resources.map((resource) => resource.updatedAt),
     settings.updatedAt,
   ]);
+}
+
+export function getLocalDataSummary(): LocalDataSummary {
+  const prospects = loadProspects();
+  const resources = loadResources();
+  const settings = loadSettings();
+  const customMessageTemplates = loadCustomMessageTemplates();
+  const settingsAreCustom = hasCustomSettings(settings);
+  const templatesAreCustom = hasCustomMessageTemplates(customMessageTemplates);
+
+  return {
+    prospectsCount: prospects.length,
+    resourcesCount: resources.length,
+    hasSettings: settingsAreCustom,
+    hasCustomMessageTemplates: templatesAreCustom,
+    hasLocalData:
+      prospects.length > 0 ||
+      resources.length > 0 ||
+      settingsAreCustom ||
+      templatesAreCustom,
+  };
 }
 
 export async function getCloudSyncStatus(): Promise<CloudSyncStatus> {
@@ -136,6 +203,55 @@ export async function getCloudSyncStatus(): Promise<CloudSyncStatus> {
     localLastUpdatedAt,
     needsSync,
     statusLabel: needsSync ? "Synchronisation recommandée" : "Cloud à jour",
+  };
+}
+
+export async function getCloudDataSummary(): Promise<CloudDataSummary> {
+  const { supabase, userId } = await getConnectedUserId();
+
+  const { count: prospectsCount, error: prospectsError } = await supabase
+    .from("crm_prospects")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId);
+  throwIfSupabaseError(prospectsError);
+
+  const { count: resourcesCount, error: resourcesError } = await supabase
+    .from("crm_resources")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId);
+  throwIfSupabaseError(resourcesError);
+
+  const { data: settingsRow, error: settingsError } = await supabase
+    .from("crm_settings")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  throwIfSupabaseError(settingsError);
+
+  const { data: templateRow, error: templatesError } = await supabase
+    .from("crm_message_templates")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  throwIfSupabaseError(templatesError);
+
+  const cloudSyncState = await getCloudSyncState();
+  const safeProspectsCount = prospectsCount ?? 0;
+  const safeResourcesCount = resourcesCount ?? 0;
+  const hasSettings = Boolean(settingsRow);
+  const hasCustomMessageTemplates = Boolean(templateRow);
+
+  return {
+    prospectsCount: safeProspectsCount,
+    resourcesCount: safeResourcesCount,
+    hasSettings,
+    hasCustomMessageTemplates,
+    lastCloudSyncAt: cloudSyncState.lastSyncAt,
+    hasCloudData:
+      safeProspectsCount > 0 ||
+      safeResourcesCount > 0 ||
+      hasSettings ||
+      hasCustomMessageTemplates,
   };
 }
 

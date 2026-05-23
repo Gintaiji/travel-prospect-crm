@@ -6,7 +6,14 @@ import {
   loadLastBackupDate,
   shouldShowBackupReminder,
 } from "./lib/backupReminderStorage";
-import { getCloudSyncStatus, type CloudSyncStatus } from "./lib/cloudSync";
+import {
+  getCloudDataSummary,
+  getCloudSyncStatus,
+  getLocalDataSummary,
+  type CloudDataSummary,
+  type CloudSyncStatus,
+  type LocalDataSummary,
+} from "./lib/cloudSync";
 import { loadProspects } from "./lib/prospectStorage";
 import {
   getProspectDisplayName,
@@ -20,6 +27,7 @@ import {
   SOCIAL_PLATFORMS,
   type Prospect,
 } from "./lib/types";
+import { createBrowserSupabaseClient } from "./lib/supabaseClient";
 
 function compareDateStrings(firstDate: string, secondDate: string) {
   if (firstDate === secondDate) {
@@ -36,6 +44,10 @@ export default function HomePage() {
   const [showBackupReminder, setShowBackupReminder] = useState(false);
   const [cloudSyncStatus, setCloudSyncStatus] =
     useState<CloudSyncStatus | null>(null);
+  const [cloudDataSummary, setCloudDataSummary] =
+    useState<CloudDataSummary | null>(null);
+  const [localDataSummary, setLocalDataSummary] =
+    useState<LocalDataSummary | null>(null);
 
   useEffect(() => {
     const loadDashboardData = window.setTimeout(() => {
@@ -49,9 +61,40 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    getCloudSyncStatus()
-      .then(setCloudSyncStatus)
-      .catch(() => setCloudSyncStatus(null));
+    async function refreshCloudAwareness() {
+      setLocalDataSummary(getLocalDataSummary());
+
+      const supabase = createBrowserSupabaseClient();
+
+      if (!supabase) {
+        setCloudSyncStatus(null);
+        setCloudDataSummary(null);
+        return;
+      }
+
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error || !data.session?.user) {
+        setCloudSyncStatus(null);
+        setCloudDataSummary(null);
+        return;
+      }
+
+      try {
+        const [syncStatus, dataSummary] = await Promise.all([
+          getCloudSyncStatus(),
+          getCloudDataSummary(),
+        ]);
+
+        setCloudSyncStatus(syncStatus);
+        setCloudDataSummary(dataSummary);
+      } catch {
+        setCloudSyncStatus(null);
+        setCloudDataSummary(null);
+      }
+    }
+
+    refreshCloudAwareness();
   }, []);
 
   const dashboardStats = useMemo(() => {
@@ -136,6 +179,9 @@ export default function HomePage() {
     { label: "Relances en retard", value: dashboardStats.lateFollowUps },
   ];
   const hasProspectData = hasLoadedProspects && prospects.length > 0;
+  const shouldSuggestCloudRestore = Boolean(
+    cloudDataSummary?.hasCloudData && localDataSummary && !localDataSummary.hasLocalData,
+  );
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-6 text-white sm:px-6 sm:py-10">
@@ -207,7 +253,28 @@ export default function HomePage() {
           </section>
         ) : null}
 
-        {cloudSyncStatus?.needsSync ? (
+        {shouldSuggestCloudRestore ? (
+          <section className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-5 shadow-xl">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-emerald-100">
+                  Données cloud disponibles
+                </h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-50/90">
+                  Tu peux restaurer tes données sur cet appareil.
+                </p>
+              </div>
+              <Link
+                href="/cloud"
+                className="inline-flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
+              >
+                Restaurer depuis le cloud
+              </Link>
+            </div>
+          </section>
+        ) : null}
+
+        {cloudSyncStatus?.needsSync && !shouldSuggestCloudRestore ? (
           <section className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-5 shadow-xl">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
