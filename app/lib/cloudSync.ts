@@ -35,6 +35,16 @@ export type CloudSyncState = {
   lastSyncAt: string | null;
 };
 
+export type CloudSyncStatus = {
+  lastCloudSyncAt: string | null;
+  localLastUpdatedAt: string | null;
+  needsSync: boolean;
+  statusLabel:
+    | "Jamais synchronisé"
+    | "Synchronisation recommandée"
+    | "Cloud à jour";
+};
+
 async function getConnectedUserId() {
   const supabase = createBrowserSupabaseClient();
 
@@ -59,6 +69,74 @@ function throwIfSupabaseError(error: { message: string } | null) {
   if (error) {
     throw new Error(error.message);
   }
+}
+
+function getValidDateTime(value: string) {
+  const dateTime = new Date(value).getTime();
+
+  return Number.isNaN(dateTime) ? null : dateTime;
+}
+
+function getMostRecentIsoDate(values: string[]) {
+  const mostRecentTime = values.reduce<number | null>((mostRecent, value) => {
+    if (!value) {
+      return mostRecent;
+    }
+
+    const dateTime = getValidDateTime(value);
+
+    if (dateTime === null) {
+      return mostRecent;
+    }
+
+    return mostRecent === null || dateTime > mostRecent ? dateTime : mostRecent;
+  }, null);
+
+  return mostRecentTime === null ? null : new Date(mostRecentTime).toISOString();
+}
+
+export function getLocalDataLastUpdatedAt(): string | null {
+  const prospects = loadProspects();
+  const resources = loadResources();
+  const settings = loadSettings();
+
+  loadCustomMessageTemplates();
+
+  return getMostRecentIsoDate([
+    ...prospects.map((prospect) => prospect.updatedAt),
+    ...resources.map((resource) => resource.updatedAt),
+    settings.updatedAt,
+  ]);
+}
+
+export async function getCloudSyncStatus(): Promise<CloudSyncStatus> {
+  const cloudSyncState = await getCloudSyncState();
+  const localLastUpdatedAt = getLocalDataLastUpdatedAt();
+  const lastCloudSyncAt = cloudSyncState.lastSyncAt;
+
+  if (!lastCloudSyncAt) {
+    return {
+      lastCloudSyncAt,
+      localLastUpdatedAt,
+      needsSync: true,
+      statusLabel: "Jamais synchronisé",
+    };
+  }
+
+  const cloudSyncTime = getValidDateTime(lastCloudSyncAt);
+  const localUpdatedTime = localLastUpdatedAt
+    ? getValidDateTime(localLastUpdatedAt)
+    : null;
+  const needsSync =
+    cloudSyncTime === null ||
+    (localUpdatedTime !== null && localUpdatedTime > cloudSyncTime);
+
+  return {
+    lastCloudSyncAt,
+    localLastUpdatedAt,
+    needsSync,
+    statusLabel: needsSync ? "Synchronisation recommandée" : "Cloud à jour",
+  };
 }
 
 export async function uploadLocalDataToCloud(): Promise<UploadCloudSummary> {

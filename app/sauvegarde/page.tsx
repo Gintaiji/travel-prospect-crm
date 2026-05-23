@@ -7,6 +7,7 @@ import {
   saveLastBackupDate,
   shouldShowBackupReminder,
 } from "../lib/backupReminderStorage";
+import { getCloudSyncStatus, type CloudSyncStatus } from "../lib/cloudSync";
 import {
   loadCustomMessageTemplates,
   saveCustomMessageTemplates,
@@ -138,6 +139,11 @@ export default function BackupPage() {
   const [requestMessage, setRequestMessage] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [importError, setImportError] = useState("");
+  const [cloudSyncStatus, setCloudSyncStatus] =
+    useState<CloudSyncStatus | null>(null);
+  const [cloudSyncStatusMessage, setCloudSyncStatusMessage] = useState(
+    "Lecture de l'état cloud...",
+  );
 
   useEffect(() => {
     const loadStoredData = window.setTimeout(() => {
@@ -169,6 +175,18 @@ export default function BackupPage() {
     }, 0);
 
     return () => window.clearTimeout(loadStoredData);
+  }, []);
+
+  useEffect(() => {
+    getCloudSyncStatus()
+      .then((status) => {
+        setCloudSyncStatus(status);
+        setCloudSyncStatusMessage("");
+      })
+      .catch(() => {
+        setCloudSyncStatus(null);
+        setCloudSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
+      });
   }, []);
 
   const totalConversationCount = getTotalConversationCount(prospects);
@@ -503,6 +521,22 @@ export default function BackupPage() {
                 retrouver tes données même après nettoyage du téléphone ou
                 changement d&apos;appareil.
               </p>
+              <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-semibold leading-6 text-white">
+                Statut cloud :{" "}
+                {cloudSyncStatus
+                  ? cloudSyncStatus.needsSync
+                    ? "Synchronisation recommandée"
+                    : "Cloud à jour"
+                  : cloudSyncStatusMessage}
+              </p>
+              {!cloudSyncStatus && cloudSyncStatusMessage ? (
+                <Link
+                  href="/connexion"
+                  className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full border border-white/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:border-emerald-300/40 hover:bg-emerald-300/10"
+                >
+                  Se connecter
+                </Link>
+              ) : null}
               <Link
                 href="/cloud"
                 className="mt-5 inline-flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"

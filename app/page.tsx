@@ -6,6 +6,7 @@ import {
   loadLastBackupDate,
   shouldShowBackupReminder,
 } from "./lib/backupReminderStorage";
+import { getCloudSyncStatus, type CloudSyncStatus } from "./lib/cloudSync";
 import { loadProspects } from "./lib/prospectStorage";
 import {
   getProspectDisplayName,
@@ -33,6 +34,8 @@ export default function HomePage() {
   const [todayDate, setTodayDate] = useState("");
   const [hasLoadedProspects, setHasLoadedProspects] = useState(false);
   const [showBackupReminder, setShowBackupReminder] = useState(false);
+  const [cloudSyncStatus, setCloudSyncStatus] =
+    useState<CloudSyncStatus | null>(null);
 
   useEffect(() => {
     const loadDashboardData = window.setTimeout(() => {
@@ -43,6 +46,12 @@ export default function HomePage() {
     }, 0);
 
     return () => window.clearTimeout(loadDashboardData);
+  }, []);
+
+  useEffect(() => {
+    getCloudSyncStatus()
+      .then(setCloudSyncStatus)
+      .catch(() => setCloudSyncStatus(null));
   }, []);
 
   const dashboardStats = useMemo(() => {
@@ -193,6 +202,28 @@ export default function HomePage() {
                 className="inline-flex min-h-11 items-center justify-center rounded-full border border-amber-200/30 bg-amber-200/10 px-5 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-200/20"
               >
                 Faire une sauvegarde
+              </Link>
+            </div>
+          </section>
+        ) : null}
+
+        {cloudSyncStatus?.needsSync ? (
+          <section className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-5 shadow-xl">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-emerald-100">
+                  Synchronisation cloud recommandée
+                </h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-50/90">
+                  Tes dernières données locales ne semblent pas encore envoyées
+                  vers le cloud.
+                </p>
+              </div>
+              <Link
+                href="/cloud"
+                className="inline-flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
+              >
+                Synchroniser
               </Link>
             </div>
           </section>

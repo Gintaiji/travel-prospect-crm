@@ -6,6 +6,7 @@ import {
   loadLastBackupDate,
   shouldShowBackupReminder,
 } from "../lib/backupReminderStorage";
+import { getCloudSyncStatus, type CloudSyncStatus } from "../lib/cloudSync";
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
 import {
   calculateProspectScore,
@@ -60,6 +61,8 @@ function getLastConversationEntry(prospect: Prospect) {
 export default function TodayPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [showBackupReminder, setShowBackupReminder] = useState(false);
+  const [cloudSyncStatus, setCloudSyncStatus] =
+    useState<CloudSyncStatus | null>(null);
 
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
@@ -68,6 +71,12 @@ export default function TodayPage() {
     }, 0);
 
     return () => window.clearTimeout(loadStoredProspects);
+  }, []);
+
+  useEffect(() => {
+    getCloudSyncStatus()
+      .then(setCloudSyncStatus)
+      .catch(() => setCloudSyncStatus(null));
   }, []);
 
   const stats = useMemo<StatCard[]>(() => {
@@ -135,6 +144,9 @@ export default function TodayPage() {
 
     saveProspects(updatedProspects);
     setProspects(updatedProspects);
+    getCloudSyncStatus()
+      .then(setCloudSyncStatus)
+      .catch(() => setCloudSyncStatus(null));
   }
 
   return (
@@ -171,6 +183,22 @@ export default function TodayPage() {
                 href="/sauvegarde"
               >
                 Faire une sauvegarde
+              </Link>
+            </div>
+          </section>
+        ) : null}
+
+        {cloudSyncStatus?.needsSync ? (
+          <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-medium leading-6 text-emerald-100">
+                Synchronisation cloud recommandée.
+              </p>
+              <Link
+                className="flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
+                href="/cloud"
+              >
+                Synchroniser
               </Link>
             </div>
           </section>

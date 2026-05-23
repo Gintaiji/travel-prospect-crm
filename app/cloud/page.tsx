@@ -7,15 +7,20 @@ import {
   isSupabaseConfigured,
 } from "../lib/supabaseClient";
 import {
-  getCloudSyncState,
+  getCloudSyncStatus,
   restoreCloudDataToLocal,
   uploadLocalDataToCloud,
+  type CloudSyncStatus,
 } from "../lib/cloudSync";
 
 export default function CloudPage() {
   const [connectionMessage, setConnectionMessage] = useState("");
   const [sessionMessage, setSessionMessage] = useState("Lecture de la session...");
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<CloudSyncStatus | null>(null);
+  const [syncStatusMessage, setSyncStatusMessage] = useState(
+    "Lecture de l'état cloud...",
+  );
   const [syncMessage, setSyncMessage] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
   const supabaseConfiguredLabel = isSupabaseConfigured() ? "Oui" : "Non";
@@ -33,10 +38,14 @@ export default function CloudPage() {
 
   async function refreshCloudSyncState() {
     try {
-      const cloudSyncState = await getCloudSyncState();
-      setLastSyncAt(cloudSyncState.lastSyncAt);
+      const cloudSyncStatus = await getCloudSyncStatus();
+      setLastSyncAt(cloudSyncStatus.lastCloudSyncAt);
+      setSyncStatus(cloudSyncStatus);
+      setSyncStatusMessage("");
     } catch {
       setLastSyncAt(null);
+      setSyncStatus(null);
+      setSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
     }
   }
 
@@ -46,6 +55,8 @@ export default function CloudPage() {
     if (!supabase) {
       setSessionMessage("Aucun utilisateur connecté.");
       setLastSyncAt(null);
+      setSyncStatus(null);
+      setSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
       return;
     }
 
@@ -54,6 +65,8 @@ export default function CloudPage() {
     if (error || !data.session?.user) {
       setSessionMessage("Aucun utilisateur connecté.");
       setLastSyncAt(null);
+      setSyncStatus(null);
+      setSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
       return;
     }
 
@@ -223,6 +236,52 @@ export default function CloudPage() {
               <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-medium text-white">
                 {connectionMessage}
               </p>
+            ) : null}
+          </section>
+
+          <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 sm:p-5">
+            <h2 className="text-xl font-bold text-emerald-100">
+              État de synchronisation
+            </h2>
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Statut
+                </p>
+                <p className="mt-2 text-lg font-bold text-white">
+                  {syncStatus?.statusLabel ?? syncStatusMessage}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Dernière synchro cloud
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                  {syncStatus ? formatDateTime(syncStatus.lastCloudSyncAt) : "-"}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Dernière modification locale détectée
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                  {syncStatus ? formatDateTime(syncStatus.localLastUpdatedAt) : "-"}
+                </p>
+              </article>
+            </div>
+            {syncStatus?.needsSync ? (
+              <p className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm font-medium leading-6 text-amber-100">
+                Certaines données locales semblent plus récentes que la dernière
+                synchronisation cloud.
+              </p>
+            ) : null}
+            {!syncStatus && syncStatusMessage ? (
+              <Link
+                href="/connexion"
+                className="mt-4 inline-flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
+              >
+                Connexion
+              </Link>
             ) : null}
           </section>
 
