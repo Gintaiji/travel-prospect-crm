@@ -8,9 +8,11 @@ import {
 } from "./lib/backupReminderStorage";
 import {
   getCloudDataSummary,
+  getCloudFreshnessStatus,
   getCloudSyncStatus,
   getLocalDataSummary,
   type CloudDataSummary,
+  type CloudFreshnessStatus,
   type CloudSyncStatus,
   type LocalDataSummary,
 } from "./lib/cloudSync";
@@ -49,6 +51,8 @@ export default function HomePage() {
     useState<CloudDataSummary | null>(null);
   const [localDataSummary, setLocalDataSummary] =
     useState<LocalDataSummary | null>(null);
+  const [cloudFreshnessStatus, setCloudFreshnessStatus] =
+    useState<CloudFreshnessStatus | null>(null);
 
   useEffect(() => {
     const loadDashboardData = window.setTimeout(() => {
@@ -70,6 +74,7 @@ export default function HomePage() {
       if (!supabase) {
         setCloudSyncStatus(null);
         setCloudDataSummary(null);
+        setCloudFreshnessStatus(null);
         return;
       }
 
@@ -78,20 +83,24 @@ export default function HomePage() {
       if (error || !data.session?.user) {
         setCloudSyncStatus(null);
         setCloudDataSummary(null);
+        setCloudFreshnessStatus(null);
         return;
       }
 
       try {
-        const [syncStatus, dataSummary] = await Promise.all([
+        const [syncStatus, dataSummary, freshnessStatus] = await Promise.all([
           getCloudSyncStatus(),
           getCloudDataSummary(),
+          getCloudFreshnessStatus(),
         ]);
 
         setCloudSyncStatus(syncStatus);
         setCloudDataSummary(dataSummary);
+        setCloudFreshnessStatus(freshnessStatus);
       } catch {
         setCloudSyncStatus(null);
         setCloudDataSummary(null);
+        setCloudFreshnessStatus(null);
       }
     }
 
@@ -254,7 +263,28 @@ export default function HomePage() {
           </section>
         ) : null}
 
-        {shouldSuggestCloudRestore ? (
+        {cloudFreshnessStatus?.cloudLooksNewer ? (
+          <section className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-5 shadow-xl">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-emerald-100">
+                  Cloud plus r&eacute;cent
+                </h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-50/90">
+                  Des donn&eacute;es plus r&eacute;centes semblent disponibles dans le cloud.
+                </p>
+              </div>
+              <Link
+                href="/cloud"
+                className="inline-flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
+              >
+                V&eacute;rifier le cloud
+              </Link>
+            </div>
+          </section>
+        ) : null}
+
+        {shouldSuggestCloudRestore && !cloudFreshnessStatus?.cloudLooksNewer ? (
           <section className="mt-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-5 shadow-xl">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>

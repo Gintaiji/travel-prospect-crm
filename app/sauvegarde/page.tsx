@@ -12,7 +12,12 @@ import {
   loadCloudSyncSettings,
   type CloudSyncSettings,
 } from "../lib/cloudSyncSettingsStorage";
-import { getCloudSyncStatus, type CloudSyncStatus } from "../lib/cloudSync";
+import {
+  getCloudFreshnessStatus,
+  getCloudSyncStatus,
+  type CloudFreshnessStatus,
+  type CloudSyncStatus,
+} from "../lib/cloudSync";
 import {
   loadCustomMessageTemplates,
   saveCustomMessageTemplates,
@@ -28,6 +33,7 @@ import {
 } from "../lib/settingsStorage";
 import type { AppSettings, Prospect, Resource } from "../lib/types";
 import QuickCloudSyncButton from "../components/QuickCloudSyncButton";
+import { createBrowserSupabaseClient } from "../lib/supabaseClient";
 
 type BackupFile = {
   appName: "Travel Prospect CRM";
@@ -150,6 +156,11 @@ export default function BackupPage() {
   const [cloudSyncStatusMessage, setCloudSyncStatusMessage] = useState(
     "Lecture de l'état cloud...",
   );
+  const [cloudFreshnessStatus, setCloudFreshnessStatus] =
+    useState<CloudFreshnessStatus | null>(null);
+  const [cloudFreshnessMessage, setCloudFreshnessMessage] = useState(
+    "Connecte-toi pour comparer les données locales et cloud.",
+  );
 
   const [cloudSyncSettings, setCloudSyncSettings] =
     useState<CloudSyncSettings>(DEFAULT_CLOUD_SYNC_SETTINGS);
@@ -188,15 +199,52 @@ export default function BackupPage() {
   }, []);
 
   useEffect(() => {
-    void getCloudSyncStatus()
-      .then((status) => {
-        setCloudSyncStatus(status);
-        setCloudSyncStatusMessage("");
-      })
-      .catch(() => {
+    async function refreshCloudStatus() {
+      const supabase = createBrowserSupabaseClient();
+
+      if (!supabase) {
         setCloudSyncStatus(null);
+        setCloudFreshnessStatus(null);
         setCloudSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
-      });
+        setCloudFreshnessMessage(
+          "Connecte-toi pour comparer les données locales et cloud.",
+        );
+        return;
+      }
+
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error || !data.session?.user) {
+        setCloudSyncStatus(null);
+        setCloudFreshnessStatus(null);
+        setCloudSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
+        setCloudFreshnessMessage(
+          "Connecte-toi pour comparer les données locales et cloud.",
+        );
+        return;
+      }
+
+      try {
+        const [status, freshnessStatus] = await Promise.all([
+          getCloudSyncStatus(),
+          getCloudFreshnessStatus(),
+        ]);
+
+        setCloudSyncStatus(status);
+        setCloudFreshnessStatus(freshnessStatus);
+        setCloudSyncStatusMessage("");
+        setCloudFreshnessMessage("");
+      } catch {
+        setCloudSyncStatus(null);
+        setCloudFreshnessStatus(null);
+        setCloudSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
+        setCloudFreshnessMessage(
+          "Connecte-toi pour comparer les données locales et cloud.",
+        );
+      }
+    }
+
+    refreshCloudStatus();
   }, []);
 
   const totalConversationCount = getTotalConversationCount(prospects);
@@ -538,6 +586,12 @@ export default function BackupPage() {
                     ? "Synchronisation recommandée"
                     : "Cloud à jour"
                   : cloudSyncStatusMessage}
+              </p>
+              <p className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-semibold leading-6 text-white">
+                Fraîcheur des données :{" "}
+                {cloudFreshnessStatus
+                  ? cloudFreshnessStatus.statusLabel
+                  : cloudFreshnessMessage}
               </p>
               <p className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-semibold leading-6 text-white">
                 Synchronisation automatique :{" "}

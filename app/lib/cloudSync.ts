@@ -73,6 +73,22 @@ export type UploadSafetyCheck = {
   cloudHasData: boolean;
 };
 
+export type CloudFreshnessStatus = {
+  cloudHasData: boolean;
+  localHasData: boolean;
+  cloudLooksNewer: boolean;
+  localLooksNewer: boolean;
+  lastCloudSyncAt: string | null;
+  localLastUpdatedAt: string | null;
+  statusLabel:
+    | "Données cloud disponibles"
+    | "Cloud plus récent"
+    | "Local plus récent"
+    | "Données alignées"
+    | "Aucune donnée cloud"
+    | "Aucune donnée locale";
+};
+
 async function getConnectedUserId() {
   const supabase = createBrowserSupabaseClient();
 
@@ -259,6 +275,60 @@ export async function getCloudDataSummary(): Promise<CloudDataSummary> {
       safeResourcesCount > 0 ||
       hasSettings ||
       hasCustomMessageTemplates,
+  };
+}
+
+export async function getCloudFreshnessStatus(): Promise<CloudFreshnessStatus> {
+  const cloudDataSummary = await getCloudDataSummary();
+  const localDataSummary = getLocalDataSummary();
+  const localLastUpdatedAt = getLocalDataLastUpdatedAt();
+  const lastCloudSyncAt = cloudDataSummary.lastCloudSyncAt;
+  const cloudHasData = cloudDataSummary.hasCloudData;
+  const localHasData = localDataSummary.hasLocalData;
+  let cloudLooksNewer = false;
+  let localLooksNewer = false;
+  let statusLabel: CloudFreshnessStatus["statusLabel"] = "Données alignées";
+
+  if (!cloudHasData) {
+    statusLabel = "Aucune donnée cloud";
+  } else if (!localHasData) {
+    cloudLooksNewer = true;
+    statusLabel = "Données cloud disponibles";
+  } else if (lastCloudSyncAt && localLastUpdatedAt) {
+    const cloudSyncTime = getValidDateTime(lastCloudSyncAt);
+    const localUpdatedTime = getValidDateTime(localLastUpdatedAt);
+
+    if (
+      cloudSyncTime !== null &&
+      localUpdatedTime !== null &&
+      cloudSyncTime > localUpdatedTime
+    ) {
+      cloudLooksNewer = true;
+      statusLabel = "Cloud plus récent";
+    } else if (
+      cloudSyncTime !== null &&
+      localUpdatedTime !== null &&
+      localUpdatedTime > cloudSyncTime
+    ) {
+      localLooksNewer = true;
+      statusLabel = "Local plus récent";
+    } else {
+      statusLabel = "Données alignées";
+    }
+  } else if (!localHasData) {
+    statusLabel = "Aucune donnée locale";
+  } else {
+    statusLabel = "Données alignées";
+  }
+
+  return {
+    cloudHasData,
+    localHasData,
+    cloudLooksNewer,
+    localLooksNewer,
+    lastCloudSyncAt,
+    localLastUpdatedAt,
+    statusLabel,
   };
 }
 

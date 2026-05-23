@@ -8,9 +8,11 @@ import {
 } from "../lib/backupReminderStorage";
 import {
   getCloudDataSummary,
+  getCloudFreshnessStatus,
   getCloudSyncStatus,
   getLocalDataSummary,
   type CloudDataSummary,
+  type CloudFreshnessStatus,
   type CloudSyncStatus,
   type LocalDataSummary,
 } from "../lib/cloudSync";
@@ -76,6 +78,8 @@ export default function TodayPage() {
     useState<CloudDataSummary | null>(null);
   const [localDataSummary, setLocalDataSummary] =
     useState<LocalDataSummary | null>(null);
+  const [cloudFreshnessStatus, setCloudFreshnessStatus] =
+    useState<CloudFreshnessStatus | null>(null);
 
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
@@ -95,6 +99,7 @@ export default function TodayPage() {
       if (!supabase) {
         setCloudSyncStatus(null);
         setCloudDataSummary(null);
+        setCloudFreshnessStatus(null);
         return;
       }
 
@@ -103,20 +108,24 @@ export default function TodayPage() {
       if (error || !data.session?.user) {
         setCloudSyncStatus(null);
         setCloudDataSummary(null);
+        setCloudFreshnessStatus(null);
         return;
       }
 
       try {
-        const [syncStatus, dataSummary] = await Promise.all([
+        const [syncStatus, dataSummary, freshnessStatus] = await Promise.all([
           getCloudSyncStatus(),
           getCloudDataSummary(),
+          getCloudFreshnessStatus(),
         ]);
 
         setCloudSyncStatus(syncStatus);
         setCloudDataSummary(dataSummary);
+        setCloudFreshnessStatus(freshnessStatus);
       } catch {
         setCloudSyncStatus(null);
         setCloudDataSummary(null);
+        setCloudFreshnessStatus(null);
       }
     }
 
@@ -233,7 +242,23 @@ export default function TodayPage() {
           </section>
         ) : null}
 
-        {shouldSuggestCloudRestore ? (
+        {cloudFreshnessStatus?.cloudLooksNewer ? (
+          <section className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-medium leading-6 text-amber-100">
+                Le cloud semble plus r&eacute;cent que ce navigateur.
+              </p>
+              <Link
+                className="flex min-h-11 items-center justify-center rounded-full border border-amber-200/30 bg-amber-200/10 px-4 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-200/20"
+                href="/cloud"
+              >
+                V&eacute;rifier le cloud
+              </Link>
+            </div>
+          </section>
+        ) : null}
+
+        {shouldSuggestCloudRestore && !cloudFreshnessStatus?.cloudLooksNewer ? (
           <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm font-medium leading-6 text-emerald-100">

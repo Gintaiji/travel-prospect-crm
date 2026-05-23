@@ -14,11 +14,13 @@ import {
 } from "../lib/cloudSyncSettingsStorage";
 import {
   getCloudDataSummary,
+  getCloudFreshnessStatus,
   getCloudSyncStatus,
   getLocalDataSummary,
   restoreCloudDataToLocal,
   uploadLocalDataToCloud,
   type CloudDataSummary,
+  type CloudFreshnessStatus,
   type CloudSyncStatus,
   type LocalDataSummary,
 } from "../lib/cloudSync";
@@ -35,6 +37,11 @@ export default function CloudPage() {
     useState<CloudDataSummary | null>(null);
   const [localDataSummary, setLocalDataSummary] =
     useState<LocalDataSummary | null>(null);
+  const [cloudFreshnessStatus, setCloudFreshnessStatus] =
+    useState<CloudFreshnessStatus | null>(null);
+  const [cloudFreshnessMessage, setCloudFreshnessMessage] = useState(
+    "Connecte-toi pour comparer les données locales et cloud.",
+  );
   const [cloudDataMessage, setCloudDataMessage] = useState(
     "Connecte-toi pour connaître les données cloud.",
   );
@@ -72,6 +79,7 @@ export default function CloudPage() {
       setLastSyncAt(null);
       setSyncStatus(null);
       setCloudDataSummary(null);
+      setCloudFreshnessStatus(null);
       setLocalDataSummary(getLocalDataSummary());
       setCloudDataMessage("Connecte-toi pour connaître les données cloud.");
       setSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
@@ -82,13 +90,22 @@ export default function CloudPage() {
     setLocalDataSummary(getLocalDataSummary());
 
     try {
-      const summary = await getCloudDataSummary();
+      const [summary, freshnessStatus] = await Promise.all([
+        getCloudDataSummary(),
+        getCloudFreshnessStatus(),
+      ]);
 
       setCloudDataSummary(summary);
+      setCloudFreshnessStatus(freshnessStatus);
       setCloudDataMessage("");
+      setCloudFreshnessMessage("");
     } catch {
       setCloudDataSummary(null);
+      setCloudFreshnessStatus(null);
       setCloudDataMessage("Connecte-toi pour connaître les données cloud.");
+      setCloudFreshnessMessage(
+        "Connecte-toi pour comparer les données locales et cloud.",
+      );
     }
   }
 
@@ -100,6 +117,7 @@ export default function CloudPage() {
       setLastSyncAt(null);
       setSyncStatus(null);
       setSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
+      setCloudFreshnessStatus(null);
       return;
     }
 
@@ -110,6 +128,7 @@ export default function CloudPage() {
       setLastSyncAt(null);
       setSyncStatus(null);
       setSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
+      setCloudFreshnessStatus(null);
       return;
     }
 
@@ -276,6 +295,79 @@ export default function CloudPage() {
                 Connexion
               </Link>
             </div>
+          </section>
+
+          <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 sm:p-5">
+            <h2 className="text-xl font-bold text-emerald-100">
+              Fra&icirc;cheur des donn&eacute;es
+            </h2>
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Statut
+                </p>
+                <p className="mt-2 text-lg font-bold text-white">
+                  {cloudFreshnessStatus?.statusLabel ?? cloudFreshnessMessage}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Derni&egrave;re synchronisation cloud
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                  {cloudFreshnessStatus
+                    ? formatDateTime(cloudFreshnessStatus.lastCloudSyncAt)
+                    : "-"}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Derni&egrave;re modification locale d&eacute;tect&eacute;e
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                  {cloudFreshnessStatus
+                    ? formatDateTime(cloudFreshnessStatus.localLastUpdatedAt)
+                    : "-"}
+                </p>
+              </article>
+            </div>
+
+            {cloudFreshnessStatus?.cloudLooksNewer ? (
+              <div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-medium leading-6 text-amber-100">
+                    Le cloud semble plus r&eacute;cent que ce navigateur. Il est
+                    conseill&eacute; de restaurer depuis le cloud avant d&apos;envoyer des
+                    donn&eacute;es locales.
+                  </p>
+                  <button
+                    className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    onClick={restoreFromCloud}
+                    disabled={isSyncing}
+                  >
+                    Restaurer depuis le cloud
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {cloudFreshnessStatus?.localLooksNewer ? (
+              <div className="mt-4 rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-medium leading-6 text-emerald-100">
+                    Les donn&eacute;es locales semblent plus r&eacute;centes. Tu peux les
+                    envoyer vers le cloud.
+                  </p>
+                  <a
+                    className="inline-flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
+                    href="#synchronisation-manuelle"
+                  >
+                    Aller &agrave; la synchronisation
+                  </a>
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 sm:p-5">
@@ -539,7 +631,10 @@ export default function CloudPage() {
             ) : null}
           </section>
 
-          <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 sm:p-5">
+          <section
+            className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 sm:p-5"
+            id="synchronisation-manuelle"
+          >
             <h2 className="text-xl font-bold text-emerald-100">
               Synchronisation manuelle
             </h2>
