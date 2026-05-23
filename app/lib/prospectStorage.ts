@@ -1,4 +1,5 @@
 import type { Prospect } from "./types";
+import { markLocalDataChanged } from "./localChangeTracker";
 
 const PROSPECTS_STORAGE_KEY = "travel-prospect-crm-prospects";
 
@@ -30,6 +31,7 @@ export function saveProspects(prospects: Prospect[]) {
   }
 
   localStorage.setItem(PROSPECTS_STORAGE_KEY, JSON.stringify(prospects));
+  markLocalDataChanged();
 }
 
 export function createProspectId() {

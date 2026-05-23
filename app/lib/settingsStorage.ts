@@ -1,4 +1,5 @@
 import type { AppSettings } from "./types";
+import { markLocalDataChanged } from "./localChangeTracker";
 
 const SETTINGS_STORAGE_KEY = "travel-prospect-crm-settings";
 
@@ -56,4 +57,5 @@ export function saveSettings(settings: AppSettings) {
   }
 
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  markLocalDataChanged();
 }

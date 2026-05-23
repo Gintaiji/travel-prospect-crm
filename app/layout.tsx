@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import CloudAutoSync from "./components/CloudAutoSync";
 import MobileBottomNav from "./components/MobileBottomNav";
 import Navigation from "./components/Navigation";
 import PwaInstallPrompt from "./components/PwaInstallPrompt";
@@ -45,6 +46,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-slate-950 pb-20 text-white md:pb-0">
         <ServiceWorkerRegister />
+        <CloudAutoSync />
         <Navigation />
         {children}
         <PwaInstallPrompt />

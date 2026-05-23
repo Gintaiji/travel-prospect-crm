@@ -7,6 +7,11 @@ import {
   saveLastBackupDate,
   shouldShowBackupReminder,
 } from "../lib/backupReminderStorage";
+import {
+  DEFAULT_CLOUD_SYNC_SETTINGS,
+  loadCloudSyncSettings,
+  type CloudSyncSettings,
+} from "../lib/cloudSyncSettingsStorage";
 import { getCloudSyncStatus, type CloudSyncStatus } from "../lib/cloudSync";
 import {
   loadCustomMessageTemplates,
@@ -146,12 +151,16 @@ export default function BackupPage() {
     "Lecture de l'état cloud...",
   );
 
+  const [cloudSyncSettings, setCloudSyncSettings] =
+    useState<CloudSyncSettings>(DEFAULT_CLOUD_SYNC_SETTINGS);
+
   useEffect(() => {
     const loadStoredData = window.setTimeout(() => {
       setProspects(loadProspects());
       setResources(loadResources());
       setSettings(loadSettings());
       setCustomMessageTemplates(loadCustomMessageTemplates());
+      setCloudSyncSettings(loadCloudSyncSettings());
       const storedLastBackupDate = loadLastBackupDate();
 
       setLastBackupDate(storedLastBackupDate);
@@ -529,6 +538,10 @@ export default function BackupPage() {
                     ? "Synchronisation recommandée"
                     : "Cloud à jour"
                   : cloudSyncStatusMessage}
+              </p>
+              <p className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-semibold leading-6 text-white">
+                Synchronisation automatique :{" "}
+                {cloudSyncSettings.autoSyncEnabled ? "Activée" : "Désactivée"}
               </p>
               <div className="mt-4">
                 <QuickCloudSyncButton />

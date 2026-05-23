@@ -7,6 +7,12 @@ import {
   isSupabaseConfigured,
 } from "../lib/supabaseClient";
 import {
+  DEFAULT_CLOUD_SYNC_SETTINGS,
+  loadCloudSyncSettings,
+  saveCloudSyncSettings,
+  type CloudSyncSettings,
+} from "../lib/cloudSyncSettingsStorage";
+import {
   getCloudDataSummary,
   getCloudSyncStatus,
   getLocalDataSummary,
@@ -34,6 +40,9 @@ export default function CloudPage() {
   );
   const [syncMessage, setSyncMessage] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
+  const [autoSyncSettings, setAutoSyncSettings] =
+    useState<CloudSyncSettings>(DEFAULT_CLOUD_SYNC_SETTINGS);
+  const [autoSyncSettingsMessage, setAutoSyncSettingsMessage] = useState("");
   const supabaseConfiguredLabel = isSupabaseConfigured() ? "Oui" : "Non";
   const shouldSuggestCloudRestore = Boolean(
     cloudDataSummary?.hasCloudData && localDataSummary && !localDataSummary.hasLocalData,
@@ -115,8 +124,23 @@ export default function CloudPage() {
   }
 
   useEffect(() => {
+    setAutoSyncSettings(loadCloudSyncSettings());
     refreshSession();
   }, []);
+
+  function saveAutoSyncSettings(nextSettings: CloudSyncSettings) {
+    const settingsToSave = {
+      ...nextSettings,
+      autoSyncDelaySeconds: Math.max(10, nextSettings.autoSyncDelaySeconds),
+      updatedAt: new Date().toISOString(),
+    };
+
+    saveCloudSyncSettings(settingsToSave);
+    setAutoSyncSettings(settingsToSave);
+    setAutoSyncSettingsMessage(
+      "Paramètres de synchronisation automatique enregistrés.",
+    );
+  }
 
   async function testSupabaseConnection() {
     setConnectionMessage("");
@@ -406,6 +430,78 @@ export default function CloudPage() {
             {!cloudDataSummary && cloudDataMessage ? (
               <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-medium leading-6 text-white">
                 {cloudDataMessage}
+              </p>
+            ) : null}
+          </section>
+
+          <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
+            <h2 className="text-xl font-bold text-white">
+              Synchronisation automatique
+            </h2>
+            <p className="mt-4 text-sm leading-6 text-slate-300">
+              Quand cette option est activée, le CRM envoie automatiquement les
+              données locales vers le cloud après une modification. La
+              protection anti-écrasement reste active.
+            </p>
+            {!syncStatus && syncStatusMessage ? (
+              <p className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm font-medium leading-6 text-amber-100">
+                Connecte-toi pour utiliser la synchronisation automatique. Tu
+                peux préparer ce réglage maintenant, mais la synchro ne pourra
+                pas se faire sans connexion.
+              </p>
+            ) : null}
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-slate-950/70 p-4 text-sm font-medium text-slate-200">
+                <input
+                  className="mt-1 h-5 w-5 accent-emerald-400"
+                  type="checkbox"
+                  checked={autoSyncSettings.autoSyncEnabled}
+                  onChange={(event) =>
+                    saveAutoSyncSettings({
+                      ...autoSyncSettings,
+                      autoSyncEnabled: event.target.checked,
+                    })
+                  }
+                />
+                <span>
+                  <span className="block font-semibold text-white">
+                    Activer la synchronisation automatique
+                  </span>
+                  <span className="mt-1 block leading-6 text-slate-400">
+                    Désactivée par défaut. Aucun envoi automatique ne part tant
+                    que cette option reste inactive.
+                  </span>
+                </span>
+              </label>
+
+              <label className="rounded-2xl border border-white/10 bg-slate-950/70 p-4 text-sm font-medium text-slate-200">
+                Délai avant synchronisation automatique
+                <div className="mt-3 flex items-center gap-3">
+                  <input
+                    className="min-h-11 w-28 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                    min={10}
+                    type="number"
+                    value={autoSyncSettings.autoSyncDelaySeconds}
+                    onChange={(event) =>
+                      setAutoSyncSettings({
+                        ...autoSyncSettings,
+                        autoSyncDelaySeconds: Number(event.target.value),
+                      })
+                    }
+                    onBlur={() => saveAutoSyncSettings(autoSyncSettings)}
+                  />
+                  <span className="text-slate-400">secondes</span>
+                </div>
+                <span className="mt-2 block text-xs leading-5 text-slate-500">
+                  Minimum conseillé : 10 secondes.
+                </span>
+              </label>
+            </div>
+
+            {autoSyncSettingsMessage ? (
+              <p className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm font-medium leading-6 text-emerald-200">
+                {autoSyncSettingsMessage}
               </p>
             ) : null}
           </section>

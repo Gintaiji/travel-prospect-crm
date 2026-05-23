@@ -1,4 +1,5 @@
 import type { MessageStyle, MessageTunnelStep } from "./messageTemplates";
+import { markLocalDataChanged } from "./localChangeTracker";
 
 const CUSTOM_MESSAGE_TEMPLATES_STORAGE_KEY =
   "travel-prospect-crm-custom-message-templates";
@@ -42,6 +43,7 @@ export function saveCustomMessageTemplates(customTemplates: CustomMessageTemplat
     CUSTOM_MESSAGE_TEMPLATES_STORAGE_KEY,
     JSON.stringify(customTemplates),
   );
+  markLocalDataChanged();
 }
 
 export function clearCustomMessageTemplates() {

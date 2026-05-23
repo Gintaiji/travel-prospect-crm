@@ -1,4 +1,5 @@
 import type { Resource } from "./types";
+import { markLocalDataChanged } from "./localChangeTracker";
 
 const RESOURCES_STORAGE_KEY = "travel-prospect-crm-resources";
 
@@ -30,6 +31,7 @@ export function saveResources(resources: Resource[]) {
   }
 
   localStorage.setItem(RESOURCES_STORAGE_KEY, JSON.stringify(resources));
+  markLocalDataChanged();
 }
 
 export function createResourceId() {
