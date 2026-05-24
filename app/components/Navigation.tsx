@@ -11,12 +11,11 @@ const principalLinks = [
 ];
 
 const toolLinks = [
-  { href: "/messages", label: "Messages & tunnel" },
+  { href: "/messages", label: "Messages" },
   { href: "/ressources", label: "Ressources" },
 ];
 
 const dataLinks = [
-  { href: "/", label: "Dashboard" },
   { href: "/sauvegarde", label: "Sauvegarde" },
   { href: "/parametres", label: "Paramètres" },
   { href: "/connexion", label: "Connexion" },
@@ -165,7 +164,7 @@ export default function Navigation() {
       <div className="mx-auto flex max-w-6xl flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <Link
-            href="/"
+            href="/aujourdhui"
             className="min-w-0 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300 sm:text-sm sm:tracking-[0.25em]"
             onClick={() => setIsMenuOpen(false)}
           >

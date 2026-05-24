@@ -237,7 +237,7 @@ export default function ConnexionPage() {
           </section>
 
           <Link
-            href="/cloud"
+            href="/sauvegarde#cloud-synchronisation"
             className="inline-flex min-h-11 w-fit items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
           >
             Voir l'état cloud
