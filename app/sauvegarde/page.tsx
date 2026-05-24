@@ -1005,6 +1005,11 @@ export default function BackupPage() {
               données locales vers le cloud après une modification. La
               protection anti-écrasement reste active.
             </p>
+            <p className="mt-2 text-sm leading-6 text-slate-300">
+              Activée par défaut, elle envoie tes modifications vers le cloud
+              après un court délai, sauf si la sécurité anti-écrasement bloque
+              l’envoi.
+            </p>
             {!cloudSyncStatus && cloudSyncStatusMessage ? (
               <p className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm font-medium leading-6 text-amber-100">
                 Connecte-toi pour utiliser la synchronisation automatique. Tu
@@ -1031,8 +1036,8 @@ export default function BackupPage() {
                     Activer la synchronisation automatique
                   </span>
                   <span className="mt-1 block leading-6 text-slate-400">
-                    Désactivée par défaut. Aucun envoi automatique ne part tant
-                    que cette option reste inactive.
+                    Tu peux la désactiver à tout moment. Aucun envoi
+                    automatique ne part si cette option est inactive.
                   </span>
                 </span>
               </label>

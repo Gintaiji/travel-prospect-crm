@@ -10,7 +10,7 @@ const CLOUD_SYNC_SETTINGS_CHANGED_EVENT =
   "travel-prospect-crm-cloud-sync-settings-changed";
 
 export const DEFAULT_CLOUD_SYNC_SETTINGS: CloudSyncSettings = {
-  autoSyncEnabled: false,
+  autoSyncEnabled: true,
   autoSyncDelaySeconds: 30,
   updatedAt: "",
 };
