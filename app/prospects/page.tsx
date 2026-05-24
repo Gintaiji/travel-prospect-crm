@@ -150,15 +150,55 @@ type ProspectSortOption =
 
 type ProspectViewMode = "compact" | "detailed";
 
-type ProspectDisplayMode = "list" | "pipeline";
+type ProspectDisplayMode = "list" | "pipeline" | "qualification";
 
 type ProspectActionMode = "standard" | "quick";
+
+type QualificationFilter =
+  | "all"
+  | "phone-import"
+  | "social-import"
+  | "social-category"
+  | "low-score"
+  | "no-follow-up";
+
+type QualificationQuickAction =
+  | "keep-contact"
+  | "make-warm"
+  | "make-hot"
+  | "follow-up-tomorrow"
+  | "follow-up-plus-three"
+  | "avoid"
+  | "not-now";
 
 const MESSAGE_ASSISTANT_SITUATIONS = MESSAGE_TUNNEL_STEPS.map(
   (messageStep) => messageStep.step,
 );
 
 const MESSAGE_ASSISTANT_STYLES = ["Doux", "Naturel", "Direct"] satisfies MessageStyle[];
+
+const qualificationFilterOptions: Array<{ id: QualificationFilter; label: string }> = [
+  { id: "all", label: "Tous les prospects à qualifier" },
+  { id: "phone-import", label: "Importés téléphone" },
+  { id: "social-import", label: "Importés réseaux sociaux" },
+  { id: "social-category", label: "Réseaux sociaux" },
+  { id: "low-score", label: "Score bas" },
+  { id: "no-follow-up", label: "Sans relance prévue" },
+];
+
+const qualificationActionButtons: Array<{
+  id: QualificationQuickAction;
+  label: string;
+  variant: "primary" | "quiet" | "danger";
+}> = [
+  { id: "keep-contact", label: "Garder à contacter", variant: "quiet" },
+  { id: "make-warm", label: "Passer en tiède", variant: "primary" },
+  { id: "make-hot", label: "Passer en chaud", variant: "primary" },
+  { id: "follow-up-tomorrow", label: "Relancer demain", variant: "quiet" },
+  { id: "follow-up-plus-three", label: "Relancer +3 jours", variant: "quiet" },
+  { id: "avoid", label: "Marquer à éviter", variant: "danger" },
+  { id: "not-now", label: "Pas maintenant", variant: "quiet" },
+];
 
 type MessageAssistantSituation = MessageTunnelStep;
 type MessageAssistantStyle = MessageStyle;
@@ -280,6 +320,30 @@ function normalizeText(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ");
+}
+
+function getMatchingStatus(statusLabel: string): Prospect["status"] {
+  const normalizedStatusLabel = normalizeText(statusLabel);
+
+  return (
+    PROSPECT_STATUSES.find(
+      (status) => normalizeText(status) === normalizedStatusLabel,
+    ) ?? PROSPECT_STATUSES[0]
+  );
+}
+
+function getMatchingTemperature(temperatureLabel: string): Prospect["temperature"] {
+  const normalizedTemperatureLabel = normalizeText(temperatureLabel);
+
+  return (
+    PROSPECT_TEMPERATURES.find(
+      (temperature) => normalizeText(temperature) === normalizedTemperatureLabel,
+    ) ?? PROSPECT_TEMPERATURES[0]
+  );
+}
+
+function getAvoidTag() {
+  return PROSPECT_TAGS.find((tag) => normalizeText(tag) === "a eviter");
 }
 
 function normalizeEmail(value: string) {
@@ -653,6 +717,78 @@ function getTemperatureSortRank(temperature: Prospect["temperature"]) {
   }
 
   return 2;
+}
+
+function hasImportedNote(prospect: Prospect) {
+  return normalizeText(prospect.notes).includes("importe");
+}
+
+function isPhoneImported(prospect: Prospect) {
+  const notes = normalizeText(prospect.notes);
+  const platform = normalizeText(prospect.mainPlatform);
+
+  return notes.includes("telephone") || platform.includes("telephone");
+}
+
+function isSocialImported(prospect: Prospect) {
+  const notes = normalizeText(prospect.notes);
+
+  return (
+    hasImportedNote(prospect) &&
+    (notes.includes("reseaux sociaux") ||
+      notes.includes("instagram") ||
+      notes.includes("facebook") ||
+      notes.includes("linkedin") ||
+      notes.includes("tiktok"))
+  );
+}
+
+function isSocialCategory(prospect: Prospect) {
+  return normalizeText(prospect.category) === "reseaux sociaux";
+}
+
+function isLowScore(prospect: Prospect) {
+  return calculateProspectScore(prospect) < 40;
+}
+
+function isLightlyQualified(prospect: Prospect) {
+  return (
+    prospect.status === getMatchingStatus("À contacter") ||
+    isLowScore(prospect) ||
+    hasImportedNote(prospect) ||
+    isSocialCategory(prospect) ||
+    normalizeText(prospect.category) === "connaissance"
+  );
+}
+
+function isAlreadyHandledForQualification(prospect: Prospect) {
+  const avoidTag = getAvoidTag();
+
+  return (
+    prospect.status !== getMatchingStatus("À contacter") ||
+    prospect.temperature === getMatchingTemperature("Tiède") ||
+    prospect.temperature === getMatchingTemperature("Chaud") ||
+    Boolean(prospect.nextActionDate) ||
+    (avoidTag ? (prospect.tags ?? []).includes(avoidTag) : false)
+  );
+}
+
+function getQualificationLocationLabel(prospect: Prospect) {
+  return [prospect.city, prospect.country].filter(Boolean).join(" / ");
+}
+
+function getQualificationActionButtonClass(
+  variant: "primary" | "quiet" | "danger",
+) {
+  if (variant === "primary") {
+    return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/20";
+  }
+
+  if (variant === "danger") {
+    return "border-rose-400/30 bg-rose-400/10 text-rose-200 hover:bg-rose-400/20";
+  }
+
+  return "border-white/10 text-slate-200 hover:border-emerald-400/40 hover:bg-emerald-400/10 hover:text-emerald-200";
 }
 
 function cleanPhoneNumber(phoneNumber: string) {
@@ -1036,6 +1172,11 @@ export default function ProspectsPage () {
   const [prospectViewMode, setProspectViewMode] = useState<ProspectViewMode>("compact");
   const [prospectDisplayMode, setProspectDisplayMode] = useState<ProspectDisplayMode>("list");
   const [prospectActionMode, setProspectActionMode] = useState<ProspectActionMode>("standard");
+  const [qualificationFilter, setQualificationFilter] =
+    useState<QualificationFilter>("all");
+  const [hideHandledQualificationProspects, setHideHandledQualificationProspects] =
+    useState(true);
+  const [qualificationMessage, setQualificationMessage] = useState("");
   const [backupMessage, setBackupMessage] = useState("");
   const [isBackupError, setIsBackupError] = useState(false);
   const [duplicateMergeState, setDuplicateMergeState] = useState<DuplicateMergeState | null>(null);
@@ -1080,8 +1221,14 @@ export default function ProspectsPage () {
     hasHandledInitialUrlRef.current = true;
 
     const searchParams = new URLSearchParams(window.location.search);
+    const requestedMode = searchParams.get("mode")?.trim();
     const requestedAction = searchParams.get("action")?.trim();
     const prospectIdToFocus = searchParams.get("focus")?.trim();
+
+    if (requestedMode === "qualification") {
+      setProspectDisplayMode("qualification");
+      setProspectActionMode("standard");
+    }
 
     if (requestedAction === "quick-add") {
       const openRequestedQuickAddForm = window.setTimeout(() => {
@@ -2121,6 +2268,69 @@ export default function ProspectsPage () {
 
     saveProspects(updatedProspects);
     setProspects(updatedProspects);
+  }
+
+  function showQualificationUpdatedMessage() {
+    setQualificationMessage("Prospect mis à jour.");
+    window.setTimeout(() => setQualificationMessage(""), 2200);
+  }
+
+  function updateProspectFromQualification(
+    prospectId: string,
+    action: QualificationQuickAction,
+  ) {
+    const updatedProspects = prospects.map((prospect) => {
+      if (prospect.id !== prospectId) {
+        return prospect;
+      }
+
+      const nextProspect: Prospect = {
+        ...prospect,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (action === "keep-contact") {
+        nextProspect.status = getMatchingStatus("À contacter");
+      }
+
+      if (action === "make-warm") {
+        nextProspect.temperature = getMatchingTemperature("Tiède");
+      }
+
+      if (action === "make-hot") {
+        nextProspect.temperature = getMatchingTemperature("Chaud");
+      }
+
+      if (action === "follow-up-tomorrow") {
+        nextProspect.nextActionDate = getFutureDateString(1);
+      }
+
+      if (action === "follow-up-plus-three") {
+        nextProspect.nextActionDate = getFutureDateString(3);
+      }
+
+      if (action === "avoid") {
+        const avoidTag = getAvoidTag();
+
+        nextProspect.status = getMatchingStatus("Refus");
+
+        if (avoidTag && !(nextProspect.tags ?? []).includes(avoidTag)) {
+          nextProspect.tags = [...(nextProspect.tags ?? []), avoidTag];
+        }
+      }
+
+      if (action === "not-now") {
+        nextProspect.status = getMatchingStatus("Pas maintenant");
+      }
+
+      nextProspect.score = calculateProspectScore(nextProspect);
+
+      return nextProspect;
+    });
+
+    saveProspects(updatedProspects);
+    setProspects(updatedProspects);
+    showQualificationUpdatedMessage();
   }
 
   function handleMoveProspectToNextStatus(prospect: Prospect) {
@@ -3247,6 +3457,73 @@ export default function ProspectsPage () {
       firstProspect.createdAt || "",
     );
   });
+  const qualificationProspects = prospects
+    .filter(isLightlyQualified)
+    .sort((firstProspect, secondProspect) => {
+      const firstScore = calculateProspectScore(firstProspect);
+      const secondScore = calculateProspectScore(secondProspect);
+
+      if (firstScore !== secondScore) {
+        return firstScore - secondScore;
+      }
+
+      return firstProspect.updatedAt.localeCompare(secondProspect.updatedAt);
+    });
+  const avoidTag = getAvoidTag();
+  const qualificationStats = [
+    { label: "Prospects à qualifier", value: qualificationProspects.length },
+    {
+      label: "Froids",
+      value: qualificationProspects.filter(
+        (prospect) => prospect.temperature === getMatchingTemperature("Froid"),
+      ).length,
+    },
+    {
+      label: "Tièdes",
+      value: qualificationProspects.filter(
+        (prospect) => prospect.temperature === getMatchingTemperature("Tiède"),
+      ).length,
+    },
+    {
+      label: "Chauds",
+      value: qualificationProspects.filter(
+        (prospect) => prospect.temperature === getMatchingTemperature("Chaud"),
+      ).length,
+    },
+    {
+      label: "À éviter",
+      value: qualificationProspects.filter((prospect) =>
+        avoidTag ? (prospect.tags ?? []).includes(avoidTag) : false,
+      ).length,
+    },
+  ];
+  const filteredQualificationProspects = qualificationProspects.filter((prospect) => {
+    if (hideHandledQualificationProspects && isAlreadyHandledForQualification(prospect)) {
+      return false;
+    }
+
+    if (qualificationFilter === "phone-import") {
+      return isPhoneImported(prospect);
+    }
+
+    if (qualificationFilter === "social-import") {
+      return isSocialImported(prospect);
+    }
+
+    if (qualificationFilter === "social-category") {
+      return isSocialCategory(prospect);
+    }
+
+    if (qualificationFilter === "low-score") {
+      return isLowScore(prospect);
+    }
+
+    if (qualificationFilter === "no-follow-up") {
+      return !prospect.nextActionDate;
+    }
+
+    return true;
+  });
   const pipelineProspectsByStatus = PROSPECT_STATUSES.reduce(
     (groupedProspects, status) => {
       groupedProspects[status] = filteredProspects
@@ -3268,7 +3545,9 @@ export default function ProspectsPage () {
   );
   const isDetailedView = prospectViewMode === "detailed";
   const isQuickActionView = prospectActionMode === "quick";
-  const isPipelineView = prospectDisplayMode === "pipeline" && !isQuickActionView;
+  const isQualificationView = prospectDisplayMode === "qualification";
+  const isPipelineView =
+    prospectDisplayMode === "pipeline" && !isQuickActionView && !isQualificationView;
   const potentialDuplicateGroups = findPotentialDuplicates(prospects);
   const sortedResources = getSortedResources(resources);
   const filteredProspectIds = filteredProspects
@@ -4577,6 +4856,7 @@ export default function ProspectsPage () {
                   >
                     <option value="list">Liste</option>
                     <option value="pipeline">Pipeline</option>
+                    <option value="qualification">Qualification rapide</option>
                   </select>
                 </label>
 
@@ -4618,7 +4898,206 @@ export default function ProspectsPage () {
               ) : null}
             </section>
 
-            {isQuickActionView ? (
+            {isQualificationView ? (
+              <section className="grid gap-5">
+                <div className="rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-4 shadow-xl sm:p-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm uppercase tracking-[0.25em] text-emerald-200">
+                        Tri express
+                      </p>
+                      <h3 className="mt-2 text-2xl font-bold text-white">
+                        Qualification rapide
+                      </h3>
+                      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-200">
+                        Passe rapidement tes contacts en revue pour décider qui
+                        mérite une vraie conversation.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                  {qualificationStats.map((stat) => (
+                    <article
+                      className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-xl"
+                      key={stat.label}
+                    >
+                      <p className="min-h-8 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                        {stat.label}
+                      </p>
+                      <p className="mt-2 text-3xl font-bold text-white">
+                        {stat.value}
+                      </p>
+                    </article>
+                  ))}
+                </section>
+
+                <section className="grid gap-4 rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-5">
+                  <div className="flex flex-wrap gap-2">
+                    {qualificationFilterOptions.map((filterOption) => {
+                      const isSelected = qualificationFilter === filterOption.id;
+
+                      return (
+                        <button
+                          className={`min-h-11 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                            isSelected
+                              ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+                              : "border-white/10 text-slate-200 hover:border-emerald-400/40 hover:bg-emerald-400/10 hover:text-emerald-200"
+                          }`}
+                          key={filterOption.id}
+                          type="button"
+                          onClick={() => setQualificationFilter(filterOption.id)}
+                        >
+                          {filterOption.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-3 text-sm font-medium text-slate-200">
+                    <input
+                      className="mt-1 h-5 w-5 accent-emerald-400"
+                      checked={hideHandledQualificationProspects}
+                      type="checkbox"
+                      onChange={(event) =>
+                        setHideHandledQualificationProspects(event.target.checked)
+                      }
+                    />
+                    <span>Masquer les prospects déjà traités</span>
+                  </label>
+                </section>
+
+                {qualificationMessage ? (
+                  <p className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-200">
+                    {qualificationMessage}
+                  </p>
+                ) : null}
+
+                {filteredQualificationProspects.length === 0 ? (
+                  <section className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-xl">
+                    <p className="text-sm leading-6 text-slate-300">
+                      Tout est trié pour le moment. Beau travail.
+                    </p>
+                  </section>
+                ) : (
+                  <section className="grid gap-4">
+                    {filteredQualificationProspects.map((prospect) => {
+                      const locationLabel = getQualificationLocationLabel(prospect);
+                      const score = calculateProspectScore(prospect);
+                      const tags = prospect.tags ?? [];
+
+                      return (
+                        <article
+                          className="grid gap-4 rounded-3xl border border-white/10 bg-slate-900/70 p-4 shadow-xl sm:p-5"
+                          key={prospect.id}
+                        >
+                          <div className="grid gap-3">
+                            <div className="min-w-0">
+                              <h2 className="truncate text-xl font-bold text-white">
+                                {getProspectDisplayName(prospect)}
+                              </h2>
+                              <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium">
+                                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-200">
+                                  {prospect.mainPlatform}
+                                </span>
+                                {prospect.profileUrl ? (
+                                  <a
+                                    className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-sky-200 transition hover:bg-sky-400/20"
+                                    href={prospect.profileUrl}
+                                    rel="noreferrer"
+                                    target="_blank"
+                                  >
+                                    Profil
+                                  </a>
+                                ) : null}
+                                {locationLabel ? (
+                                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-200">
+                                    {locationLabel}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div className="grid gap-2 text-sm sm:grid-cols-3">
+                              <p className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
+                                <span className="block text-xs text-slate-500">
+                                  Statut
+                                </span>
+                                <span className="font-semibold text-white">
+                                  {prospect.status}
+                                </span>
+                              </p>
+                              <p className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
+                                <span className="block text-xs text-slate-500">
+                                  Température
+                                </span>
+                                <span className="font-semibold text-white">
+                                  {prospect.temperature}
+                                </span>
+                              </p>
+                              <p className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3">
+                                <span className="block text-xs text-emerald-300/80">
+                                  Score
+                                </span>
+                                <span className="font-semibold text-emerald-100">
+                                  {score}
+                                </span>
+                              </p>
+                            </div>
+
+                            {tags.length > 0 ? (
+                              <div className="flex flex-wrap gap-2">
+                                {tags.map((tag) => (
+                                  <span
+                                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300"
+                                    key={tag}
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+
+                            {prospect.notes ? (
+                              <p className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm leading-6 text-slate-300">
+                                {prospect.notes}
+                              </p>
+                            ) : null}
+                          </div>
+
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                            {qualificationActionButtons.map((actionButton) => (
+                              <button
+                                className={`min-h-12 rounded-full border px-4 py-2 text-sm font-semibold transition ${getQualificationActionButtonClass(
+                                  actionButton.variant,
+                                )}`}
+                                key={actionButton.id}
+                                type="button"
+                                onClick={() =>
+                                  updateProspectFromQualification(
+                                    prospect.id,
+                                    actionButton.id,
+                                  )
+                                }
+                              >
+                                {actionButton.label}
+                              </button>
+                            ))}
+                            <a
+                              className="flex min-h-12 items-center justify-center rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-center text-sm font-semibold text-sky-200 transition hover:bg-sky-400/20"
+                              href={`/prospects?focus=${encodeURIComponent(prospect.id)}`}
+                            >
+                              Voir la fiche
+                            </a>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </section>
+                )}
+              </section>
+            ) : isQuickActionView ? (
               sortedProspects.length === 0 ? (
                 <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-6 text-center text-slate-300">
                   Aucun prospect ne correspond à ta recherche.

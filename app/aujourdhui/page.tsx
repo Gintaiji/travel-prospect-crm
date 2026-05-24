@@ -37,7 +37,7 @@ type StatCard = {
 const quickLinks = [
   { href: "/prospects?action=quick-add", label: "Ajout express" },
   { href: "/prospects?action=add", label: "Ajouter un prospect" },
-  { href: "/qualification", label: "Qualification rapide" },
+  { href: "/prospects?mode=qualification", label: "Qualification rapide" },
   { href: "/relances", label: "Voir les relances" },
   { href: "/messages", label: "Ouvrir les messages" },
   { href: "/ressources", label: "Ouvrir les ressources" },
