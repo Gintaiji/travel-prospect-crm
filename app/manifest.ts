@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "Travel CRM",
     description:
       "CRM de prospection voyage pour suivre les contacts, relances et conversations.",
-    start_url: "/",
+    start_url: "/aujourdhui",
     scope: "/",
     display: "standalone",
     background_color: "#020617",
@@ -18,6 +18,32 @@ export default function manifest(): MetadataRoute.Manifest {
         src: "/favicon.ico",
         sizes: "any",
         type: "image/x-icon",
+      },
+    ],
+    shortcuts: [
+      {
+        name: "Aujourd’hui",
+        short_name: "Aujourd’hui",
+        description: "Ouvrir les actions importantes du jour.",
+        url: "/aujourdhui",
+      },
+      {
+        name: "Prospects",
+        short_name: "Prospects",
+        description: "Ouvrir la liste des prospects.",
+        url: "/prospects",
+      },
+      {
+        name: "Ressources",
+        short_name: "Ressources",
+        description: "Ouvrir les ressources.",
+        url: "/ressources",
+      },
+      {
+        name: "Sauvegarde",
+        short_name: "Sauvegarde",
+        description: "Ouvrir la protection des données.",
+        url: "/sauvegarde",
       },
     ],
   };

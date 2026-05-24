@@ -77,7 +77,8 @@ export default function PwaInstallPrompt() {
               Installer l’application
             </p>
             <p className="mt-2 text-sm leading-6 text-slate-200">
-              Ajoute Travel Prospect CRM à ton écran d’accueil pour y accéder plus vite.
+              Ajoute Travel Prospect CRM à ton écran d’accueil pour ouvrir
+              Aujourd’hui plus vite.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -100,7 +101,8 @@ export default function PwaInstallPrompt() {
       ) : (
         <div className="flex items-start justify-between gap-3">
           <p className="text-xs leading-5 text-slate-300">
-            Sur iPhone : ouvre le menu Partager, puis choisis Sur l’écran d’accueil.
+            Sur iPhone : ouvre le menu Partager, puis choisis Sur l’écran
+            d’accueil.
           </p>
           <button
             className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"

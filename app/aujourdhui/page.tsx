@@ -59,9 +59,9 @@ const quickLinks = [
   { href: "/prospects?action=quick-add", label: "Ajout express" },
   { href: "/prospects?action=add", label: "Ajouter un prospect" },
   { href: "/prospects?mode=qualification", label: "Qualification rapide" },
-  { href: "/aujourdhui", label: "Voir les relances" },
   { href: "/messages", label: "Ouvrir les messages" },
   { href: "/ressources", label: "Ouvrir les ressources" },
+  { href: "/sauvegarde", label: "Ouvrir la sauvegarde" },
 ];
 
 const followUpResults: FollowUpResult[] = [
