@@ -25,6 +25,14 @@ function getMessageKey(step: MessageTunnelStep, tone: MessageStyle) {
   return `${step}-${tone}`;
 }
 
+function formatSuggestedFollowUp(daysToAdd: number | null) {
+  if (daysToAdd === null) {
+    return "";
+  }
+
+  return `Dans ${daysToAdd} jour${daysToAdd > 1 ? "s" : ""}`;
+}
+
 function getCustomTemplateMessage(
   customTemplates: CustomMessageTemplates,
   step: MessageTunnelStep,
@@ -55,9 +63,12 @@ function getConfiguredMessage(message: string, settings: AppSettings) {
 
 export default function MessagesPage() {
   const [copiedMessageKey, setCopiedMessageKey] = useState<string | null>(null);
-  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
-  const [customTemplates, setCustomTemplates] = useState<CustomMessageTemplates>({});
-  const [editingMessage, setEditingMessage] = useState<EditingMessageState>(null);
+  const [appSettings, setAppSettings] =
+    useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [customTemplates, setCustomTemplates] =
+    useState<CustomMessageTemplates>({});
+  const [editingMessage, setEditingMessage] =
+    useState<EditingMessageState>(null);
   const [feedbackMessage, setFeedbackMessage] = useState("");
 
   useEffect(() => {
@@ -163,32 +174,138 @@ export default function MessagesPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-6 text-white sm:px-6 sm:py-10">
+    <main className="min-h-screen bg-slate-950 px-4 py-6 pb-28 text-white sm:px-6 sm:py-10 md:pb-10">
       <section className="mx-auto max-w-6xl">
         <header className="mb-8">
           <p className="text-sm uppercase tracking-[0.3em] text-emerald-400">
             Messages
           </p>
           <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-5xl">
-            Bibliothèque de messages
+            Messages &amp; tunnel
           </h1>
           <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
-            Des modèles courts, naturels et copiables pour avancer dans tes conversations sans forcer.
+            Retrouve la méthode de prospection et les modèles de messages à
+            adapter à ta façon de parler.
           </p>
         </header>
+
+        <section className="mb-6 rounded-3xl border border-white/10 bg-white/5 p-5">
+          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-emerald-200">
+            Règle d’or
+          </p>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-200">
+            Le message doit ouvrir une conversation, pas donner l’impression de
+            vendre dès la première phrase.
+          </p>
+        </section>
+
+        <section className="mb-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-5">
+          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-emerald-200">
+            Tunnel de prospection
+          </p>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-200">
+            Une méthode simple pour avancer dans les conversations sans forcer,
+            sans perdre le fil.
+          </p>
+
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            {MESSAGE_TUNNEL_STEPS.map((messageStep, index) => {
+              const naturalVariant =
+                messageStep.variants.find(
+                  (variant) => variant.tone === "Naturel",
+                ) ?? messageStep.variants[0];
+              const suggestedFollowUp = formatSuggestedFollowUp(
+                messageStep.suggestedFollowUpDays,
+              );
+              const naturalExample = getConfiguredMessage(
+                naturalVariant.message,
+                appSettings,
+              );
+
+              return (
+                <article
+                  className="rounded-3xl border border-white/10 bg-slate-950/70 p-4 shadow-xl sm:p-5"
+                  key={messageStep.step}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-400/10 text-sm font-bold text-emerald-200">
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                        {messageStep.step}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-slate-300">
+                        {messageStep.objective}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3">
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Prochaine action conseillée
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-slate-100">
+                        {messageStep.nextAction}
+                      </p>
+                    </div>
+
+                    {suggestedFollowUp || messageStep.suggestedStatus ? (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {suggestedFollowUp ? (
+                          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                              Relance suggérée
+                            </p>
+                            <p className="mt-2 text-sm text-slate-100">
+                              {suggestedFollowUp}
+                            </p>
+                          </div>
+                        ) : null}
+
+                        {messageStep.suggestedStatus ? (
+                          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                              Statut suggéré
+                            </p>
+                            <p className="mt-2 text-sm text-slate-100">
+                              {messageStep.suggestedStatus}
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Exemple naturel
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-slate-100">
+                        {naturalExample}
+                      </p>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
 
         <section className="mb-6 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.25em] text-emerald-200">
-                Personnalisation
+                Modèles de messages
               </p>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-200">
-                Tu peux adapter les modèles à ta façon de parler. Les textes modifiés seront utilisés dans l’assistant des fiches prospects.
+                Tu peux adapter les modèles à ta façon de parler. Les textes
+                modifiés seront utilisés dans l’assistant des fiches prospects.
               </p>
               {appSettings.messageSignature.trim() ? (
                 <p className="mt-3 max-w-3xl text-sm leading-6 text-emerald-100">
-                  Ta signature personnalisée pourra être ajoutée depuis l’assistant prospect.
+                  Ta signature personnalisée pourra être ajoutée depuis
+                  l’assistant prospect.
                 </p>
               ) : null}
             </div>
@@ -205,15 +322,6 @@ export default function MessagesPage() {
               {feedbackMessage}
             </p>
           ) : null}
-        </section>
-
-        <section className="mb-6 rounded-3xl border border-white/10 bg-white/5 p-5">
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-emerald-200">
-            Règle d’or
-          </p>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-200">
-            Le message doit ouvrir une conversation, pas donner l’impression de vendre dès la première phrase.
-          </p>
         </section>
 
         <section className="grid gap-5">
@@ -233,7 +341,10 @@ export default function MessagesPage() {
 
               <div className="grid gap-3 lg:grid-cols-3">
                 {templateSection.variants.map((variant) => {
-                  const messageKey = getMessageKey(templateSection.step, variant.tone);
+                  const messageKey = getMessageKey(
+                    templateSection.step,
+                    variant.tone,
+                  );
                   const customMessage = getCustomTemplateMessage(
                     customTemplates,
                     templateSection.step,
@@ -307,7 +418,9 @@ export default function MessagesPage() {
                             <button
                               className="min-h-10 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
                               type="button"
-                              onClick={() => handleCopyMessage(configuredMessage, messageKey)}
+                              onClick={() =>
+                                handleCopyMessage(configuredMessage, messageKey)
+                              }
                             >
                               Copier
                             </button>
@@ -329,7 +442,10 @@ export default function MessagesPage() {
                               type="button"
                               disabled={!isCustomized}
                               onClick={() =>
-                                resetOneMessage(templateSection.step, variant.tone)
+                                resetOneMessage(
+                                  templateSection.step,
+                                  variant.tone,
+                                )
                               }
                             >
                               Réinitialiser ce message

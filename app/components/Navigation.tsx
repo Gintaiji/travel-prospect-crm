@@ -12,8 +12,7 @@ const principalLinks = [
 ];
 
 const toolLinks = [
-  { href: "/messages", label: "Messages" },
-  { href: "/tunnel", label: "Tunnel" },
+  { href: "/messages", label: "Messages & tunnel" },
   { href: "/ressources", label: "Ressources" },
   { href: "/qualification", label: "Qualification" },
 ];
