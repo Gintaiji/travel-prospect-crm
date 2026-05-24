@@ -250,7 +250,7 @@ export default function TodayPage() {
               </p>
               <Link
                 className="flex min-h-11 items-center justify-center rounded-full border border-amber-200/30 bg-amber-200/10 px-4 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-200/20"
-                href="/cloud"
+                href="/sauvegarde#fraicheur-donnees"
               >
                 V&eacute;rifier le cloud
               </Link>
@@ -267,7 +267,7 @@ export default function TodayPage() {
               </p>
               <Link
                 className="flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
-                href="/cloud"
+                href="/sauvegarde#protection-anti-ecrasement"
               >
                 Restaurer depuis le cloud
               </Link>

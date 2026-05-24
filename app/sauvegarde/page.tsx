@@ -10,13 +10,21 @@ import {
 import {
   DEFAULT_CLOUD_SYNC_SETTINGS,
   loadCloudSyncSettings,
+  saveCloudSyncSettings,
   type CloudSyncSettings,
 } from "../lib/cloudSyncSettingsStorage";
 import {
+  canUploadLocalDataSafely,
+  getCloudDataSummary,
   getCloudFreshnessStatus,
   getCloudSyncStatus,
+  getLocalDataSummary,
+  restoreCloudDataToLocal,
+  uploadLocalDataToCloud,
+  type CloudDataSummary,
   type CloudFreshnessStatus,
   type CloudSyncStatus,
+  type LocalDataSummary,
 } from "../lib/cloudSync";
 import {
   loadCustomMessageTemplates,
@@ -32,8 +40,10 @@ import {
   saveSettings,
 } from "../lib/settingsStorage";
 import type { AppSettings, Prospect, Resource } from "../lib/types";
-import QuickCloudSyncButton from "../components/QuickCloudSyncButton";
-import { createBrowserSupabaseClient } from "../lib/supabaseClient";
+import {
+  createBrowserSupabaseClient,
+  isSupabaseConfigured,
+} from "../lib/supabaseClient";
 
 type BackupFile = {
   appName: "Travel Prospect CRM";
@@ -135,6 +145,17 @@ function formatLastBackupDate(lastBackupDate: string) {
     : parsedDate.toLocaleString("fr-FR");
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "Aucune synchronisation cloud enregistrée.";
+  }
+
+  return new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
 export default function BackupPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
@@ -151,32 +172,125 @@ export default function BackupPage() {
   const [requestMessage, setRequestMessage] = useState("");
   const [importMessage, setImportMessage] = useState("");
   const [importError, setImportError] = useState("");
+  const [connectionMessage, setConnectionMessage] = useState("");
+  const [sessionMessage, setSessionMessage] = useState(
+    "Lecture de la session...",
+  );
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [cloudSyncStatus, setCloudSyncStatus] =
     useState<CloudSyncStatus | null>(null);
   const [cloudSyncStatusMessage, setCloudSyncStatusMessage] = useState(
     "Lecture de l'état cloud...",
   );
+  const [cloudDataSummary, setCloudDataSummary] =
+    useState<CloudDataSummary | null>(null);
+  const [localDataSummary, setLocalDataSummary] =
+    useState<LocalDataSummary | null>(null);
   const [cloudFreshnessStatus, setCloudFreshnessStatus] =
     useState<CloudFreshnessStatus | null>(null);
   const [cloudFreshnessMessage, setCloudFreshnessMessage] = useState(
     "Connecte-toi pour comparer les données locales et cloud.",
   );
-
+  const [cloudDataMessage, setCloudDataMessage] = useState(
+    "Connecte-toi pour connaître les données cloud.",
+  );
+  const [syncMessage, setSyncMessage] = useState("");
+  const [isSyncing, setIsSyncing] = useState(false);
   const [cloudSyncSettings, setCloudSyncSettings] =
     useState<CloudSyncSettings>(DEFAULT_CLOUD_SYNC_SETTINGS);
+  const [autoSyncSettingsMessage, setAutoSyncSettingsMessage] = useState("");
+
+  function refreshLocalSnapshot() {
+    setProspects(loadProspects());
+    setResources(loadResources());
+    setSettings(loadSettings());
+    setCustomMessageTemplates(loadCustomMessageTemplates());
+    setLocalDataSummary(getLocalDataSummary());
+    setLastReadAt(new Date().toLocaleString("fr-FR"));
+  }
+
+  async function refreshCloudSyncState() {
+    try {
+      const nextCloudSyncStatus = await getCloudSyncStatus();
+
+      setLastSyncAt(nextCloudSyncStatus.lastCloudSyncAt);
+      setCloudSyncStatus(nextCloudSyncStatus);
+      setCloudSyncStatusMessage("");
+    } catch {
+      setLastSyncAt(null);
+      setCloudSyncStatus(null);
+      setCloudDataSummary(null);
+      setCloudFreshnessStatus(null);
+      setLocalDataSummary(getLocalDataSummary());
+      setCloudDataMessage("Connecte-toi pour connaître les données cloud.");
+      setCloudSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
+    }
+  }
+
+  async function refreshCloudDataOverview() {
+    setLocalDataSummary(getLocalDataSummary());
+
+    try {
+      const [summary, freshnessStatus] = await Promise.all([
+        getCloudDataSummary(),
+        getCloudFreshnessStatus(),
+      ]);
+
+      setCloudDataSummary(summary);
+      setCloudFreshnessStatus(freshnessStatus);
+      setCloudDataMessage("");
+      setCloudFreshnessMessage("");
+    } catch {
+      setCloudDataSummary(null);
+      setCloudFreshnessStatus(null);
+      setCloudDataMessage("Connecte-toi pour connaître les données cloud.");
+      setCloudFreshnessMessage(
+        "Connecte-toi pour comparer les données locales et cloud.",
+      );
+    }
+  }
+
+  async function refreshSession() {
+    const supabase = createBrowserSupabaseClient();
+
+    if (!supabase) {
+      setSessionMessage("Aucun utilisateur connecté.");
+      setLastSyncAt(null);
+      setCloudSyncStatus(null);
+      setCloudSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
+      setCloudFreshnessStatus(null);
+      return;
+    }
+
+    const { data, error } = await supabase.auth.getSession();
+
+    if (error || !data.session?.user) {
+      setSessionMessage("Aucun utilisateur connecté.");
+      setLastSyncAt(null);
+      setCloudSyncStatus(null);
+      setCloudSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
+      setCloudFreshnessStatus(null);
+      return;
+    }
+
+    setSessionMessage(
+      data.session.user.email
+        ? `Utilisateur connecté : ${data.session.user.email}`
+        : "Utilisateur connecté.",
+    );
+
+    await refreshCloudSyncState();
+    await refreshCloudDataOverview();
+  }
 
   useEffect(() => {
     const loadStoredData = window.setTimeout(() => {
-      setProspects(loadProspects());
-      setResources(loadResources());
-      setSettings(loadSettings());
-      setCustomMessageTemplates(loadCustomMessageTemplates());
+      refreshLocalSnapshot();
       setCloudSyncSettings(loadCloudSyncSettings());
       const storedLastBackupDate = loadLastBackupDate();
 
       setLastBackupDate(storedLastBackupDate);
       setShowBackupReminder(shouldShowBackupReminder(storedLastBackupDate));
-      setLastReadAt(new Date().toLocaleString("fr-FR"));
 
       const browserStorage = navigator.storage;
       const hasStorageApi = Boolean(browserStorage);
@@ -199,52 +313,7 @@ export default function BackupPage() {
   }, []);
 
   useEffect(() => {
-    async function refreshCloudStatus() {
-      const supabase = createBrowserSupabaseClient();
-
-      if (!supabase) {
-        setCloudSyncStatus(null);
-        setCloudFreshnessStatus(null);
-        setCloudSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
-        setCloudFreshnessMessage(
-          "Connecte-toi pour comparer les données locales et cloud.",
-        );
-        return;
-      }
-
-      const { data, error } = await supabase.auth.getSession();
-
-      if (error || !data.session?.user) {
-        setCloudSyncStatus(null);
-        setCloudFreshnessStatus(null);
-        setCloudSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
-        setCloudFreshnessMessage(
-          "Connecte-toi pour comparer les données locales et cloud.",
-        );
-        return;
-      }
-
-      try {
-        const [status, freshnessStatus] = await Promise.all([
-          getCloudSyncStatus(),
-          getCloudFreshnessStatus(),
-        ]);
-
-        setCloudSyncStatus(status);
-        setCloudFreshnessStatus(freshnessStatus);
-        setCloudSyncStatusMessage("");
-        setCloudFreshnessMessage("");
-      } catch {
-        setCloudSyncStatus(null);
-        setCloudFreshnessStatus(null);
-        setCloudSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
-        setCloudFreshnessMessage(
-          "Connecte-toi pour comparer les données locales et cloud.",
-        );
-      }
-    }
-
-    refreshCloudStatus();
+    refreshSession();
   }, []);
 
   const totalConversationCount = getTotalConversationCount(prospects);
@@ -253,6 +322,15 @@ export default function BackupPage() {
     ? "Oui"
     : "Non";
   const formattedLastBackupDate = formatLastBackupDate(lastBackupDate);
+  const supabaseConfiguredLabel = isSupabaseConfigured() ? "Oui" : "Non";
+  const shouldSuggestCloudRestore = Boolean(
+    cloudDataSummary?.hasCloudData &&
+      localDataSummary &&
+      !localDataSummary.hasLocalData,
+  );
+  const antiOverwriteStatusLabel = shouldSuggestCloudRestore
+    ? "Envoi bloqué pour protéger les données cloud"
+    : "Aucun risque détecté";
 
   function exportCompleteBackup() {
     const backup: BackupFile = {
@@ -297,6 +375,121 @@ export default function BackupPage() {
         ? "Protection du stockage activée."
         : "Le navigateur n'a pas accordé la protection du stockage.",
     );
+  }
+
+  function saveAutoSyncSettings(nextSettings: CloudSyncSettings) {
+    const settingsToSave = {
+      ...nextSettings,
+      autoSyncDelaySeconds: Math.max(10, nextSettings.autoSyncDelaySeconds),
+      updatedAt: new Date().toISOString(),
+    };
+
+    saveCloudSyncSettings(settingsToSave);
+    setCloudSyncSettings(settingsToSave);
+    setAutoSyncSettingsMessage(
+      "Paramètres de synchronisation automatique enregistrés.",
+    );
+  }
+
+  async function testSupabaseConnection() {
+    setConnectionMessage("");
+
+    const supabase = createBrowserSupabaseClient();
+
+    if (!supabase) {
+      setConnectionMessage("Supabase n'est pas encore configuré.");
+      return;
+    }
+
+    const { error } = await supabase.auth.getSession();
+
+    setConnectionMessage(
+      error
+        ? "Connexion Supabase impossible pour le moment."
+        : "Client Supabase configuré.",
+    );
+
+    await refreshSession();
+  }
+
+  async function uploadToCloud() {
+    setSyncMessage("");
+
+    try {
+      const uploadSafetyCheck = await canUploadLocalDataSafely();
+
+      if (!uploadSafetyCheck.canUpload) {
+        setSyncMessage(uploadSafetyCheck.reason);
+        return;
+      }
+    } catch (error) {
+      setSyncMessage(
+        error instanceof Error ? error.message : "Erreur de synchronisation.",
+      );
+      return;
+    }
+
+    const shouldUpload = window.confirm(
+      "Envoyer les données locales vers le cloud ? Les anciennes données cloud de ce compte seront remplacées.",
+    );
+
+    if (!shouldUpload) {
+      return;
+    }
+
+    setIsSyncing(true);
+
+    try {
+      const summary = await uploadLocalDataToCloud();
+
+      setSyncMessage(
+        `Données envoyées vers le cloud avec succès. ${summary.prospectsCount} prospect(s), ${summary.resourcesCount} ressource(s), paramètres ${
+          summary.settingsSent ? "envoyés" : "non envoyés"
+        }, modèles personnalisés ${
+          summary.customMessageTemplatesSent ? "envoyés" : "non envoyés"
+        }.`,
+      );
+      await refreshSession();
+    } catch (error) {
+      setSyncMessage(
+        error instanceof Error ? error.message : "Erreur de synchronisation.",
+      );
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
+  async function restoreFromCloud() {
+    const shouldRestore = window.confirm(
+      "Restaurer les données cloud sur cet appareil ? Les données locales actuelles seront remplacées.",
+    );
+
+    if (!shouldRestore) {
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncMessage("");
+
+    try {
+      const summary = await restoreCloudDataToLocal();
+
+      refreshLocalSnapshot();
+      setSyncMessage(
+        `Données restaurées depuis le cloud avec succès. ${summary.prospectsCount} prospect(s), ${summary.resourcesCount} ressource(s), paramètres ${
+          summary.settingsRestored ? "restaurés" : "non restaurés"
+        }, modèles personnalisés ${
+          summary.customMessageTemplatesRestored ? "restaurés" : "non restaurés"
+        }.`,
+      );
+      await refreshSession();
+    } catch (error) {
+      setSyncMessage(
+        error instanceof Error ? error.message : "Erreur de restauration.",
+      );
+    } finally {
+      setIsSyncing(false);
+    }
   }
 
   function handleImportBackup(event: React.ChangeEvent<HTMLInputElement>) {
@@ -557,68 +750,336 @@ export default function BackupPage() {
             )}
           </section>
 
-          <div className="grid gap-5 lg:grid-cols-2">
-            <section className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 sm:p-5">
-              <h2 className="text-xl font-bold text-amber-100">
-                Risque à connaître
-              </h2>
-              <p className="mt-4 text-sm leading-6 text-amber-100/90">
-                Cette V1 utilise encore le stockage local du navigateur. Si tu
-                supprimes les données du site, l&apos;historique ou les données de
-                navigation, tes prospects peuvent disparaître. La sauvegarde
-                complète reste indispensable tant que le cloud n&apos;est pas activé.
-              </p>
-            </section>
+          <section
+            className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 sm:p-5"
+            id="cloud-synchronisation"
+          >
+            <h2 className="text-xl font-bold text-emerald-100">
+              Cloud &amp; synchronisation
+            </h2>
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Supabase configuré
+                </p>
+                <p className="mt-2 text-2xl font-bold text-white">
+                  {supabaseConfiguredLabel}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4 md:col-span-2">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Session
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                  {sessionMessage}
+                </p>
+                {!cloudSyncStatus ? (
+                  <Link
+                    href="/connexion"
+                    className="mt-4 inline-flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
+                  >
+                    Connexion
+                  </Link>
+                ) : null}
+              </article>
+            </div>
 
-            <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 sm:p-5">
-              <h2 className="text-xl font-bold text-emerald-100">
-                Préparation cloud
-              </h2>
-              <p className="mt-4 text-sm leading-6 text-emerald-50/90">
-                Prochaine étape : connecter une base de données en ligne pour
-                retrouver tes données même après nettoyage du téléphone ou
-                changement d&apos;appareil.
-              </p>
-              <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-semibold leading-6 text-white">
-                Statut cloud :{" "}
-                {cloudSyncStatus
-                  ? cloudSyncStatus.needsSync
-                    ? "Synchronisation recommandée"
-                    : "Cloud à jour"
-                  : cloudSyncStatusMessage}
-              </p>
-              <p className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-semibold leading-6 text-white">
-                Fraîcheur des données :{" "}
-                {cloudFreshnessStatus
-                  ? cloudFreshnessStatus.statusLabel
-                  : cloudFreshnessMessage}
-              </p>
-              <p className="mt-3 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-semibold leading-6 text-white">
-                Synchronisation automatique :{" "}
-                {cloudSyncSettings.autoSyncEnabled ? "Activée" : "Désactivée"}
-              </p>
-              <div className="mt-4">
-                <QuickCloudSyncButton />
-              </div>
-              <Link
-                href="/cloud"
-                className="mt-5 inline-flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Statut
+                </p>
+                <p className="mt-2 text-lg font-bold text-white">
+                  {cloudSyncStatus?.statusLabel ?? cloudSyncStatusMessage}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Dernière synchro cloud
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                  {formatDateTime(lastSyncAt)}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Synchro automatique
+                </p>
+                <p className="mt-2 text-lg font-bold text-white">
+                  {cloudSyncSettings.autoSyncEnabled ? "Activée" : "Désactivée"}
+                </p>
+              </article>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <button
+                className="min-h-11 rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
+                type="button"
+                onClick={testSupabaseConnection}
               >
-                Vérifier la préparation cloud
-              </Link>
-              <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-                <h3 className="text-base font-bold text-white">
-                  Ce que le cloud permettra
-                </h3>
-                <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-200">
-                  <li>Retrouver les données après connexion</li>
-                  <li>Utiliser plusieurs appareils</li>
-                  <li>Préparer une version équipe</li>
-                  <li>Garder localStorage comme cache de secours</li>
-                </ul>
+                Tester la connexion Supabase
+              </button>
+              <button
+                className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={uploadToCloud}
+                disabled={isSyncing || shouldSuggestCloudRestore}
+              >
+                Envoyer mes données locales vers le cloud
+              </button>
+              <button
+                className="min-h-11 rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={restoreFromCloud}
+                disabled={isSyncing}
+              >
+                Restaurer depuis le cloud vers ce navigateur
+              </button>
+            </div>
+
+            {connectionMessage ? (
+              <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-medium text-white">
+                {connectionMessage}
+              </p>
+            ) : null}
+            {syncMessage ? (
+              <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-medium leading-6 text-white">
+                {syncMessage}
+              </p>
+            ) : null}
+          </section>
+
+          <section
+            className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 sm:p-5"
+            id="fraicheur-donnees"
+          >
+            <h2 className="text-xl font-bold text-emerald-100">
+              Fraîcheur des données
+            </h2>
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Statut
+                </p>
+                <p className="mt-2 text-lg font-bold text-white">
+                  {cloudFreshnessStatus?.statusLabel ?? cloudFreshnessMessage}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Dernière synchronisation cloud
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                  {cloudFreshnessStatus
+                    ? formatDateTime(cloudFreshnessStatus.lastCloudSyncAt)
+                    : "-"}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Dernière modification locale détectée
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                  {cloudFreshnessStatus
+                    ? formatDateTime(cloudFreshnessStatus.localLastUpdatedAt)
+                    : "-"}
+                </p>
+              </article>
+            </div>
+
+            {cloudFreshnessStatus?.cloudLooksNewer ? (
+              <div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-medium leading-6 text-amber-100">
+                    Le cloud semble plus récent que ce navigateur. Il est
+                    conseillé de restaurer depuis le cloud avant d&apos;envoyer des
+                    données locales.
+                  </p>
+                  <button
+                    className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    onClick={restoreFromCloud}
+                    disabled={isSyncing}
+                  >
+                    Restaurer depuis le cloud
+                  </button>
+                </div>
               </div>
-            </section>
-          </div>
+            ) : null}
+          </section>
+
+          <section
+            className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5"
+            id="protection-anti-ecrasement"
+          >
+            <h2 className="text-xl font-bold text-white">
+              Sécurité anti-écrasement
+            </h2>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Prospects cloud
+                </p>
+                <p className="mt-2 text-3xl font-bold text-white">
+                  {cloudDataSummary?.prospectsCount ?? "-"}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Ressources cloud
+                </p>
+                <p className="mt-2 text-3xl font-bold text-white">
+                  {cloudDataSummary?.resourcesCount ?? "-"}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Paramètres cloud
+                </p>
+                <p className="mt-2 text-lg font-bold text-white">
+                  {cloudDataSummary
+                    ? cloudDataSummary.hasSettings
+                      ? "Oui"
+                      : "Non"
+                    : "-"}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Modèles cloud
+                </p>
+                <p className="mt-2 text-lg font-bold text-white">
+                  {cloudDataSummary
+                    ? cloudDataSummary.hasCustomMessageTemplates
+                      ? "Oui"
+                      : "Non"
+                    : "-"}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Statut
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                  {antiOverwriteStatusLabel}
+                </p>
+              </article>
+            </div>
+
+            {shouldSuggestCloudRestore ? (
+              <div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-medium leading-6 text-amber-100">
+                    Protection activée : ce navigateur semble vide alors que le
+                    cloud contient des données. Restaure d&apos;abord depuis le
+                    cloud pour éviter d&apos;écraser ta sauvegarde.
+                  </p>
+                  <button
+                    className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    onClick={restoreFromCloud}
+                    disabled={isSyncing}
+                  >
+                    Restaurer les données cloud sur cet appareil
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {!cloudDataSummary && cloudDataMessage ? (
+              <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-medium leading-6 text-white">
+                {cloudDataMessage}
+              </p>
+            ) : null}
+          </section>
+
+          <section
+            className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5"
+            id="parametres-synchro-automatique"
+          >
+            <h2 className="text-xl font-bold text-white">
+              Synchronisation automatique
+            </h2>
+            <p className="mt-4 text-sm leading-6 text-slate-300">
+              Quand cette option est activée, le CRM envoie automatiquement les
+              données locales vers le cloud après une modification. La
+              protection anti-écrasement reste active.
+            </p>
+            {!cloudSyncStatus && cloudSyncStatusMessage ? (
+              <p className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm font-medium leading-6 text-amber-100">
+                Connecte-toi pour utiliser la synchronisation automatique. Tu
+                peux préparer ce réglage maintenant, mais la synchro ne pourra
+                pas se faire sans connexion.
+              </p>
+            ) : null}
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-slate-950/70 p-4 text-sm font-medium text-slate-200">
+                <input
+                  className="mt-1 h-5 w-5 accent-emerald-400"
+                  type="checkbox"
+                  checked={cloudSyncSettings.autoSyncEnabled}
+                  onChange={(event) =>
+                    saveAutoSyncSettings({
+                      ...cloudSyncSettings,
+                      autoSyncEnabled: event.target.checked,
+                    })
+                  }
+                />
+                <span>
+                  <span className="block font-semibold text-white">
+                    Activer la synchronisation automatique
+                  </span>
+                  <span className="mt-1 block leading-6 text-slate-400">
+                    Désactivée par défaut. Aucun envoi automatique ne part tant
+                    que cette option reste inactive.
+                  </span>
+                </span>
+              </label>
+
+              <label className="rounded-2xl border border-white/10 bg-slate-950/70 p-4 text-sm font-medium text-slate-200">
+                Délai avant synchronisation automatique
+                <div className="mt-3 flex items-center gap-3">
+                  <input
+                    className="min-h-11 w-28 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                    min={10}
+                    type="number"
+                    value={cloudSyncSettings.autoSyncDelaySeconds}
+                    onChange={(event) =>
+                      setCloudSyncSettings({
+                        ...cloudSyncSettings,
+                        autoSyncDelaySeconds: Number(event.target.value),
+                      })
+                    }
+                    onBlur={() => saveAutoSyncSettings(cloudSyncSettings)}
+                  />
+                  <span className="text-slate-400">secondes</span>
+                </div>
+                <span className="mt-2 block text-xs leading-5 text-slate-500">
+                  Minimum conseillé : 10 secondes.
+                </span>
+              </label>
+            </div>
+
+            {autoSyncSettingsMessage ? (
+              <p className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm font-medium leading-6 text-emerald-200">
+                {autoSyncSettingsMessage}
+              </p>
+            ) : null}
+          </section>
+
+          <section className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 sm:p-5">
+            <h2 className="text-xl font-bold text-amber-100">
+              Risque à connaître
+            </h2>
+            <p className="mt-4 text-sm leading-6 text-amber-100/90">
+              Cette V1 utilise encore le stockage local du navigateur. Si tu
+              supprimes les données du site, l&apos;historique ou les données de
+              navigation, tes prospects peuvent disparaître. La sauvegarde
+              complète reste indispensable tant que le cloud n&apos;est pas activé
+              comme source principale.
+            </p>
+          </section>
         </div>
       </section>
     </main>

@@ -20,15 +20,8 @@ const toolLinks = [
 
 const dataLinks = [
   { href: "/", label: "Dashboard" },
-  { href: "/sauvegarde", label: "Sauvegarde locale" },
-  { href: "/cloud", label: "Cloud" },
-  { href: "/cloud#synchronisation-manuelle", label: "Synchronisation" },
-  { href: "/cloud#protection-anti-ecrasement", label: "Protection anti-écrasement" },
-  {
-    href: "/cloud#parametres-synchro-automatique",
-    label: "Paramètres de synchro automatique",
-  },
-  { href: "/parametres", label: "Paramètres CRM" },
+  { href: "/sauvegarde", label: "Sauvegarde" },
+  { href: "/parametres", label: "Paramètres" },
   { href: "/connexion", label: "Connexion" },
 ];
 

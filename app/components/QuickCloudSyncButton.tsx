@@ -125,8 +125,11 @@ export default function QuickCloudSyncButton({
           Synchronisation bloquée : restaure d’abord les données cloud sur cet
           appareil.
         </p>
-        <Link href="/cloud" className={secondaryLinkClassName}>
-          Ouvrir le cloud
+        <Link
+          href="/sauvegarde#protection-anti-ecrasement"
+          className={secondaryLinkClassName}
+        >
+          Ouvrir la sauvegarde
         </Link>
       </div>
     );

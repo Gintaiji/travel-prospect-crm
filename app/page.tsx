@@ -275,7 +275,7 @@ export default function HomePage() {
                 </p>
               </div>
               <Link
-                href="/cloud"
+                href="/sauvegarde#fraicheur-donnees"
                 className="inline-flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
               >
                 V&eacute;rifier le cloud
@@ -296,7 +296,7 @@ export default function HomePage() {
                 </p>
               </div>
               <Link
-                href="/cloud"
+                href="/sauvegarde#protection-anti-ecrasement"
                 className="inline-flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
               >
                 Restaurer depuis le cloud
