@@ -263,7 +263,10 @@ export default function CloudPage() {
         </header>
 
         <div className="grid gap-5">
-          <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
+          <section
+            className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5"
+            id="parametres-synchro-automatique"
+          >
             <h2 className="text-xl font-bold text-white">Configuration</h2>
             <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
               <p className="text-sm leading-6 text-slate-300">
@@ -275,7 +278,10 @@ export default function CloudPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
+          <section
+            className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5"
+            id="protection-anti-ecrasement"
+          >
             <h2 className="text-xl font-bold text-white">État actuel</h2>
             <ul className="mt-5 space-y-3 text-sm leading-6 text-slate-200">
               <li>Les données sont encore stockées localement.</li>
