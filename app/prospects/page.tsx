@@ -754,6 +754,7 @@ function isLowScore(prospect: Prospect) {
 function isLightlyQualified(prospect: Prospect) {
   return (
     prospect.status === getMatchingStatus("À contacter") ||
+    prospect.temperature === getMatchingTemperature("Aucun") ||
     isLowScore(prospect) ||
     hasImportedNote(prospect) ||
     isSocialCategory(prospect) ||
@@ -2997,9 +2998,9 @@ export default function ProspectsPage () {
       temperature: pickAllowedCsvValue(
         getCell("temperature"),
         PROSPECT_TEMPERATURES,
-        "Froid",
+        PROSPECT_TEMPERATURES[0],
       ),
-      colorType: "Jaune",
+      colorType: PROSPECT_COLOR_TYPES[0],
       score: 0,
       tags: importedTags,
       isFollower: false,
@@ -3042,7 +3043,7 @@ export default function ProspectsPage () {
       whatsapp: "",
       tags: "Voyage|Créateur de contenu",
       notes: "Contact repéré manuellement sur Instagram",
-      temperature: "Froid",
+      temperature: "Aucun",
       status: "À contacter",
       category: "Réseaux sociaux",
     };
@@ -3472,6 +3473,12 @@ export default function ProspectsPage () {
   const avoidTag = getAvoidTag();
   const qualificationStats = [
     { label: "Prospects à qualifier", value: qualificationProspects.length },
+    {
+      label: "Non définis",
+      value: qualificationProspects.filter(
+        (prospect) => prospect.temperature === getMatchingTemperature("Aucun"),
+      ).length,
+    },
     {
       label: "Froids",
       value: qualificationProspects.filter(

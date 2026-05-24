@@ -23,9 +23,9 @@ export type ProspectStatus =
   | "Pas maintenant"
   | "Refus";
 
-export type ProspectTemperature = "Froid" | "Tiède" | "Chaud";
+export type ProspectTemperature = "Aucun" | "Froid" | "Tiède" | "Chaud";
 
-export type ProspectColorType = "Jaune" | "Rouge" | "Bleu" | "Vert";
+export type ProspectColorType = "Aucun" | "Jaune" | "Rouge" | "Bleu" | "Vert";
 
 export type ProspectCategory =
   | "Prospect"
@@ -183,12 +183,14 @@ export const PROSPECT_STATUSES: ProspectStatus[] = [
 ];
 
 export const PROSPECT_TEMPERATURES: ProspectTemperature[] = [
+  "Aucun",
   "Froid",
   "Tiède",
   "Chaud",
 ];
 
 export const PROSPECT_COLOR_TYPES: ProspectColorType[] = [
+  "Aucun",
   "Jaune",
   "Rouge",
   "Bleu",
