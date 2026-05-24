@@ -1,4 +1,4 @@
-const CACHE_NAME = "travel-prospect-crm-v2";
+const CACHE_NAME = "travel-prospect-crm-v3";
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -52,7 +52,7 @@ self.addEventListener("fetch", (event) => {
           return cachedResponse;
         }
 
-        if (request.mode === "navigate") {
+        if (request.mode === "navigate" && requestUrl.pathname === "/") {
           const cachedHome = await caches.match("/aujourdhui");
 
           if (cachedHome) {
