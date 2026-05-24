@@ -13,6 +13,7 @@ type SessionStatus = {
 export default function ConnexionPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>({
     isLoading: true,
@@ -192,17 +193,32 @@ export default function ConnexionPage() {
                 />
               </label>
 
-              <label className="grid gap-2 text-sm font-semibold text-emerald-50">
-                Mot de passe
-                <input
-                  className="min-h-11 rounded-xl border border-white/10 bg-slate-950/80 px-4 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/60"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  autoComplete="current-password"
-                  required
-                />
-              </label>
+              <div className="grid gap-2 text-sm font-semibold text-emerald-50">
+                <label htmlFor="password">Mot de passe</label>
+                <div className="flex max-w-full gap-2">
+                  <input
+                    id="password"
+                    className="min-h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950/80 px-4 py-2 text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/60"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
+                  <button
+                    className="min-h-11 shrink-0 rounded-xl border border-emerald-300/40 bg-slate-950/80 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/10"
+                    type="button"
+                    aria-label={
+                      showPassword
+                        ? "Masquer le mot de passe"
+                        : "Afficher le mot de passe"
+                    }
+                    onClick={() => setShowPassword((current) => !current)}
+                  >
+                    {showPassword ? "Masquer" : "Afficher"}
+                  </button>
+                </div>
+              </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <button
