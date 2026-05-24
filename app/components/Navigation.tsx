@@ -7,7 +7,6 @@ import { useState } from "react";
 const principalLinks = [
   { href: "/aujourdhui", label: "Aujourd’hui" },
   { href: "/prospects", label: "Prospects" },
-  { href: "/relances", label: "Relances" },
   { href: "/activite", label: "Activité" },
 ];
 
