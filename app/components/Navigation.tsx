@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const principalLinks = [
   { href: "/aujourdhui", label: "Aujourd’hui" },
@@ -55,16 +55,20 @@ type NavigationLink = {
   label: string;
 };
 
+type DesktopMenuId = "outils" | "donnees";
+
 type DesktopMenuProps = {
+  id: DesktopMenuId;
   label: string;
   links: NavigationLink[];
   isActive: boolean;
-  openMenu: string | null;
-  setOpenMenu: (menu: string | null) => void;
+  openMenu: DesktopMenuId | null;
+  setOpenMenu: (menu: DesktopMenuId | null) => void;
   pathname: string;
 };
 
 function DesktopMenu({
+  id,
   label,
   links,
   isActive,
@@ -72,24 +76,23 @@ function DesktopMenu({
   setOpenMenu,
   pathname,
 }: DesktopMenuProps) {
-  const isOpen = openMenu === label;
+  const isOpen = openMenu === id;
+  const menuId = `desktop-menu-${id}`;
 
   return (
-    <div
-      className="relative"
-      onMouseEnter={() => setOpenMenu(label)}
-      onMouseLeave={() => setOpenMenu(null)}
-    >
+    <div className="relative">
       <button
         type="button"
         className={menuButtonClassName(isActive)}
-        onClick={() => setOpenMenu(isOpen ? null : label)}
+        onClick={() => setOpenMenu(isOpen ? null : id)}
         aria-expanded={isOpen}
         aria-haspopup="menu"
+        aria-controls={menuId}
       >
         {label}
       </button>
       <div
+        id={menuId}
         className={`absolute right-0 top-full z-50 mt-2 w-56 rounded-2xl border border-white/10 bg-slate-950/98 p-2 shadow-2xl shadow-black/40 backdrop-blur ${
           isOpen ? "grid" : "hidden"
         }`}
@@ -154,19 +157,51 @@ function MobileGroup({ title, links, pathname, closeMenu }: MobileGroupProps) {
 
 export default function Navigation() {
   const pathname = usePathname();
+  const navigationRef = useRef<HTMLElement>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<DesktopMenuId | null>(null);
   const isToolsActive = hasActiveLink(pathname, toolLinks);
   const isDataActive = hasActiveLink(pathname, dataLinks);
 
+  useEffect(() => {
+    function closeOnOutsideClick(event: MouseEvent) {
+      if (
+        navigationRef.current &&
+        !navigationRef.current.contains(event.target as Node)
+      ) {
+        setOpenMenu(null);
+      }
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpenMenu(null);
+      }
+    }
+
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
+
   return (
-    <nav className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/95 px-4 py-3 backdrop-blur sm:px-6">
+    <nav
+      ref={navigationRef}
+      className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/95 px-4 py-3 backdrop-blur sm:px-6"
+    >
       <div className="mx-auto flex max-w-6xl flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <Link
             href="/aujourdhui"
             className="min-w-0 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300 sm:text-sm sm:tracking-[0.25em]"
-            onClick={() => setIsMenuOpen(false)}
+            onClick={() => {
+              setIsMenuOpen(false);
+              setOpenMenu(null);
+            }}
           >
             Travel Prospect CRM
           </Link>
@@ -190,12 +225,14 @@ export default function Navigation() {
                 key={navigationLink.href}
                 href={navigationLink.href}
                 className={linkClassName(isActive)}
+                onClick={() => setOpenMenu(null)}
               >
                 {navigationLink.label}
               </Link>
             );
           })}
           <DesktopMenu
+            id="outils"
             label="Outils"
             links={toolLinks}
             isActive={isToolsActive}
@@ -204,6 +241,7 @@ export default function Navigation() {
             pathname={pathname}
           />
           <DesktopMenu
+            id="donnees"
             label="Données"
             links={dataLinks}
             isActive={isDataActive}
