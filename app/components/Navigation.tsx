@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 const principalLinks = [
   { href: "/aujourdhui", label: "Aujourd’hui" },
@@ -62,8 +68,8 @@ type DesktopMenuProps = {
   label: string;
   links: NavigationLink[];
   isActive: boolean;
-  openMenu: DesktopMenuId | null;
-  setOpenMenu: (menu: DesktopMenuId | null) => void;
+  openDesktopMenu: DesktopMenuId | null;
+  setOpenDesktopMenu: Dispatch<SetStateAction<DesktopMenuId | null>>;
   pathname: string;
 };
 
@@ -72,11 +78,11 @@ function DesktopMenu({
   label,
   links,
   isActive,
-  openMenu,
-  setOpenMenu,
+  openDesktopMenu,
+  setOpenDesktopMenu,
   pathname,
 }: DesktopMenuProps) {
-  const isOpen = openMenu === id;
+  const isOpen = openDesktopMenu === id;
   const menuId = `desktop-menu-${id}`;
 
   return (
@@ -84,7 +90,9 @@ function DesktopMenu({
       <button
         type="button"
         className={menuButtonClassName(isActive)}
-        onClick={() => setOpenMenu(isOpen ? null : id)}
+        onClick={() =>
+          setOpenDesktopMenu((current) => (current === id ? null : id))
+        }
         aria-expanded={isOpen}
         aria-haspopup="menu"
         aria-controls={menuId}
@@ -110,7 +118,7 @@ function DesktopMenu({
                   ? "bg-emerald-400/10 text-emerald-200"
                   : "text-slate-200 hover:bg-emerald-400/10 hover:text-emerald-200"
               }`}
-              onClick={() => setOpenMenu(null)}
+              onClick={() => setOpenDesktopMenu(null)}
               role="menuitem"
             >
               {navigationLink.label}
@@ -157,42 +165,46 @@ function MobileGroup({ title, links, pathname, closeMenu }: MobileGroupProps) {
 
 export default function Navigation() {
   const pathname = usePathname();
-  const navigationRef = useRef<HTMLElement>(null);
+  const desktopNavRef = useRef<HTMLDivElement | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [openMenu, setOpenMenu] = useState<DesktopMenuId | null>(null);
+  const [openDesktopMenu, setOpenDesktopMenu] =
+    useState<DesktopMenuId | null>(null);
   const isToolsActive = hasActiveLink(pathname, toolLinks);
   const isDataActive = hasActiveLink(pathname, dataLinks);
 
   useEffect(() => {
-    function closeOnOutsideClick(event: MouseEvent) {
+    function handleClickOutside(event: MouseEvent) {
       if (
-        navigationRef.current &&
-        !navigationRef.current.contains(event.target as Node)
+        desktopNavRef.current &&
+        !desktopNavRef.current.contains(event.target as Node)
       ) {
-        setOpenMenu(null);
+        setOpenDesktopMenu(null);
       }
     }
 
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setOpenMenu(null);
-      }
-    }
-
-    document.addEventListener("mousedown", closeOnOutsideClick);
-    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("mousedown", handleClickOutside);
 
     return () => {
-      document.removeEventListener("mousedown", closeOnOutsideClick);
-      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpenDesktopMenu(null);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
 
   return (
-    <nav
-      ref={navigationRef}
-      className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/95 px-4 py-3 backdrop-blur sm:px-6"
-    >
+    <nav className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/95 px-4 py-3 backdrop-blur sm:px-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <Link
@@ -200,7 +212,7 @@ export default function Navigation() {
             className="min-w-0 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300 sm:text-sm sm:tracking-[0.25em]"
             onClick={() => {
               setIsMenuOpen(false);
-              setOpenMenu(null);
+              setOpenDesktopMenu(null);
             }}
           >
             Travel Prospect CRM
@@ -216,7 +228,10 @@ export default function Navigation() {
           </button>
         </div>
 
-        <div className="hidden items-center gap-2 md:flex md:flex-wrap">
+        <div
+          ref={desktopNavRef}
+          className="hidden items-center gap-2 md:flex md:flex-wrap"
+        >
           {principalLinks.map((navigationLink) => {
             const isActive = isActivePath(pathname, navigationLink.href);
 
@@ -225,7 +240,7 @@ export default function Navigation() {
                 key={navigationLink.href}
                 href={navigationLink.href}
                 className={linkClassName(isActive)}
-                onClick={() => setOpenMenu(null)}
+                onClick={() => setOpenDesktopMenu(null)}
               >
                 {navigationLink.label}
               </Link>
@@ -236,8 +251,8 @@ export default function Navigation() {
             label="Outils"
             links={toolLinks}
             isActive={isToolsActive}
-            openMenu={openMenu}
-            setOpenMenu={setOpenMenu}
+            openDesktopMenu={openDesktopMenu}
+            setOpenDesktopMenu={setOpenDesktopMenu}
             pathname={pathname}
           />
           <DesktopMenu
@@ -245,8 +260,8 @@ export default function Navigation() {
             label="Données"
             links={dataLinks}
             isActive={isDataActive}
-            openMenu={openMenu}
-            setOpenMenu={setOpenMenu}
+            openDesktopMenu={openDesktopMenu}
+            setOpenDesktopMenu={setOpenDesktopMenu}
             pathname={pathname}
           />
         </div>
