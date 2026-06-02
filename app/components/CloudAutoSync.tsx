@@ -6,11 +6,16 @@ import {
   subscribeToCloudSyncSettingsChanges,
   type CloudSyncSettings,
 } from "../lib/cloudSyncSettingsStorage";
-import { clearLastLocalChangeDate, subscribeToLocalDataChanges } from "../lib/localChangeTracker";
+import {
+  clearLastLocalChangeDate,
+  isLocalChangeTrackingPaused,
+  subscribeToLocalDataChanges,
+} from "../lib/localChangeTracker";
 import {
   canUploadLocalDataSafely,
   uploadLocalDataToCloud,
 } from "../lib/cloudSync";
+import { isStartupCloudCheckRunning } from "../lib/cloudStartupRestoreStorage";
 
 export default function CloudAutoSync() {
   const settingsRef = useRef<CloudSyncSettings>(loadCloudSyncSettings());
@@ -41,9 +46,23 @@ export default function CloudAutoSync() {
       isSyncingRef.current = true;
 
       try {
+        if (isStartupCloudCheckRunning() || isLocalChangeTrackingPaused()) {
+          console.warn(
+            "Synchronisation automatique ignoree pendant une verification ou restauration cloud.",
+          );
+          return;
+        }
+
         const safetyCheck = await canUploadLocalDataSafely();
 
         if (!safetyCheck.canUpload) {
+          return;
+        }
+
+        if (isStartupCloudCheckRunning() || isLocalChangeTrackingPaused()) {
+          console.warn(
+            "Synchronisation automatique ignoree pendant une verification ou restauration cloud.",
+          );
           return;
         }
 

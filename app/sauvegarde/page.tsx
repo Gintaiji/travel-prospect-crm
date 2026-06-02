@@ -14,6 +14,11 @@ import {
   type CloudSyncSettings,
 } from "../lib/cloudSyncSettingsStorage";
 import {
+  isStartupCloudCheckRunning,
+  loadStartupRestoreStatus,
+  type StartupRestoreStatus,
+} from "../lib/cloudStartupRestoreStorage";
+import {
   canUploadLocalDataSafely,
   getCloudDataSummary,
   getCloudFreshnessStatus,
@@ -156,6 +161,17 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatOptionalDateTime(value: string) {
+  if (!value) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
 export default function BackupPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
@@ -199,6 +215,10 @@ export default function BackupPage() {
   const [cloudSyncSettings, setCloudSyncSettings] =
     useState<CloudSyncSettings>(DEFAULT_CLOUD_SYNC_SETTINGS);
   const [autoSyncSettingsMessage, setAutoSyncSettingsMessage] = useState("");
+  const [startupRestoreStatus, setStartupRestoreStatusState] =
+    useState<StartupRestoreStatus | null>(null);
+  const [startupCloudCheckRunning, setStartupCloudCheckRunningState] =
+    useState(false);
 
   function refreshLocalSnapshot() {
     setProspects(loadProspects());
@@ -287,6 +307,8 @@ export default function BackupPage() {
     const loadStoredData = window.setTimeout(() => {
       refreshLocalSnapshot();
       setCloudSyncSettings(loadCloudSyncSettings());
+      setStartupRestoreStatusState(loadStartupRestoreStatus());
+      setStartupCloudCheckRunningState(isStartupCloudCheckRunning());
       const storedLastBackupDate = loadLastBackupDate();
 
       setLastBackupDate(storedLastBackupDate);
@@ -331,6 +353,7 @@ export default function BackupPage() {
   const antiOverwriteStatusLabel = shouldSuggestCloudRestore
     ? "Envoi bloqué pour protéger les données cloud"
     : "Aucun risque détecté";
+  const hasStartupRestoreStatus = Boolean(startupRestoreStatus?.lastCheckedAt);
 
   function exportCompleteBackup() {
     const backup: BackupFile = {
@@ -810,6 +833,72 @@ export default function BackupPage() {
                 </p>
               </article>
             </div>
+
+            <section className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+              <h3 className="text-lg font-bold text-white">
+                Chargement automatique du cloud
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-slate-300">
+                Au démarrage ou après connexion, l&apos;app vérifie le cloud avant
+                de laisser la synchronisation automatique envoyer des données.
+              </p>
+
+              {hasStartupRestoreStatus ? (
+                <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <article className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                      Dernière vérification
+                    </p>
+                    <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                      {formatOptionalDateTime(
+                        startupRestoreStatus?.lastCheckedAt ?? "",
+                      )}
+                    </p>
+                  </article>
+                  <article className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                      Dernière restauration automatique
+                    </p>
+                    <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                      {formatOptionalDateTime(
+                        startupRestoreStatus?.lastRestoredAt ?? "",
+                      )}
+                    </p>
+                  </article>
+                  <article className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                      Dernier message
+                    </p>
+                    <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                      {startupRestoreStatus?.lastMessage || "-"}
+                    </p>
+                  </article>
+                  <article className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                      Vérification en cours
+                    </p>
+                    <p className="mt-2 text-lg font-bold text-white">
+                      {startupCloudCheckRunning ? "Oui" : "Non"}
+                    </p>
+                  </article>
+                </div>
+              ) : (
+                <div className="mt-5 grid gap-3 md:grid-cols-2">
+                  <p className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm font-medium leading-6 text-white">
+                    Aucune vérification cloud automatique enregistrée pour le
+                    moment.
+                  </p>
+                  <article className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                      Vérification en cours
+                    </p>
+                    <p className="mt-2 text-lg font-bold text-white">
+                      {startupCloudCheckRunning ? "Oui" : "Non"}
+                    </p>
+                  </article>
+                </div>
+              )}
+            </section>
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <button

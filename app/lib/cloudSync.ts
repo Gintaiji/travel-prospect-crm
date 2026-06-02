@@ -11,6 +11,10 @@ import {
   loadSettings,
   saveSettings,
 } from "./settingsStorage";
+import {
+  pauseLocalChangeTracking,
+  resumeLocalChangeTracking,
+} from "./localChangeTracker";
 import type { AppSettings, Prospect, Resource } from "./types";
 
 type CloudDataRow<T> = {
@@ -476,15 +480,21 @@ export async function restoreCloudDataToLocal(): Promise<RestoreCloudSummary> {
     templateRow as CloudDataRow<CustomMessageTemplates> | null
   )?.data;
 
-  saveProspects(prospects);
-  saveResources(resources);
+  pauseLocalChangeTracking();
 
-  if (settings) {
-    saveSettings(settings);
-  }
+  try {
+    saveProspects(prospects);
+    saveResources(resources);
 
-  if (customMessageTemplates) {
-    saveCustomMessageTemplates(customMessageTemplates);
+    if (settings) {
+      saveSettings(settings);
+    }
+
+    if (customMessageTemplates) {
+      saveCustomMessageTemplates(customMessageTemplates);
+    }
+  } finally {
+    resumeLocalChangeTracking();
   }
 
   return {
