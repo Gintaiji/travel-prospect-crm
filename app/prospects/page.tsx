@@ -179,8 +179,8 @@ const MESSAGE_ASSISTANT_STYLES = ["Doux", "Naturel", "Direct"] satisfies Message
 
 const qualificationFilterOptions: Array<{ id: QualificationFilter; label: string }> = [
   { id: "all", label: "Tous les prospects à qualifier" },
-  { id: "phone-import", label: "Importés téléphone" },
-  { id: "social-import", label: "Importés réseaux sociaux" },
+  { id: "phone-import", label: "Chargés téléphone" },
+  { id: "social-import", label: "Chargés réseaux sociaux" },
   { id: "social-category", label: "Réseaux sociaux" },
   { id: "low-score", label: "Score bas" },
   { id: "no-follow-up", label: "Sans relance prévue" },
@@ -720,7 +720,11 @@ function getTemperatureSortRank(temperature: Prospect["temperature"]) {
 }
 
 function hasImportedNote(prospect: Prospect) {
-  return normalizeText(prospect.notes).includes("importe");
+  const normalizedNotes = normalizeText(prospect.notes);
+
+  return (
+    normalizedNotes.includes("importe") || normalizedNotes.includes("charge")
+  );
 }
 
 function isPhoneImported(prospect: Prospect) {
@@ -1669,7 +1673,7 @@ export default function ProspectsPage () {
       lastInteractionDate: "",
       nextActionDate: "",
       conversationHistory: [],
-      notes: "Importé depuis les contacts du téléphone",
+      notes: "Chargé depuis les contacts du téléphone",
       createdAt: now,
       updatedAt: now,
     };
@@ -1685,7 +1689,7 @@ export default function ProspectsPage () {
 
     if (!selectContacts) {
       showContactImportMessage(
-        "L'import direct depuis le téléphone n'est pas disponible sur ce navigateur. Tu peux utiliser l'import CSV.",
+        "Le chargement direct depuis le téléphone n'est pas disponible sur ce navigateur. Tu peux utiliser un CSV.",
         true,
       );
       return;
@@ -1715,7 +1719,7 @@ export default function ProspectsPage () {
 
       if (hasPotentialDuplicate) {
         const confirmed = window.confirm(
-          "Certains contacts semblent déjà exister. Importer quand même les nouveaux contacts sélectionnés ?",
+          "Certains contacts semblent déjà exister. Charger quand même les nouveaux contacts sélectionnés ?",
         );
 
         if (!confirmed) {
@@ -1726,14 +1730,14 @@ export default function ProspectsPage () {
       const updatedProspects = [...importedProspects, ...prospects];
       saveProspects(updatedProspects);
       setProspects(updatedProspects);
-      showContactImportMessage("Contacts importés avec succès.");
+      showContactImportMessage("Contacts chargés avec succès.");
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         return;
       }
 
       showContactImportMessage(
-        "Impossible d'importer les contacts depuis ce navigateur. Tu peux utiliser l'import CSV.",
+        "Impossible de charger les contacts depuis ce navigateur. Tu peux utiliser un CSV.",
         true,
       );
     }
@@ -2827,12 +2831,12 @@ export default function ProspectsPage () {
   }
 
   function showInvalidImportMessage() {
-    setBackupMessage("Fichier invalide. Import impossible.");
+    setBackupMessage("Fichier invalide. Chargement impossible.");
     setIsBackupError(true);
   }
 
   function showInvalidCsvImportMessage() {
-    setBackupMessage("CSV invalide. Import impossible.");
+    setBackupMessage("CSV invalide. Chargement impossible.");
     setIsBackupError(true);
   }
 
@@ -2842,7 +2846,10 @@ export default function ProspectsPage () {
   }
 
   function showInvalidSocialContactCsvImportMessage() {
-    showSocialContactImportMessage("CSV réseaux sociaux invalide. Import impossible.", true);
+    showSocialContactImportMessage(
+      "CSV réseaux sociaux invalide. Chargement impossible.",
+      true,
+    );
   }
 
   function getSocialLinkValues(
@@ -3015,7 +3022,7 @@ export default function ProspectsPage () {
       lastInteractionDate: "",
       nextActionDate: "",
       conversationHistory: [],
-      notes: getCell("notes") || "Importé depuis un CSV réseaux sociaux",
+      notes: getCell("notes") || "Chargé depuis un CSV réseaux sociaux",
       createdAt: now,
       updatedAt: now,
     };
@@ -3130,7 +3137,7 @@ export default function ProspectsPage () {
 
         if (hasPotentialDuplicate) {
           const confirmed = window.confirm(
-            "Certains contacts réseaux sociaux semblent déjà exister. Importer quand même les contacts ?",
+            "Certains contacts réseaux sociaux semblent déjà exister. Charger quand même les contacts ?",
           );
 
           if (!confirmed) {
@@ -3143,7 +3150,7 @@ export default function ProspectsPage () {
 
         saveProspects(updatedProspects);
         setProspects(updatedProspects);
-        showSocialContactImportMessage("Contacts réseaux sociaux importés avec succès.");
+        showSocialContactImportMessage("Contacts réseaux sociaux chargés avec succès.");
         resetSocialContactCsvImportFileInput();
       } catch {
         showInvalidSocialContactCsvImportMessage();
@@ -3203,7 +3210,7 @@ export default function ProspectsPage () {
         }
 
         const confirmed = window.confirm(
-          "Importer ce CSV ? Les prospects seront ajoutés à la liste actuelle.",
+          "Charger ce CSV ? Les prospects seront ajoutés à la liste actuelle.",
         );
 
         if (!confirmed) {
@@ -3238,7 +3245,7 @@ export default function ProspectsPage () {
           ...initialMessageAssistantState,
           style: appSettings.defaultMessageStyle,
         });
-        setBackupMessage("CSV importé avec succès.");
+        setBackupMessage("CSV chargé avec succès.");
         setIsBackupError(false);
         resetCsvImportFileInput();
       } catch {
@@ -3281,7 +3288,7 @@ export default function ProspectsPage () {
         }
 
         const confirmed = window.confirm(
-          "Importer cette sauvegarde ? Les prospects actuels seront remplacés.",
+          "Charger cette sauvegarde ? Les prospects actuels seront remplacés.",
         );
 
         if (!confirmed) {
@@ -3304,7 +3311,7 @@ export default function ProspectsPage () {
           ...initialMessageAssistantState,
           style: appSettings.defaultMessageStyle,
         });
-        setBackupMessage("Sauvegarde importée avec succès.");
+        setBackupMessage("Sauvegarde chargée avec succès.");
         setIsBackupError(false);
         resetImportFileInput();
       } catch {
@@ -3654,7 +3661,7 @@ export default function ProspectsPage () {
                 Sauvegarde des données
               </p>
               <p className="mt-2 text-sm text-slate-300">
-                Pense à exporter régulièrement tes données tant que l’application fonctionne en stockage local.
+                Pense à sauvegarder régulièrement tes données tant que l’application fonctionne en stockage local.
               </p>
               {backupMessage ? (
                 <p
@@ -3670,7 +3677,7 @@ export default function ProspectsPage () {
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Import / export JSON
+                  Sauvegarde JSON
                 </p>
                 <div className="mt-3 flex w-full flex-wrap gap-2">
                   <button
@@ -3678,10 +3685,10 @@ export default function ProspectsPage () {
                     type="button"
                     onClick={handleExportProspects}
                   >
-                    Exporter les prospects
+                    Sauvegarder les prospects
                   </button>
                   <label className="min-h-10 flex-1 cursor-pointer rounded-full border border-white/10 px-4 py-2 text-center text-xs font-semibold text-slate-200 transition hover:bg-white/5 sm:flex-none">
-                    Importer une sauvegarde
+                    Charger une sauvegarde
                     <input
                       ref={importFileInputRef}
                       accept=".json,application/json"
@@ -3695,18 +3702,18 @@ export default function ProspectsPage () {
 
               <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
-                  Importer des contacts
+                  Charger des contacts
                 </p>
                 <p className="mt-2 text-xs leading-5 text-slate-300">
-                  Sur certains téléphones, le navigateur peut te laisser choisir les contacts à importer.
-                  Rien n&apos;est importé sans ton choix.
+                  Sur certains téléphones, le navigateur peut te laisser choisir les contacts à charger.
+                  Rien n&apos;est chargé sans ton choix.
                 </p>
                 <button
                   className="mt-3 min-h-12 w-full rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
                   type="button"
                   onClick={handlePhoneContactsImport}
                 >
-                  Importer depuis le téléphone
+                  Charger contacts téléphone
                 </button>
                 {contactImportMessage ? (
                   <p
@@ -3720,15 +3727,15 @@ export default function ProspectsPage () {
 
                 <div className="mt-4 border-t border-white/10 pt-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
-                    Importer contacts réseaux sociaux
+                    Charger contacts réseaux sociaux
                   </p>
                   <p className="mt-2 text-xs leading-5 text-slate-300">
-                    Importe une liste préparée depuis Instagram, Facebook, LinkedIn, TikTok ou un autre réseau.
+                    Charge une liste préparée depuis Instagram, Facebook, LinkedIn, TikTok ou un autre réseau.
                     Aucun compte n’est connecté automatiquement.
                   </p>
                   <div className="mt-3 grid gap-2">
                     <label className="flex min-h-12 cursor-pointer items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-center text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20">
-                      Importer contacts réseaux sociaux
+                      Charger contacts réseaux sociaux
                       <input
                         ref={socialContactCsvImportFileInputRef}
                         accept=".csv,text/csv"
@@ -3759,10 +3766,10 @@ export default function ProspectsPage () {
 
               <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
-                  Import / export CSV
+                  Sauvegarde CSV
                 </p>
                 <p className="mt-2 text-xs leading-5 text-slate-300">
-                  Le CSV permet d’importer une liste préparée depuis Excel ou Google Sheets.
+                  Le CSV permet de charger une liste préparée depuis Excel ou Google Sheets.
                 </p>
                 <div className="mt-3 flex w-full flex-wrap gap-2">
                   <button
@@ -3770,10 +3777,10 @@ export default function ProspectsPage () {
                     type="button"
                     onClick={handleExportProspectsCsv}
                   >
-                    Exporter en CSV
+                    Sauvegarder en CSV
                   </button>
                   <label className="min-h-10 flex-1 cursor-pointer rounded-full border border-white/10 px-4 py-2 text-center text-xs font-semibold text-slate-200 transition hover:bg-white/5 sm:flex-none">
-                    Importer un CSV
+                    Charger un CSV
                     <input
                       ref={csvImportFileInputRef}
                       accept=".csv,text/csv"

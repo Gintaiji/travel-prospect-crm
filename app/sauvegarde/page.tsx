@@ -484,7 +484,7 @@ export default function BackupPage() {
 
   async function restoreFromCloud() {
     const shouldRestore = window.confirm(
-      "Restaurer les données cloud sur cet appareil ? Les données locales actuelles seront remplacées.",
+      "Charger les données cloud sur cet appareil ? Les données présentes sur cet appareil seront remplacées.",
     );
 
     if (!shouldRestore) {
@@ -499,16 +499,16 @@ export default function BackupPage() {
 
       refreshLocalSnapshot();
       setSyncMessage(
-        `Données restaurées depuis le cloud avec succès. ${summary.prospectsCount} prospect(s), ${summary.resourcesCount} ressource(s), paramètres ${
-          summary.settingsRestored ? "restaurés" : "non restaurés"
+        `Données chargées depuis le cloud avec succès. ${summary.prospectsCount} prospect(s), ${summary.resourcesCount} ressource(s), paramètres ${
+          summary.settingsRestored ? "chargés" : "non chargés"
         }, modèles personnalisés ${
-          summary.customMessageTemplatesRestored ? "restaurés" : "non restaurés"
+          summary.customMessageTemplatesRestored ? "chargés" : "non chargés"
         }.`,
       );
       await refreshSession();
     } catch (error) {
       setSyncMessage(
-        error instanceof Error ? error.message : "Erreur de restauration.",
+        error instanceof Error ? error.message : "Erreur de chargement.",
       );
     } finally {
       setIsSyncing(false);
@@ -527,7 +527,7 @@ export default function BackupPage() {
     }
 
     if (!selectedFile.name.toLowerCase().endsWith(".json")) {
-      setImportError("Fichier invalide. Import impossible.");
+      setImportError("Fichier invalide. Chargement impossible.");
       event.target.value = "";
       return;
     }
@@ -539,12 +539,12 @@ export default function BackupPage() {
         const parsedBackup = JSON.parse(String(fileReader.result));
 
         if (!isBackupFile(parsedBackup)) {
-          setImportError("Fichier invalide. Import impossible.");
+          setImportError("Fichier invalide. Chargement impossible.");
           return;
         }
 
         const shouldImport = window.confirm(
-          "Importer cette sauvegarde complète ? Les prospects, ressources, paramètres et modèles personnalisés seront remplacés si la sauvegarde les contient.",
+          "Charger cette sauvegarde complète ? Les prospects, ressources, paramètres et modèles personnalisés seront remplacés si la sauvegarde les contient.",
         );
 
         if (!shouldImport) {
@@ -566,16 +566,16 @@ export default function BackupPage() {
         setProspects(parsedBackup.prospects);
         setResources(parsedBackup.resources);
         setLastReadAt(new Date().toLocaleString("fr-FR"));
-        setImportMessage("Sauvegarde complète importée avec succès.");
+        setImportMessage("Sauvegarde complète chargée avec succès.");
       } catch {
-        setImportError("Fichier invalide. Import impossible.");
+        setImportError("Fichier invalide. Chargement impossible.");
       } finally {
         event.target.value = "";
       }
     };
 
     fileReader.onerror = () => {
-      setImportError("Fichier invalide. Import impossible.");
+      setImportError("Fichier invalide. Chargement impossible.");
       event.target.value = "";
     };
 
@@ -593,7 +593,7 @@ export default function BackupPage() {
             Sauvegarde
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-            Exporte, protège et prépare la synchronisation de tes données locales.
+            Sauvegarde, protège et prépare la synchronisation de tes données locales.
           </p>
         </header>
 
@@ -654,7 +654,7 @@ export default function BackupPage() {
               <div>
                 <h2 className="text-xl font-bold text-white">Sauvegarde complète</h2>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-                  Exporte les prospects, ressources, paramètres et modèles
+                  Sauvegarde les prospects, ressources, paramètres et modèles
                   personnalisés dans un fichier JSON complet.
                 </p>
               </div>
@@ -663,14 +663,14 @@ export default function BackupPage() {
                 type="button"
                 onClick={exportCompleteBackup}
               >
-                Exporter la sauvegarde complète
+                Sauvegarder mes données
               </button>
             </div>
           </section>
 
           <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
             <h2 className="text-xl font-bold text-white">
-              Importer une sauvegarde complète
+              Charger une sauvegarde
             </h2>
             <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
               <label className="flex flex-col gap-3 text-sm font-medium text-slate-200">
@@ -764,7 +764,7 @@ export default function BackupPage() {
             {showBackupReminder ? (
               <p className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-sm font-medium leading-6 text-amber-100">
                 Sauvegarde recommandée : tes données sont encore locales. Pense à
-                exporter une sauvegarde complète.
+                sauvegarder tes données.
               </p>
             ) : (
               <p className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm font-medium leading-6 text-emerald-200">
@@ -857,7 +857,7 @@ export default function BackupPage() {
                   </article>
                   <article className="rounded-2xl border border-white/10 bg-white/5 p-4">
                     <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
-                      Dernière restauration automatique
+                      Dernier chargement automatique
                     </p>
                     <p className="mt-2 text-sm font-semibold leading-6 text-white">
                       {formatOptionalDateTime(
@@ -914,7 +914,7 @@ export default function BackupPage() {
                 onClick={uploadToCloud}
                 disabled={isSyncing || shouldSuggestCloudRestore}
               >
-                Envoyer mes données locales vers le cloud
+                Sauvegarder dans le cloud
               </button>
               <button
                 className="min-h-11 rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-60"
@@ -922,7 +922,7 @@ export default function BackupPage() {
                 onClick={restoreFromCloud}
                 disabled={isSyncing}
               >
-                Restaurer depuis le cloud vers ce navigateur
+                Charger depuis le cloud
               </button>
             </div>
 
@@ -981,7 +981,7 @@ export default function BackupPage() {
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm font-medium leading-6 text-amber-100">
                     Le cloud semble plus récent que ce navigateur. Il est
-                    conseillé de restaurer depuis le cloud avant d&apos;envoyer des
+                    conseillé de charger depuis le cloud avant d&apos;envoyer des
                     données locales.
                   </p>
                   <button
@@ -990,7 +990,7 @@ export default function BackupPage() {
                     onClick={restoreFromCloud}
                     disabled={isSyncing}
                   >
-                    Restaurer depuis le cloud
+                    Charger depuis le cloud
                   </button>
                 </div>
               </div>
@@ -1060,7 +1060,7 @@ export default function BackupPage() {
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm font-medium leading-6 text-amber-100">
                     Protection activée : ce navigateur semble vide alors que le
-                    cloud contient des données. Restaure d&apos;abord depuis le
+                    cloud contient des données. Charge d&apos;abord depuis le
                     cloud pour éviter d&apos;écraser ta sauvegarde.
                   </p>
                   <button
@@ -1069,7 +1069,7 @@ export default function BackupPage() {
                     onClick={restoreFromCloud}
                     disabled={isSyncing}
                   >
-                    Restaurer les données cloud sur cet appareil
+                    Charger les données cloud sur cet appareil
                   </button>
                 </div>
               </div>

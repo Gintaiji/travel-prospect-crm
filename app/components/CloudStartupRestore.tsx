@@ -59,7 +59,7 @@ export default function CloudStartupRestore() {
           saveStartupRestoreStatus({
             lastCheckedAt: restoredAt,
             lastRestoredAt: restoredAt,
-            lastMessage: "Données restaurées depuis le cloud sur cet appareil.",
+            lastMessage: "Données chargées depuis le cloud sur cet appareil.",
           });
           return;
         }
@@ -81,7 +81,7 @@ export default function CloudStartupRestore() {
 
         if (freshnessStatus.localLooksNewer) {
           saveCheckStatus(
-            "Données locales plus récentes, aucune restauration automatique.",
+            "Données locales plus récentes, aucun chargement automatique.",
           );
           return;
         }

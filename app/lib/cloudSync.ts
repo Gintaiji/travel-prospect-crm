@@ -346,7 +346,7 @@ export async function canUploadLocalDataSafely(): Promise<UploadSafetyCheck> {
     return {
       canUpload: false,
       reason:
-        "Le navigateur local est vide alors que le cloud contient des données. Restaure d’abord les données cloud sur cet appareil.",
+        "Le navigateur local est vide alors que le cloud contient des données. Charge d’abord les données cloud sur cet appareil.",
       localHasData,
       cloudHasData,
     };

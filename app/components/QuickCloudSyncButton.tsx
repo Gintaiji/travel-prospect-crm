@@ -79,7 +79,7 @@ export default function QuickCloudSyncButton({
   async function syncNow() {
     if (safetyCheck && !safetyCheck.canUpload) {
       setMessage(
-        "Synchronisation bloquée : restaure d’abord les données cloud sur cet appareil.",
+        "Synchronisation bloquée : charge d’abord les données cloud sur cet appareil.",
       );
       return;
     }
@@ -122,7 +122,7 @@ export default function QuickCloudSyncButton({
     return (
       <div className="grid gap-2">
         <p className={messageClassName}>
-          Synchronisation bloquée : restaure d’abord les données cloud sur cet
+          Synchronisation bloquée : charge d’abord les données cloud sur cet
           appareil.
         </p>
         <Link

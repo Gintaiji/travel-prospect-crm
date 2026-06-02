@@ -660,14 +660,14 @@ export default function TodayPage() {
           <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm font-medium leading-6 text-emerald-100">
-                Données cloud disponibles : tu peux restaurer tes données sur
+                Données cloud disponibles : tu peux charger tes données sur
                 cet appareil.
               </p>
               <Link
                 className="flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
                 href="/sauvegarde#protection-anti-ecrasement"
               >
-                Restaurer depuis le cloud
+                Charger depuis le cloud
               </Link>
             </div>
           </section>
