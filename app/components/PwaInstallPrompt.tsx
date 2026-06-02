@@ -32,6 +32,11 @@ export default function PwaInstallPrompt() {
 
     function handleBeforeInstallPrompt(event: Event) {
       event.preventDefault();
+
+      if (localStorage.getItem(INSTALL_DISMISSED_STORAGE_KEY) === "true") {
+        return;
+      }
+
       setInstallPromptEvent(event as BeforeInstallPromptEvent);
     }
 
@@ -43,7 +48,7 @@ export default function PwaInstallPrompt() {
     };
   }, []);
 
-  if (!isMounted || isDismissed || !isMobile) {
+  if (!isMounted || isDismissed || !isMobile || !installPromptEvent) {
     return null;
   }
 
@@ -70,49 +75,33 @@ export default function PwaInstallPrompt() {
 
   return (
     <aside className="fixed inset-x-3 bottom-24 z-40 mx-auto max-w-md rounded-3xl border border-emerald-400/20 bg-slate-950/95 p-4 shadow-2xl shadow-black/40 backdrop-blur md:hidden">
-      {installPromptEvent ? (
-        <div className="grid gap-3">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
-              Installer l’application
-            </p>
-            <p className="mt-2 text-sm leading-6 text-slate-200">
-              Ajoute Travel Prospect CRM à ton écran d’accueil pour ouvrir
-              Aujourd’hui plus vite.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              className="min-h-11 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
-              type="button"
-              onClick={installApp}
-            >
-              Installer
-            </button>
-            <button
-              className="min-h-11 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
-              type="button"
-              onClick={dismissPrompt}
-            >
-              Plus tard
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-start justify-between gap-3">
-          <p className="text-xs leading-5 text-slate-300">
-            Sur iPhone : ouvre le menu Partager, puis choisis Sur l’écran
-            d’accueil.
+      <div className="grid gap-3">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
+            Installer l’application
           </p>
+          <p className="mt-2 text-sm leading-6 text-slate-200">
+            Ajoute Travel Prospect CRM à ton écran d’accueil pour ouvrir
+            Aujourd’hui plus vite.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <button
-            className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+            className="min-h-11 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
+            type="button"
+            onClick={installApp}
+          >
+            Installer
+          </button>
+          <button
+            className="min-h-11 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
             type="button"
             onClick={dismissPrompt}
           >
             Plus tard
           </button>
         </div>
-      )}
+      </div>
     </aside>
   );
 }
