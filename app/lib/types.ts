@@ -42,14 +42,11 @@ export type ProspectTag =
   | "Famille"
   | "Entrepreneur"
   | "Créateur de contenu"
-  | "Liberté"
   | "Potentiel partenaire"
   | "Présentation faite"
-  | "Hôtel"
   | "Vacances"
   | "Business"
   | "Revenus complémentaires"
-  | "Bien-être"
   | "À éviter";
 
 export type ResourceType =
@@ -214,14 +211,11 @@ export const PROSPECT_TAGS: ProspectTag[] = [
   "Famille",
   "Entrepreneur",
   "Créateur de contenu",
-  "Liberté",
   "Potentiel partenaire",
   "Présentation faite",
-  "Hôtel",
   "Vacances",
   "Business",
   "Revenus complémentaires",
-  "Bien-être",
   "À éviter",
 ];
 

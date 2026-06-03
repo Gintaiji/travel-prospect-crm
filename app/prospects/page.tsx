@@ -976,7 +976,6 @@ function buildMessageAssistantContext(prospect: Prospect) {
   const tagInsights = [
     hasTag("Famille") ? "les voyages en famille" : "",
     hasTag("Bons plans") ? "les bons plans" : "",
-    hasTag("Hôtel") || hasTag("Hotel") ? "le confort hôtel" : "",
     hasTag("Entrepreneur") || hasTag("Business") ? "la liberté et les projets autour du voyage" : "",
   ].filter(Boolean);
 
