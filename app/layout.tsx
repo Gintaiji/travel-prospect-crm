@@ -4,6 +4,7 @@ import CloudAutoSync from "./components/CloudAutoSync";
 import CloudStartupRestore from "./components/CloudStartupRestore";
 import MobileBottomNav from "./components/MobileBottomNav";
 import Navigation from "./components/Navigation";
+import NotificationManager from "./components/NotificationManager";
 import PwaInstallPrompt from "./components/PwaInstallPrompt";
 import ServiceWorkerRegister from "./components/ServiceWorkerRegister";
 import "./globals.css";
@@ -49,6 +50,7 @@ export default function RootLayout({
         <ServiceWorkerRegister />
         <CloudStartupRestore />
         <CloudAutoSync />
+        <NotificationManager />
         <Navigation />
         {children}
         <PwaInstallPrompt />

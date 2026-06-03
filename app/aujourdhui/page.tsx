@@ -17,6 +17,7 @@ import {
   type LocalDataSummary,
 } from "../lib/cloudSync";
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
+import { loadNotificationSettings } from "../lib/notificationSettingsStorage";
 import {
   calculateProspectScore,
   getFutureDateString,
@@ -126,6 +127,9 @@ function getLastConversationEntry(prospect: Prospect) {
 
 export default function TodayPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [notificationsEnabled, setNotificationsEnabled] = useState<
+    boolean | null
+  >(null);
   const [showBackupReminder, setShowBackupReminder] = useState(false);
   const [cloudSyncStatus, setCloudSyncStatus] =
     useState<CloudSyncStatus | null>(null);
@@ -144,6 +148,7 @@ export default function TodayPage() {
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
       setProspects(loadProspects());
+      setNotificationsEnabled(loadNotificationSettings().notificationsEnabled);
       setShowBackupReminder(shouldShowBackupReminder(loadLastBackupDate()));
     }, 0);
 
@@ -635,6 +640,28 @@ export default function TodayPage() {
                 href="/sauvegarde"
               >
                 Faire une sauvegarde
+              </Link>
+            </div>
+          </section>
+        ) : null}
+
+        {notificationsEnabled === false ? (
+          <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-base font-bold text-emerald-100">
+                  Notifications
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-emerald-100/90">
+                  Active les notifications pour être prévenu des prospects à
+                  contacter et des relances en retard.
+                </p>
+              </div>
+              <Link
+                className="flex min-h-11 items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
+                href="/parametres"
+              >
+                Ouvrir les paramètres
               </Link>
             </div>
           </section>

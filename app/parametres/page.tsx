@@ -7,6 +7,12 @@ import {
   loadSettings,
   saveSettings,
 } from "../lib/settingsStorage";
+import {
+  DEFAULT_NOTIFICATION_SETTINGS,
+  loadNotificationSettings,
+  saveNotificationSettings,
+  type NotificationSettings,
+} from "../lib/notificationSettingsStorage";
 import type { AppSettings } from "../lib/types";
 
 const messageStyles: AppSettings["defaultMessageStyle"][] = [
@@ -40,6 +46,11 @@ function buildPreviewMessage(settings: AppSettings) {
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [notificationSettings, setNotificationSettings] =
+    useState<NotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
+  const [notificationsSupported, setNotificationsSupported] = useState(false);
+  const [notificationPermission, setNotificationPermission] =
+    useState<NotificationPermission>("default");
   const [savedMessage, setSavedMessage] = useState("");
   const [isMounted, setIsMounted] = useState(false);
 
@@ -47,6 +58,12 @@ export default function SettingsPage() {
     const loadStoredSettings = window.setTimeout(() => {
       setIsMounted(true);
       setSettings(loadSettings());
+      setNotificationSettings(loadNotificationSettings());
+      setNotificationsSupported("Notification" in window);
+
+      if ("Notification" in window) {
+        setNotificationPermission(Notification.permission);
+      }
     }, 0);
 
     return () => window.clearTimeout(loadStoredSettings);
@@ -68,6 +85,88 @@ export default function SettingsPage() {
     window.setTimeout(() => {
       setSavedMessage("");
     }, 2500);
+  }
+
+  function getNotificationPermissionLabel() {
+    if (!notificationsSupported) {
+      return "Non supportées";
+    }
+
+    if (notificationPermission === "granted") {
+      return "accordée";
+    }
+
+    if (notificationPermission === "denied") {
+      return "refusée";
+    }
+
+    return "non demandée";
+  }
+
+  function saveNextNotificationSettings(
+    nextNotificationSettings: NotificationSettings,
+    message?: string,
+  ) {
+    saveNotificationSettings(nextNotificationSettings);
+    setNotificationSettings(nextNotificationSettings);
+
+    if (message) {
+      showSavedMessage(message);
+    }
+  }
+
+  async function activateNotifications() {
+    if (!("Notification" in window)) {
+      showSavedMessage("Notifications non supportées par ce navigateur.");
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+
+    setNotificationPermission(permission);
+
+    if (permission === "granted") {
+      saveNextNotificationSettings(
+        {
+          ...notificationSettings,
+          notificationsEnabled: true,
+          updatedAt: new Date().toISOString(),
+        },
+        "Notifications activées.",
+      );
+      return;
+    }
+
+    saveNextNotificationSettings(
+      {
+        ...notificationSettings,
+        notificationsEnabled: false,
+        updatedAt: new Date().toISOString(),
+      },
+      "Notifications refusées par le navigateur.",
+    );
+  }
+
+  function disableNotifications() {
+    saveNextNotificationSettings(
+      {
+        ...notificationSettings,
+        notificationsEnabled: false,
+        updatedAt: new Date().toISOString(),
+      },
+      "Notifications désactivées.",
+    );
+  }
+
+  function updateNotificationSetting<Field extends keyof Pick<
+    NotificationSettings,
+    "notifyProspectsToContact" | "notifyLateFollowUps"
+  >>(field: Field, value: NotificationSettings[Field]) {
+    saveNextNotificationSettings({
+      ...notificationSettings,
+      [field]: value,
+      updatedAt: new Date().toISOString(),
+    });
   }
 
   function handleTextChange(
@@ -259,6 +358,82 @@ export default function SettingsPage() {
                 />
               </label>
             </div>
+
+            <section className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-4 sm:p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-white">Notifications</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">
+                    Reçois un rappel local pour les prospects à contacter et les
+                    relances en retard.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
+                  <p>
+                    Support :{" "}
+                    <span className="font-semibold text-slate-100">
+                      {isMounted && notificationsSupported ? "Oui" : "Non"}
+                    </span>
+                  </p>
+                  <p className="mt-1">
+                    Permission :{" "}
+                    <span className="font-semibold text-slate-100">
+                      {isMounted ? getNotificationPermissionLabel() : "Chargement"}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3">
+                <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-slate-950/50 p-3 text-sm text-slate-200">
+                  <input
+                    checked={notificationSettings.notifyProspectsToContact}
+                    className="mt-1 h-4 w-4 accent-emerald-400"
+                    onChange={(event) =>
+                      updateNotificationSetting(
+                        "notifyProspectsToContact",
+                        event.target.checked,
+                      )
+                    }
+                    type="checkbox"
+                  />
+                  <span>Me prévenir pour les prospects à contacter</span>
+                </label>
+
+                <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-slate-950/50 p-3 text-sm text-slate-200">
+                  <input
+                    checked={notificationSettings.notifyLateFollowUps}
+                    className="mt-1 h-4 w-4 accent-emerald-400"
+                    onChange={(event) =>
+                      updateNotificationSetting(
+                        "notifyLateFollowUps",
+                        event.target.checked,
+                      )
+                    }
+                    type="checkbox"
+                  />
+                  <span>Me prévenir pour les relances en retard</span>
+                </label>
+              </div>
+
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <button
+                  className="min-h-11 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-5 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!isMounted || !notificationsSupported}
+                  onClick={activateNotifications}
+                  type="button"
+                >
+                  Activer les notifications
+                </button>
+                <button
+                  className="min-h-11 rounded-full border border-white/10 px-5 py-2 text-sm font-semibold text-slate-200 transition hover:border-emerald-400/40 hover:bg-emerald-400/10 hover:text-emerald-200"
+                  onClick={disableNotifications}
+                  type="button"
+                >
+                  Désactiver les notifications
+                </button>
+              </div>
+            </section>
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-slate-400">
