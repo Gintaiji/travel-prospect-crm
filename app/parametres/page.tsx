@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import AppVersionChecker from "../components/AppVersionChecker";
 import {
   DEFAULT_APP_SETTINGS,
   loadSettings,
@@ -494,6 +495,15 @@ export default function SettingsPage() {
                 Voir l’état du stockage local
               </Link>
             </div>
+
+            <section className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <h2 className="text-xl font-bold text-white">
+                Version de l’application
+              </h2>
+              <div className="mt-4">
+                <AppVersionChecker />
+              </div>
+            </section>
           </aside>
         </div>
       </section>

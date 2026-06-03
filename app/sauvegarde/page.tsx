@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import AppVersionChecker from "../components/AppVersionChecker";
 import {
   loadLastBackupDate,
   saveLastBackupDate,
@@ -1160,6 +1161,15 @@ export default function BackupPage() {
                 {autoSyncSettingsMessage}
               </p>
             ) : null}
+          </section>
+
+          <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
+            <h2 className="text-xl font-bold text-white">
+              Version &amp; mise à jour
+            </h2>
+            <div className="mt-4">
+              <AppVersionChecker />
+            </div>
           </section>
 
           <section className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 sm:p-5">
