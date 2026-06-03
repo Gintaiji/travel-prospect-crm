@@ -44,6 +44,7 @@ export type ProspectTag =
   | "Créateur de contenu"
   | "Liberté"
   | "Potentiel partenaire"
+  | "Présentation faite"
   | "Hôtel"
   | "Vacances"
   | "Business"
@@ -215,6 +216,7 @@ export const PROSPECT_TAGS: ProspectTag[] = [
   "Créateur de contenu",
   "Liberté",
   "Potentiel partenaire",
+  "Présentation faite",
   "Hôtel",
   "Vacances",
   "Business",
