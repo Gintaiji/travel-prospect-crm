@@ -37,3 +37,15 @@ select,
 textarea {
   max-width: 100%;
 }
+
+input[type="date"] {
+  color: #f8fafc;
+  color-scheme: dark;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 1;
+  filter: invert(82%) sepia(39%) saturate(606%) hue-rotate(96deg)
+    brightness(101%) contrast(93%);
+}
