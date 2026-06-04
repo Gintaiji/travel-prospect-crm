@@ -16,6 +16,11 @@ const principalLinks = [
   { href: "/activite", label: "Activité" },
 ];
 
+const desktopPrincipalLinks = [
+  ...principalLinks,
+  { href: "/connexion", label: "Connexion" },
+];
+
 const toolLinks = [
   { href: "/ressources", label: "Ressources" },
   { href: "/messages", label: "Messages" },
@@ -24,6 +29,10 @@ const toolLinks = [
 const dataLinks = [
   { href: "/sauvegarde", label: "Sauvegarde" },
   { href: "/parametres", label: "Paramètres" },
+];
+
+const mobileDataLinks = [
+  ...dataLinks,
   { href: "/connexion", label: "Connexion" },
 ];
 
@@ -232,7 +241,7 @@ export default function Navigation() {
           ref={desktopNavRef}
           className="hidden items-center gap-2 md:flex md:flex-wrap"
         >
-          {principalLinks.map((navigationLink) => {
+          {desktopPrincipalLinks.map((navigationLink) => {
             const isActive = isActivePath(pathname, navigationLink.href);
 
             return (
@@ -284,7 +293,7 @@ export default function Navigation() {
           />
           <MobileGroup
             title="Données"
-            links={dataLinks}
+            links={mobileDataLinks}
             pathname={pathname}
             closeMenu={() => setIsMenuOpen(false)}
           />
