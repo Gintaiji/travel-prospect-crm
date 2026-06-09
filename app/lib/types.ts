@@ -56,6 +56,9 @@ export type ResourceType =
   | "Vidéo"
   | "Document"
   | "Groupe WhatsApp"
+  | "Zoom"
+  | "Mon équipe"
+  | "Réseaux sociaux"
   | "Réservation"
   | "Autre";
 
@@ -226,6 +229,9 @@ export const RESOURCE_TYPES: ResourceType[] = [
   "Vidéo",
   "Document",
   "Groupe WhatsApp",
+  "Zoom",
+  "Mon équipe",
+  "Réseaux sociaux",
   "Réservation",
   "Autre",
 ];
