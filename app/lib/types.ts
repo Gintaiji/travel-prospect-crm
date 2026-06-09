@@ -66,6 +66,7 @@ export type Resource = {
   id: string;
   title: string;
   type: ResourceType;
+  subCategory?: string;
   url: string;
   notes: string;
   isFavorite: boolean;

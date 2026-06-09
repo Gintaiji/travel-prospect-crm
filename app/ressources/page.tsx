@@ -11,6 +11,7 @@ import { RESOURCE_TYPES, type Resource } from "../lib/types";
 type ResourceFormState = {
   title: string;
   type: Resource["type"];
+  subCategory: string;
   url: string;
   notes: string;
   isFavorite: boolean;
@@ -22,6 +23,7 @@ type TypeFilter = "Tous" | Resource["type"];
 const initialResourceFormState: ResourceFormState = {
   title: "",
   type: RESOURCE_TYPES[0],
+  subCategory: "",
   url: "",
   notes: "",
   isFavorite: false,
@@ -36,6 +38,7 @@ function getResourceSearchText(resource: Resource) {
     [
       resource.title,
       resource.type,
+      resource.subCategory ?? "",
       resource.url,
       resource.notes,
     ].join(" "),
@@ -110,6 +113,7 @@ export default function ResourcesPage() {
       id: createResourceId(),
       title: formState.title.trim(),
       type: formState.type,
+      subCategory: formState.subCategory.trim() || undefined,
       url: formState.url.trim(),
       notes: formState.notes.trim(),
       isFavorite: formState.isFavorite,
@@ -128,6 +132,7 @@ export default function ResourcesPage() {
     setEditingFormState({
       title: resource.title,
       type: resource.type,
+      subCategory: resource.subCategory ?? "",
       url: resource.url,
       notes: resource.notes,
       isFavorite: resource.isFavorite,
@@ -146,6 +151,7 @@ export default function ResourcesPage() {
         ...resource,
         title: editingFormState.title.trim(),
         type: editingFormState.type,
+        subCategory: editingFormState.subCategory.trim() || undefined,
         url: editingFormState.url.trim(),
         notes: editingFormState.notes.trim(),
         isFavorite: editingFormState.isFavorite,
@@ -246,6 +252,16 @@ export default function ResourcesPage() {
             </label>
 
             <label className="grid gap-2 text-sm text-slate-300 md:col-span-2">
+              Sous-catégorie
+              <input
+                className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                value={formState.subCategory}
+                onChange={(event) => updateFormField("subCategory", event.target.value)}
+                placeholder="Présentation publique, TikTok..."
+              />
+            </label>
+
+            <label className="grid gap-2 text-sm text-slate-300 md:col-span-2">
               URL
               <input
                 className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
@@ -294,7 +310,7 @@ export default function ResourcesPage() {
                 className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Titre, type, URL, notes..."
+                placeholder="Titre, type, sous-catégorie, URL, notes..."
               />
             </label>
 
@@ -355,6 +371,11 @@ export default function ResourcesPage() {
                         ) : null}
                       </div>
                       <p className="mt-2 text-sm font-medium text-emerald-300">{resource.type}</p>
+                      {resource.subCategory ? (
+                        <p className="mt-1 text-sm text-slate-300">
+                          {resource.subCategory}
+                        </p>
+                      ) : null}
                       <a
                         className="mt-2 block break-all text-sm text-sky-200 underline-offset-4 hover:underline"
                         href={resource.url}
@@ -440,6 +461,18 @@ export default function ResourcesPage() {
                               </option>
                             ))}
                           </select>
+                        </label>
+
+                        <label className="grid gap-1 text-xs text-slate-300 md:col-span-2">
+                          Sous-catégorie
+                          <input
+                            className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                            value={editingFormState.subCategory}
+                            onChange={(event) =>
+                              updateEditingFormField("subCategory", event.target.value)
+                            }
+                            placeholder="Présentation publique, TikTok..."
+                          />
                         </label>
 
                         <label className="grid gap-1 text-xs text-slate-300 md:col-span-2">
