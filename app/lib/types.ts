@@ -59,7 +59,7 @@ export type ResourceType =
   | "Zoom"
   | "Mon équipe"
   | "Réseaux sociaux"
-  | "Réservation"
+  | "Rendez-vous"
   | "Autre";
 
 export type Resource = {
@@ -232,6 +232,6 @@ export const RESOURCE_TYPES: ResourceType[] = [
   "Zoom",
   "Mon équipe",
   "Réseaux sociaux",
-  "Réservation",
+  "Rendez-vous",
   "Autre",
 ];

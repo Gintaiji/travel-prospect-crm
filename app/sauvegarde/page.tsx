@@ -39,7 +39,11 @@ import {
 } from "../lib/messageTemplateStorage";
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
 import { getTodayDateString } from "../lib/prospectUtils";
-import { loadResources, saveResources } from "../lib/resourceStorage";
+import {
+  loadResources,
+  normalizeResources,
+  saveResources,
+} from "../lib/resourceStorage";
 import {
   DEFAULT_APP_SETTINGS,
   loadSettings,
@@ -552,8 +556,10 @@ export default function BackupPage() {
           return;
         }
 
+        const importedResources = normalizeResources(parsedBackup.resources);
+
         saveProspects(parsedBackup.prospects);
-        saveResources(parsedBackup.resources);
+        saveResources(importedResources.resources);
         if (hasBackupSettings(parsedBackup)) {
           const importedSettings = normalizeImportedSettings(parsedBackup.settings);
 
@@ -565,7 +571,7 @@ export default function BackupPage() {
           setCustomMessageTemplates(parsedBackup.customMessageTemplates);
         }
         setProspects(parsedBackup.prospects);
-        setResources(parsedBackup.resources);
+        setResources(importedResources.resources);
         setLastReadAt(new Date().toLocaleString("fr-FR"));
         setImportMessage("Sauvegarde complète chargée avec succès.");
       } catch {
