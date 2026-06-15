@@ -18,10 +18,13 @@ import {
   type Prospect,
 } from "../lib/types";
 import {
+  DEFAULT_STREET_MARKETING_SURVEY_STORAGE,
+  createStreetMarketingSurvey,
   DEFAULT_STREET_MARKETING_SURVEY,
   loadStreetMarketingSurvey,
   saveStreetMarketingSurvey,
   type StreetMarketingSurvey,
+  type StreetMarketingSurveyStorage,
 } from "../lib/streetMarketingSurveyStorage";
 
 type QuickContactFormState = {
@@ -69,11 +72,14 @@ function getProspectName(prospect: Prospect) {
 }
 
 export default function StreetMarketingPage() {
-  const [survey, setSurvey] = useState<StreetMarketingSurvey>(
-    DEFAULT_STREET_MARKETING_SURVEY,
+  const [surveyStorage, setSurveyStorage] = useState<StreetMarketingSurveyStorage>(
+    DEFAULT_STREET_MARKETING_SURVEY_STORAGE,
   );
   const [draftQuestions, setDraftQuestions] = useState<string[]>(
     DEFAULT_STREET_MARKETING_SURVEY.questions,
+  );
+  const [draftSurveyName, setDraftSurveyName] = useState(
+    DEFAULT_STREET_MARKETING_SURVEY.name,
   );
   const [isEditingSurvey, setIsEditingSurvey] = useState(false);
   const [quickContactForm, setQuickContactForm] =
@@ -84,12 +90,23 @@ export default function StreetMarketingPage() {
   const [streetMarketingProspects, setStreetMarketingProspects] = useState<
     Prospect[]
   >([]);
+  const activeSurvey =
+    surveyStorage.surveys.find(
+      (survey) => survey.id === surveyStorage.activeSurveyId,
+    ) ??
+    surveyStorage.surveys[0] ??
+    DEFAULT_STREET_MARKETING_SURVEY;
 
   useEffect(() => {
-    const storedSurvey = loadStreetMarketingSurvey();
+    const storedSurveyStorage = loadStreetMarketingSurvey();
 
-    setSurvey(storedSurvey);
-    setDraftQuestions(storedSurvey.questions);
+    setSurveyStorage(storedSurveyStorage);
+    const storedActiveSurvey =
+      storedSurveyStorage.surveys.find(
+        (survey) => survey.id === storedSurveyStorage.activeSurveyId,
+      ) ?? storedSurveyStorage.surveys[0];
+    setDraftSurveyName(storedActiveSurvey.name);
+    setDraftQuestions(storedActiveSurvey.questions);
   }, []);
 
   useEffect(() => {
@@ -105,13 +122,69 @@ export default function StreetMarketingPage() {
   useEffect(() => {
     setQuickContactForm((currentForm) => ({
       ...currentForm,
-      answers: survey.questions.map((_, index) => currentForm.answers[index] ?? ""),
+      answers: activeSurvey.questions.map(
+        (_, index) => currentForm.answers[index] ?? "",
+      ),
     }));
-  }, [survey.questions]);
+  }, [activeSurvey.questions]);
 
   function startSurveyEdit() {
-    setDraftQuestions(survey.questions);
+    setDraftSurveyName(activeSurvey.name);
+    setDraftQuestions(activeSurvey.questions);
     setIsEditingSurvey(true);
+  }
+
+  function persistSurveyStorage(nextSurveyStorage: StreetMarketingSurveyStorage) {
+    saveStreetMarketingSurvey(nextSurveyStorage);
+    setSurveyStorage(nextSurveyStorage);
+  }
+
+  function updateActiveSurveyId(activeSurveyId: string) {
+    const nextSurveyStorage = {
+      ...surveyStorage,
+      activeSurveyId,
+    };
+
+    persistSurveyStorage(nextSurveyStorage);
+    const nextActiveSurvey =
+      nextSurveyStorage.surveys.find((survey) => survey.id === activeSurveyId) ??
+      nextSurveyStorage.surveys[0];
+    setDraftSurveyName(nextActiveSurvey.name);
+    setDraftQuestions(nextActiveSurvey.questions);
+    setIsEditingSurvey(false);
+  }
+
+  function addSurvey() {
+    const newSurvey = createStreetMarketingSurvey();
+    const nextSurveyStorage = {
+      surveys: [...surveyStorage.surveys, newSurvey],
+      activeSurveyId: newSurvey.id,
+    };
+
+    persistSurveyStorage(nextSurveyStorage);
+    setDraftSurveyName(newSurvey.name);
+    setDraftQuestions(newSurvey.questions);
+    setIsEditingSurvey(true);
+  }
+
+  function deleteActiveSurvey() {
+    if (surveyStorage.surveys.length <= 1) {
+      return;
+    }
+
+    const remainingSurveys = surveyStorage.surveys.filter(
+      (survey) => survey.id !== activeSurvey.id,
+    );
+    const nextActiveSurvey = remainingSurveys[0];
+    const nextSurveyStorage = {
+      surveys: remainingSurveys,
+      activeSurveyId: nextActiveSurvey.id,
+    };
+
+    persistSurveyStorage(nextSurveyStorage);
+    setDraftSurveyName(nextActiveSurvey.name);
+    setDraftQuestions(nextActiveSurvey.questions);
+    setIsEditingSurvey(false);
   }
 
   function updateDraftQuestion(index: number, value: string) {
@@ -142,19 +215,30 @@ export default function StreetMarketingPage() {
       .map((question) => question.trim())
       .filter(Boolean);
     const updatedSurvey: StreetMarketingSurvey = {
+      ...activeSurvey,
+      name: draftSurveyName.trim() || activeSurvey.name,
       questions: cleanedQuestions.length
         ? cleanedQuestions
         : DEFAULT_STREET_MARKETING_SURVEY.questions,
+      updatedAt: new Date().toISOString(),
+    };
+    const nextSurveyStorage = {
+      ...surveyStorage,
+      surveys: surveyStorage.surveys.map((survey) =>
+        survey.id === activeSurvey.id ? updatedSurvey : survey,
+      ),
+      activeSurveyId: updatedSurvey.id,
     };
 
-    saveStreetMarketingSurvey(updatedSurvey);
-    setSurvey(updatedSurvey);
+    persistSurveyStorage(nextSurveyStorage);
+    setDraftSurveyName(updatedSurvey.name);
     setDraftQuestions(updatedSurvey.questions);
     setIsEditingSurvey(false);
   }
 
   function cancelSurveyEdit() {
-    setDraftQuestions(survey.questions);
+    setDraftSurveyName(activeSurvey.name);
+    setDraftQuestions(activeSurvey.questions);
     setIsEditingSurvey(false);
   }
 
@@ -170,7 +254,7 @@ export default function StreetMarketingPage() {
 
   function updateQuickContactAnswer(index: number, value: string) {
     setQuickContactForm((currentForm) => {
-      const updatedAnswers = survey.questions.map(
+      const updatedAnswers = activeSurvey.questions.map(
         (_, answerIndex) => currentForm.answers[answerIndex] ?? "",
       );
       updatedAnswers[index] = value;
@@ -183,12 +267,13 @@ export default function StreetMarketingPage() {
   }
 
   function buildStreetMarketingNotes(contact: QuickContactFormState) {
-    const surveyAnswerLines = survey.questions.flatMap((question, index) => [
+    const surveyAnswerLines = activeSurvey.questions.flatMap((question, index) => [
       `Question ${index + 1} : ${question}`,
       `Réponse ${index + 1} : ${contact.answers[index] || "Non renseignée"}`,
     ]);
 
     return [
+      `Sondage : ${activeSurvey.name}`,
       `Lieu de rencontre : ${contact.meetingPlace || "Non renseigné"}`,
       ...surveyAnswerLines,
       `Note terrain : ${contact.fieldNote || "Non renseignée"}`,
@@ -205,7 +290,7 @@ export default function StreetMarketingPage() {
       lastName: quickContactForm.lastName.trim(),
       phone: quickContactForm.phone.trim(),
       meetingPlace: quickContactForm.meetingPlace.trim(),
-      answers: survey.questions.map((_, index) =>
+      answers: activeSurvey.questions.map((_, index) =>
         (quickContactForm.answers[index] ?? "").trim(),
       ),
       fieldNote: quickContactForm.fieldNote.trim(),
@@ -322,20 +407,57 @@ export default function StreetMarketingPage() {
               <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
                 Sondage rapide
               </p>
-              {!isEditingSurvey ? (
+              <div className="flex flex-wrap gap-2">
+                {!isEditingSurvey ? (
+                  <button
+                    className="min-h-10 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+                    type="button"
+                    onClick={startSurveyEdit}
+                  >
+                    Modifier le sondage
+                  </button>
+                ) : null}
                 <button
                   className="min-h-10 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
                   type="button"
-                  onClick={startSurveyEdit}
+                  onClick={addSurvey}
                 >
-                  Modifier le sondage
+                  Ajouter un sondage
                 </button>
-              ) : null}
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+              <label className="grid gap-2 text-sm font-medium text-slate-200">
+                Sondage actif
+                <select
+                  className="min-h-11 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
+                  value={activeSurvey.id}
+                  onChange={(event) => updateActiveSurveyId(event.target.value)}
+                >
+                  {surveyStorage.surveys.map((surveyOption) => (
+                    <option key={surveyOption.id} value={surveyOption.id}>
+                      {surveyOption.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="min-h-10 rounded-full border border-red-400/40 bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-200 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                  onClick={deleteActiveSurvey}
+                  disabled={surveyStorage.surveys.length <= 1}
+                >
+                  Supprimer le sondage
+                </button>
+              </div>
             </div>
 
             {!isEditingSurvey ? (
               <ol className="mt-5 grid gap-3">
-                {survey.questions.map((question, index) => (
+                {activeSurvey.questions.map((question, index) => (
                   <li
                     className="rounded-2xl border border-white/10 bg-slate-950/70 p-4 text-sm leading-6 text-slate-200"
                     key={index}
@@ -349,6 +471,15 @@ export default function StreetMarketingPage() {
               </ol>
             ) : (
               <div className="mt-5 grid gap-4">
+                <label className="grid gap-2 text-sm font-medium text-slate-200">
+                  Nom du sondage
+                  <input
+                    className="min-h-11 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                    value={draftSurveyName}
+                    onChange={(event) => setDraftSurveyName(event.target.value)}
+                  />
+                </label>
+
                 {draftQuestions.map((question, index) => (
                   <div className="grid gap-2" key={index}>
                     <div className="flex items-center justify-between gap-3">
@@ -461,7 +592,7 @@ export default function StreetMarketingPage() {
                 />
               </label>
 
-              {survey.questions.map((question, index) => (
+              {activeSurvey.questions.map((question, index) => (
                 <label
                   className="grid gap-2 text-sm font-medium text-slate-200"
                   key={index}
@@ -557,7 +688,7 @@ export default function StreetMarketingPage() {
                       {preparedContact.meetingPlace || "Non renseigné"}
                     </dd>
                   </div>
-                  {survey.questions.map((question, index) => (
+                  {activeSurvey.questions.map((question, index) => (
                     <div key={index}>
                       <dt className="text-xs uppercase tracking-[0.18em] text-slate-500">
                         Réponse question {index + 1}
