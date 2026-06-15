@@ -1,5 +1,10 @@
 export type StreetMarketingSurvey = {
-  questions: [string, string];
+  questions: string[];
+};
+
+type LegacyStreetMarketingSurvey = Partial<StreetMarketingSurvey> & {
+  question1?: unknown;
+  question2?: unknown;
 };
 
 export const STREET_MARKETING_SURVEY_STORAGE_KEY =
@@ -23,25 +28,38 @@ function isBrowser() {
   return typeof window !== "undefined";
 }
 
-function normalizeSurvey(value: Partial<StreetMarketingSurvey>): StreetMarketingSurvey {
-  const firstQuestion =
-    typeof value.questions?.[0] === "string" && value.questions[0].trim()
-      ? value.questions[0]
-      : DEFAULT_STREET_MARKETING_SURVEY.questions[0];
-  const secondQuestion =
-    typeof value.questions?.[1] === "string" && value.questions[1].trim()
-      ? value.questions[1]
-      : DEFAULT_STREET_MARKETING_SURVEY.questions[1];
+function getLegacyQuestionArray(value: LegacyStreetMarketingSurvey) {
+  const legacyQuestions = [value.question1, value.question2].filter(
+    (question): question is string =>
+      typeof question === "string" && question.trim().length > 0,
+  );
+
+  return legacyQuestions.length > 0 ? legacyQuestions : null;
+}
+
+function normalizeSurvey(value: LegacyStreetMarketingSurvey): StreetMarketingSurvey {
+  const rawQuestions = Array.isArray(value.questions)
+    ? value.questions
+    : getLegacyQuestionArray(value);
+  const questions = rawQuestions
+    ?.filter((question): question is string => typeof question === "string")
+    .map((question) => question.trim())
+    .filter(Boolean);
 
   return {
-    questions: [firstQuestion, secondQuestion],
+    questions: questions?.length
+      ? questions
+      : DEFAULT_STREET_MARKETING_SURVEY.questions,
   };
 }
 
 function shouldMigrateLegacyDefaultSurvey(survey: StreetMarketingSurvey) {
   return (
-    survey.questions[0] === LEGACY_DEFAULT_STREET_MARKETING_SURVEY.questions[0] &&
-    survey.questions[1] === LEGACY_DEFAULT_STREET_MARKETING_SURVEY.questions[1]
+    survey.questions.length === LEGACY_DEFAULT_STREET_MARKETING_SURVEY.questions.length &&
+    survey.questions.every(
+      (question, index) =>
+        question === LEGACY_DEFAULT_STREET_MARKETING_SURVEY.questions[index],
+    )
   );
 }
 
@@ -58,7 +76,7 @@ export function loadStreetMarketingSurvey(): StreetMarketingSurvey {
 
   try {
     const normalizedSurvey = normalizeSurvey(
-      JSON.parse(storedSurvey) as Partial<StreetMarketingSurvey>,
+      JSON.parse(storedSurvey) as LegacyStreetMarketingSurvey,
     );
 
     if (shouldMigrateLegacyDefaultSurvey(normalizedSurvey)) {

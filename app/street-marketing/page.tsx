@@ -29,8 +29,7 @@ type QuickContactFormState = {
   lastName: string;
   phone: string;
   meetingPlace: string;
-  firstAnswer: string;
-  secondAnswer: string;
+  answers: string[];
   fieldNote: string;
 };
 
@@ -43,8 +42,7 @@ const initialQuickContactFormState: QuickContactFormState = {
   lastName: "",
   phone: "",
   meetingPlace: "",
-  firstAnswer: "",
-  secondAnswer: "",
+  answers: [],
   fieldNote: "",
 };
 
@@ -74,7 +72,7 @@ export default function StreetMarketingPage() {
   const [survey, setSurvey] = useState<StreetMarketingSurvey>(
     DEFAULT_STREET_MARKETING_SURVEY,
   );
-  const [draftQuestions, setDraftQuestions] = useState<[string, string]>(
+  const [draftQuestions, setDraftQuestions] = useState<string[]>(
     DEFAULT_STREET_MARKETING_SURVEY.questions,
   );
   const [isEditingSurvey, setIsEditingSurvey] = useState(false);
@@ -104,26 +102,49 @@ export default function StreetMarketingPage() {
     setStreetMarketingProspects(loadedProspects);
   }, [quickContactMessage]);
 
+  useEffect(() => {
+    setQuickContactForm((currentForm) => ({
+      ...currentForm,
+      answers: survey.questions.map((_, index) => currentForm.answers[index] ?? ""),
+    }));
+  }, [survey.questions]);
+
   function startSurveyEdit() {
     setDraftQuestions(survey.questions);
     setIsEditingSurvey(true);
   }
 
-  function updateDraftQuestion(index: 0 | 1, value: string) {
+  function updateDraftQuestion(index: number, value: string) {
     setDraftQuestions((currentQuestions) => {
-      const updatedQuestions: [string, string] = [...currentQuestions];
+      const updatedQuestions = [...currentQuestions];
       updatedQuestions[index] = value;
 
       return updatedQuestions;
     });
   }
 
+  function addDraftQuestion() {
+    setDraftQuestions((currentQuestions) => [...currentQuestions, ""]);
+  }
+
+  function removeDraftQuestion(index: number) {
+    setDraftQuestions((currentQuestions) => {
+      if (currentQuestions.length <= 1) {
+        return currentQuestions;
+      }
+
+      return currentQuestions.filter((_, questionIndex) => questionIndex !== index);
+    });
+  }
+
   function saveSurvey() {
+    const cleanedQuestions = draftQuestions
+      .map((question) => question.trim())
+      .filter(Boolean);
     const updatedSurvey: StreetMarketingSurvey = {
-      questions: [
-        draftQuestions[0].trim() || DEFAULT_STREET_MARKETING_SURVEY.questions[0],
-        draftQuestions[1].trim() || DEFAULT_STREET_MARKETING_SURVEY.questions[1],
-      ],
+      questions: cleanedQuestions.length
+        ? cleanedQuestions
+        : DEFAULT_STREET_MARKETING_SURVEY.questions,
     };
 
     saveStreetMarketingSurvey(updatedSurvey);
@@ -147,13 +168,29 @@ export default function StreetMarketingPage() {
     }));
   }
 
+  function updateQuickContactAnswer(index: number, value: string) {
+    setQuickContactForm((currentForm) => {
+      const updatedAnswers = survey.questions.map(
+        (_, answerIndex) => currentForm.answers[answerIndex] ?? "",
+      );
+      updatedAnswers[index] = value;
+
+      return {
+        ...currentForm,
+        answers: updatedAnswers,
+      };
+    });
+  }
+
   function buildStreetMarketingNotes(contact: QuickContactFormState) {
+    const surveyAnswerLines = survey.questions.flatMap((question, index) => [
+      `Question ${index + 1} : ${question}`,
+      `Réponse ${index + 1} : ${contact.answers[index] || "Non renseignée"}`,
+    ]);
+
     return [
       `Lieu de rencontre : ${contact.meetingPlace || "Non renseigné"}`,
-      `Question 1 : ${survey.questions[0]}`,
-      `Réponse 1 : ${contact.firstAnswer || "Non renseignée"}`,
-      `Question 2 : ${survey.questions[1]}`,
-      `Réponse 2 : ${contact.secondAnswer || "Non renseignée"}`,
+      ...surveyAnswerLines,
       `Note terrain : ${contact.fieldNote || "Non renseignée"}`,
       "Relance automatique prévue sous 24h.",
       "Ajouté depuis Street Marketing",
@@ -168,8 +205,9 @@ export default function StreetMarketingPage() {
       lastName: quickContactForm.lastName.trim(),
       phone: quickContactForm.phone.trim(),
       meetingPlace: quickContactForm.meetingPlace.trim(),
-      firstAnswer: quickContactForm.firstAnswer.trim(),
-      secondAnswer: quickContactForm.secondAnswer.trim(),
+      answers: survey.questions.map((_, index) =>
+        (quickContactForm.answers[index] ?? "").trim(),
+      ),
       fieldNote: quickContactForm.fieldNote.trim(),
     };
 
@@ -311,25 +349,41 @@ export default function StreetMarketingPage() {
               </ol>
             ) : (
               <div className="mt-5 grid gap-4">
-                <label className="grid gap-2 text-sm font-medium text-slate-200">
-                  Question 1
-                  <textarea
-                    className="min-h-28 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
-                    value={draftQuestions[0]}
-                    onChange={(event) => updateDraftQuestion(0, event.target.value)}
-                  />
-                </label>
-
-                <label className="grid gap-2 text-sm font-medium text-slate-200">
-                  Question 2
-                  <textarea
-                    className="min-h-28 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
-                    value={draftQuestions[1]}
-                    onChange={(event) => updateDraftQuestion(1, event.target.value)}
-                  />
-                </label>
+                {draftQuestions.map((question, index) => (
+                  <div className="grid gap-2" key={index}>
+                    <div className="flex items-center justify-between gap-3">
+                      <label
+                        className="text-sm font-medium text-slate-200"
+                        htmlFor={`street-marketing-question-${index}`}
+                      >
+                        Question {index + 1}
+                      </label>
+                      <button
+                        className="min-h-9 rounded-full border border-red-400/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-200 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                        type="button"
+                        onClick={() => removeDraftQuestion(index)}
+                        disabled={draftQuestions.length <= 1}
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                    <textarea
+                      className="min-h-28 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      id={`street-marketing-question-${index}`}
+                      value={question}
+                      onChange={(event) => updateDraftQuestion(index, event.target.value)}
+                    />
+                  </div>
+                ))}
 
                 <div className="flex flex-wrap gap-2">
+                  <button
+                    className="min-h-11 rounded-full border border-emerald-400/30 px-5 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+                    type="button"
+                    onClick={addDraftQuestion}
+                  >
+                    Ajouter une question
+                  </button>
                   <button
                     className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
                     type="button"
@@ -407,37 +461,26 @@ export default function StreetMarketingPage() {
                 />
               </label>
 
-              <label className="grid gap-2 text-sm font-medium text-slate-200">
-                <span>
-                  Réponse question 1
-                  <span className="mt-1 block text-xs font-normal leading-5 text-slate-400">
-                    {survey.questions[0]}
+              {survey.questions.map((question, index) => (
+                <label
+                  className="grid gap-2 text-sm font-medium text-slate-200"
+                  key={index}
+                >
+                  <span>
+                    Réponse question {index + 1}
+                    <span className="mt-1 block text-xs font-normal leading-5 text-slate-400">
+                      {question}
+                    </span>
                   </span>
-                </span>
-                <textarea
-                  className="min-h-24 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
-                  value={quickContactForm.firstAnswer}
-                  onChange={(event) =>
-                    updateQuickContactField("firstAnswer", event.target.value)
-                  }
-                />
-              </label>
-
-              <label className="grid gap-2 text-sm font-medium text-slate-200">
-                <span>
-                  Réponse question 2
-                  <span className="mt-1 block text-xs font-normal leading-5 text-slate-400">
-                    {survey.questions[1]}
-                  </span>
-                </span>
-                <textarea
-                  className="min-h-24 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
-                  value={quickContactForm.secondAnswer}
-                  onChange={(event) =>
-                    updateQuickContactField("secondAnswer", event.target.value)
-                  }
-                />
-              </label>
+                  <textarea
+                    className="min-h-24 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                    value={quickContactForm.answers[index] ?? ""}
+                    onChange={(event) =>
+                      updateQuickContactAnswer(index, event.target.value)
+                    }
+                  />
+                </label>
+              ))}
 
               <label className="grid gap-2 text-sm font-medium text-slate-200">
                 Note terrain
@@ -514,22 +557,19 @@ export default function StreetMarketingPage() {
                       {preparedContact.meetingPlace || "Non renseigné"}
                     </dd>
                   </div>
-                  <div>
-                    <dt className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                      Réponse question 1
-                    </dt>
-                    <dd className="mt-1 text-slate-200">
-                      {preparedContact.firstAnswer || "Non renseignée"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                      Réponse question 2
-                    </dt>
-                    <dd className="mt-1 text-slate-200">
-                      {preparedContact.secondAnswer || "Non renseignée"}
-                    </dd>
-                  </div>
+                  {survey.questions.map((question, index) => (
+                    <div key={index}>
+                      <dt className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                        Réponse question {index + 1}
+                      </dt>
+                      <dd className="mt-1 text-slate-200">
+                        <span className="mb-1 block text-xs text-slate-500">
+                          {question}
+                        </span>
+                        {preparedContact.answers[index] || "Non renseignée"}
+                      </dd>
+                    </div>
+                  ))}
                   <div>
                     <dt className="text-xs uppercase tracking-[0.18em] text-slate-500">
                       Note terrain
