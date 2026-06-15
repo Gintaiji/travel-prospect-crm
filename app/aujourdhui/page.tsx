@@ -19,6 +19,7 @@ import {
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
 import { loadNotificationSettings } from "../lib/notificationSettingsStorage";
 import {
+  buildGoogleCalendarFollowUpUrl,
   calculateProspectScore,
   getFutureDateString,
   getProspectDisplayName,
@@ -399,6 +400,7 @@ export default function TodayPage() {
     const tags = prospect.tags ?? [];
     const lastConversationEntry = getLastConversationEntry(prospect);
     const isTreatmentFormOpen = activeTreatmentProspectId === prospect.id;
+    const googleCalendarUrl = buildGoogleCalendarFollowUpUrl(prospect);
 
     return (
       <article
@@ -601,6 +603,16 @@ export default function TodayPage() {
           >
             Voir la fiche
           </Link>
+          {googleCalendarUrl ? (
+            <a
+              className="flex min-h-12 items-center justify-center rounded-full border border-white/10 px-4 py-2 text-center text-sm font-semibold text-slate-200 transition hover:bg-white/5"
+              href={googleCalendarUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Ajouter à Google Agenda
+            </a>
+          ) : null}
         </div>
       </article>
     );
@@ -752,6 +764,7 @@ export default function TodayPage() {
                 const score = calculateProspectScore(prospect);
                 const tags = prospect.tags ?? [];
                 const lastConversationEntry = getLastConversationEntry(prospect);
+                const googleCalendarUrl = buildGoogleCalendarFollowUpUrl(prospect);
 
                 return (
                   <article
@@ -862,6 +875,16 @@ export default function TodayPage() {
                       >
                         Reporter +7 jours
                       </button>
+                      {googleCalendarUrl ? (
+                        <a
+                          className="flex min-h-12 items-center justify-center rounded-full border border-white/10 px-4 py-2 text-center text-sm font-semibold text-slate-200 transition hover:bg-white/5"
+                          href={googleCalendarUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Ajouter à Google Agenda
+                        </a>
+                      ) : null}
                     </div>
                   </article>
                 );

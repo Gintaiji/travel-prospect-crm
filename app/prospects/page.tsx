@@ -8,6 +8,7 @@ import {
 } from "../lib/prospectStorage";
 import { loadResources } from "../lib/resourceStorage";
 import {
+  buildGoogleCalendarFollowUpUrl,
   calculateProspectScore,
   getFutureDateString,
   getProspectDisplayName,
@@ -3328,6 +3329,8 @@ export default function ProspectsPage () {
   }
 
   function renderQuickFollowUpControls(prospect: Prospect, isCompact = false) {
+    const googleCalendarUrl = buildGoogleCalendarFollowUpUrl(prospect);
+
     return (
       <div
         className={
@@ -3376,6 +3379,16 @@ export default function ProspectsPage () {
           >
             Effacer
           </button>
+          {googleCalendarUrl ? (
+            <a
+              className="flex min-h-10 items-center justify-center rounded-full border border-white/10 px-3 py-2 text-center text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+              href={googleCalendarUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Ajouter à Google Agenda
+            </a>
+          ) : null}
         </div>
       </div>
     );
@@ -6373,7 +6386,17 @@ export default function ProspectsPage () {
                           <p><span className="text-slate-500">Température :</span> <span className="font-medium text-white">{prospect.temperature}</span></p>
                           <p><span className="text-slate-500">Type couleur :</span> <span className="font-medium text-white">{prospect.colorType}</span></p>
                           {prospect.nextActionDate ? (
-                            <p><span className="text-slate-500">Prochaine relance :</span> <span className="font-medium text-white">{prospect.nextActionDate}</span></p>
+                            <div className="grid gap-2">
+                              <p><span className="text-slate-500">Prochaine relance :</span> <span className="font-medium text-white">{prospect.nextActionDate}</span></p>
+                              <a
+                                className="inline-flex min-h-10 w-fit items-center justify-center rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+                                href={buildGoogleCalendarFollowUpUrl(prospect)}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Ajouter à Google Agenda
+                              </a>
+                            </div>
                           ) : null}
                           {isDetailedView && prospect.notes ? (
                             <p className="leading-5"><span className="text-slate-500">Notes :</span> <span className="font-medium text-white">{prospect.notes}</span></p>

@@ -98,3 +98,39 @@ export function getProspectDisplayName(prospect: Prospect) {
 
   return prospect.displayName.trim() || fullName || "Sans nom";
 }
+
+function formatGoogleCalendarDateTime(date: string, time: string) {
+  return `${date.replace(/-/g, "")}T${time}`;
+}
+
+export function buildGoogleCalendarFollowUpUrl(prospect: Prospect) {
+  if (!prospect.nextActionDate) {
+    return "";
+  }
+
+  const prospectName = getProspectDisplayName(prospect);
+  const startDateTime = formatGoogleCalendarDateTime(
+    prospect.nextActionDate,
+    "180000",
+  );
+  const endDateTime = formatGoogleCalendarDateTime(
+    prospect.nextActionDate,
+    "183000",
+  );
+  const description = [
+    prospect.phone ? `Téléphone : ${prospect.phone}` : "Téléphone : non renseigné",
+    `Statut : ${prospect.status}`,
+    prospect.notes ? `Notes : ${prospect.notes}` : "",
+    "Relance créée depuis Travel Prospect CRM",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const calendarParams = new URLSearchParams({
+    action: "TEMPLATE",
+    text: `Relancer ${prospectName}`,
+    dates: `${startDateTime}/${endDateTime}`,
+    details: description,
+  });
+
+  return `https://calendar.google.com/calendar/render?${calendarParams.toString()}`;
+}
