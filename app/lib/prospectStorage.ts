@@ -4,6 +4,10 @@ import { markLocalDataChanged } from "./localChangeTracker";
 
 const PROSPECTS_STORAGE_KEY = "travel-prospect-crm-prospects";
 
+type ProspectWithOptionalSource = Prospect & {
+  source?: unknown;
+};
+
 function isBrowser() {
   return typeof window !== "undefined";
 }
@@ -37,6 +41,46 @@ function cleanProspectTags(prospects: Prospect[]) {
   return { cleanedProspects, hasChanged };
 }
 
+function isStreetMarketingProspect(prospect: Prospect) {
+  const prospectWithSource = prospect as ProspectWithOptionalSource;
+  const source =
+    typeof prospectWithSource.source === "string"
+      ? prospectWithSource.source
+      : "";
+
+  return (
+    source === "Street Marketing" ||
+    prospect.notes.includes("Ajouté depuis Street Marketing")
+  );
+}
+
+function normalizeStreetMarketingCategories(prospects: Prospect[]) {
+  let hasChanged = false;
+
+  const normalizedProspects = prospects.map((prospect) => {
+    if (
+      prospect.category === "Street Marketing" ||
+      !isStreetMarketingProspect(prospect)
+    ) {
+      return prospect;
+    }
+
+    const normalizedProspect: Prospect = {
+      ...prospect,
+      category: "Street Marketing",
+    };
+
+    hasChanged = true;
+
+    return {
+      ...normalizedProspect,
+      score: calculateProspectScore(normalizedProspect),
+    };
+  });
+
+  return { normalizedProspects, hasChanged };
+}
+
 export function loadProspects(): Prospect[] {
   if (!isBrowser()) {
     return [];
@@ -50,13 +94,20 @@ export function loadProspects(): Prospect[] {
 
   try {
     const parsedProspects = JSON.parse(storedProspects) as Prospect[];
-    const { cleanedProspects, hasChanged } = cleanProspectTags(parsedProspects);
+    const {
+      cleanedProspects,
+      hasChanged: hasCleanedTags,
+    } = cleanProspectTags(parsedProspects);
+    const {
+      normalizedProspects,
+      hasChanged: hasNormalizedStreetMarketingCategories,
+    } = normalizeStreetMarketingCategories(cleanedProspects);
 
-    if (hasChanged) {
-      saveProspects(cleanedProspects);
+    if (hasCleanedTags || hasNormalizedStreetMarketingCategories) {
+      saveProspects(normalizedProspects);
     }
 
-    return cleanedProspects;
+    return normalizedProspects;
   } catch {
     return [];
   }

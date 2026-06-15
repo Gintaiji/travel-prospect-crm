@@ -13,7 +13,6 @@ import {
   getTodayDateString,
 } from "../lib/prospectUtils";
 import {
-  PROSPECT_CATEGORIES,
   PROSPECT_TAGS,
   SOCIAL_PLATFORMS,
   type Prospect,
@@ -187,9 +186,7 @@ export default function StreetMarketingPage() {
     const phonePlatform = (SOCIAL_PLATFORMS as readonly string[]).includes("Téléphone")
       ? ("Téléphone" as Prospect["mainPlatform"])
       : "Autre";
-    const prospectCategory = (PROSPECT_CATEGORIES as readonly string[]).includes("Prospects")
-      ? ("Prospects" as Prospect["category"])
-      : "Prospect";
+    const prospectCategory: Prospect["category"] = "Street Marketing";
     const streetMarketingTags: Prospect["tags"] = (
       PROSPECT_TAGS as readonly string[]
     ).includes("Street Marketing")

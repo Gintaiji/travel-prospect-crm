@@ -34,7 +34,8 @@ export type ProspectCategory =
   | "Famille"
   | "Réseaux sociaux"
   | "Entreprise"
-  | "Partenariat";
+  | "Partenariat"
+  | "Street Marketing";
 
 export type ProspectTag =
   | "Voyage"
@@ -207,6 +208,7 @@ export const PROSPECT_CATEGORIES: ProspectCategory[] = [
   "Réseaux sociaux",
   "Entreprise",
   "Partenariat",
+  "Street Marketing",
 ];
 
 export const PROSPECT_TAGS: ProspectTag[] = [
