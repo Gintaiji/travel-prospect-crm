@@ -5,10 +5,17 @@ export type StreetMarketingSurvey = {
 export const STREET_MARKETING_SURVEY_STORAGE_KEY =
   "travel-prospect-crm-street-marketing-survey";
 
-export const DEFAULT_STREET_MARKETING_SURVEY: StreetMarketingSurvey = {
+const LEGACY_DEFAULT_STREET_MARKETING_SURVEY: StreetMarketingSurvey = {
   questions: [
     "Quand tu voyages, tu cherches plutôt le meilleur prix ou la meilleure expérience ?",
     "Si tu pouvais voyager plus souvent sans exploser ton budget, est-ce que ça t’intéresserait ?",
+  ],
+};
+
+export const DEFAULT_STREET_MARKETING_SURVEY: StreetMarketingSurvey = {
+  questions: [
+    "Aujourd'hui, pour réserver vos week-ends ou vacances, est-ce que vous passez plutôt par des plateformes publiques comme Booking, Airbnb, Expedia… ? Ou est-ce que vous cherchez des bons plans par vous-même ?",
+    "Si une plateforme vous permettait d'avoir les mêmes prestations, mais avec des prix plus avantageux, est-ce que vous seriez curieux de voir à quoi ça ressemble ?",
   ],
 };
 
@@ -31,6 +38,13 @@ function normalizeSurvey(value: Partial<StreetMarketingSurvey>): StreetMarketing
   };
 }
 
+function shouldMigrateLegacyDefaultSurvey(survey: StreetMarketingSurvey) {
+  return (
+    survey.questions[0] === LEGACY_DEFAULT_STREET_MARKETING_SURVEY.questions[0] &&
+    survey.questions[1] === LEGACY_DEFAULT_STREET_MARKETING_SURVEY.questions[1]
+  );
+}
+
 export function loadStreetMarketingSurvey(): StreetMarketingSurvey {
   if (!isBrowser()) {
     return DEFAULT_STREET_MARKETING_SURVEY;
@@ -43,7 +57,20 @@ export function loadStreetMarketingSurvey(): StreetMarketingSurvey {
   }
 
   try {
-    return normalizeSurvey(JSON.parse(storedSurvey) as Partial<StreetMarketingSurvey>);
+    const normalizedSurvey = normalizeSurvey(
+      JSON.parse(storedSurvey) as Partial<StreetMarketingSurvey>,
+    );
+
+    if (shouldMigrateLegacyDefaultSurvey(normalizedSurvey)) {
+      localStorage.setItem(
+        STREET_MARKETING_SURVEY_STORAGE_KEY,
+        JSON.stringify(DEFAULT_STREET_MARKETING_SURVEY),
+      );
+
+      return DEFAULT_STREET_MARKETING_SURVEY;
+    }
+
+    return normalizedSurvey;
   } catch {
     return DEFAULT_STREET_MARKETING_SURVEY;
   }
