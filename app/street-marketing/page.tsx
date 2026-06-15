@@ -35,6 +35,10 @@ type QuickContactFormState = {
   fieldNote: string;
 };
 
+type ProspectWithOptionalSource = Prospect & {
+  source?: unknown;
+};
+
 const initialQuickContactFormState: QuickContactFormState = {
   firstName: "",
   lastName: "",
@@ -44,6 +48,28 @@ const initialQuickContactFormState: QuickContactFormState = {
   secondAnswer: "",
   fieldNote: "",
 };
+
+function isStreetMarketingProspect(prospect: Prospect) {
+  const prospectWithSource = prospect as ProspectWithOptionalSource;
+  const source =
+    typeof prospectWithSource.source === "string"
+      ? prospectWithSource.source
+      : "";
+
+  return (
+    source === "Street Marketing" ||
+    prospect.notes.includes("Ajouté depuis Street Marketing") ||
+    prospect.notes.includes("Street Marketing")
+  );
+}
+
+function getProspectName(prospect: Prospect) {
+  return (
+    `${prospect.firstName} ${prospect.lastName}`.trim() ||
+    prospect.displayName.trim() ||
+    "Contact terrain"
+  );
+}
 
 export default function StreetMarketingPage() {
   const [survey, setSurvey] = useState<StreetMarketingSurvey>(
@@ -58,6 +84,9 @@ export default function StreetMarketingPage() {
   const [preparedContact, setPreparedContact] =
     useState<QuickContactFormState | null>(null);
   const [quickContactMessage, setQuickContactMessage] = useState("");
+  const [streetMarketingProspects, setStreetMarketingProspects] = useState<
+    Prospect[]
+  >([]);
 
   useEffect(() => {
     const storedSurvey = loadStreetMarketingSurvey();
@@ -65,6 +94,16 @@ export default function StreetMarketingPage() {
     setSurvey(storedSurvey);
     setDraftQuestions(storedSurvey.questions);
   }, []);
+
+  useEffect(() => {
+    const loadedProspects = loadProspects()
+      .filter(isStreetMarketingProspect)
+      .sort((firstProspect, secondProspect) =>
+        secondProspect.createdAt.localeCompare(firstProspect.createdAt),
+      );
+
+    setStreetMarketingProspects(loadedProspects);
+  }, [quickContactMessage]);
 
   function startSurveyEdit() {
     setDraftQuestions(survey.questions);
@@ -506,6 +545,60 @@ export default function StreetMarketingPage() {
               </section>
             ) : null}
           </article>
+        </section>
+
+        <section className="mt-4 rounded-3xl border border-white/10 bg-white/5 p-5 shadow-xl">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                Historique terrain
+              </p>
+              <p className="mt-2 text-sm text-slate-400">
+                {streetMarketingProspects.length} contacts ajoutés depuis le terrain
+              </p>
+            </div>
+          </div>
+
+          {streetMarketingProspects.length === 0 ? (
+            <p className="mt-5 rounded-2xl border border-white/10 bg-slate-950/70 p-4 text-sm text-slate-300">
+              Aucun contact terrain pour le moment.
+            </p>
+          ) : (
+            <div className="mt-5 grid gap-3">
+              {streetMarketingProspects.slice(0, 10).map((prospect) => (
+                <article
+                  className="rounded-2xl border border-white/10 bg-slate-950/70 p-4"
+                  key={prospect.id}
+                >
+                  <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_1fr_1fr_auto] lg:items-center">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-white">
+                        {getProspectName(prospect)}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Ajouté le {prospect.createdAt.slice(0, 10)}
+                      </p>
+                    </div>
+                    <p className="text-sm text-slate-300">
+                      {prospect.phone || "Téléphone non renseigné"}
+                    </p>
+                    <p className="text-sm text-slate-300">{prospect.status}</p>
+                    <p className="text-sm text-slate-300">
+                      {prospect.nextActionDate
+                        ? `Relance : ${prospect.nextActionDate}`
+                        : "Relance non planifiée"}
+                    </p>
+                    <Link
+                      className="inline-flex min-h-10 items-center justify-center rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+                      href={`/prospects?focus=${encodeURIComponent(prospect.id)}`}
+                    >
+                      Voir la fiche
+                    </Link>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
       </section>
     </main>
