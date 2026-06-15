@@ -13,6 +13,7 @@ import {
 const principalLinks = [
   { href: "/aujourdhui", label: "Aujourd’hui" },
   { href: "/prospects", label: "Prospects" },
+  { href: "/street-marketing", label: "Street Marketing" },
   { href: "/activite", label: "Activité" },
 ];
 
