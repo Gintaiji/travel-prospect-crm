@@ -1,12 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import {
   DEFAULT_STREET_MARKETING_SURVEY,
   loadStreetMarketingSurvey,
   saveStreetMarketingSurvey,
   type StreetMarketingSurvey,
 } from "../lib/streetMarketingSurveyStorage";
+
+type QuickContactFormState = {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  meetingPlace: string;
+  firstAnswer: string;
+  secondAnswer: string;
+  fieldNote: string;
+};
+
+const initialQuickContactFormState: QuickContactFormState = {
+  firstName: "",
+  lastName: "",
+  phone: "",
+  meetingPlace: "",
+  firstAnswer: "",
+  secondAnswer: "",
+  fieldNote: "",
+};
 
 export default function StreetMarketingPage() {
   const [survey, setSurvey] = useState<StreetMarketingSurvey>(
@@ -16,6 +36,10 @@ export default function StreetMarketingPage() {
     DEFAULT_STREET_MARKETING_SURVEY.questions,
   );
   const [isEditingSurvey, setIsEditingSurvey] = useState(false);
+  const [quickContactForm, setQuickContactForm] =
+    useState<QuickContactFormState>(initialQuickContactFormState);
+  const [preparedContact, setPreparedContact] =
+    useState<QuickContactFormState | null>(null);
 
   useEffect(() => {
     const storedSurvey = loadStreetMarketingSurvey();
@@ -55,6 +79,35 @@ export default function StreetMarketingPage() {
   function cancelSurveyEdit() {
     setDraftQuestions(survey.questions);
     setIsEditingSurvey(false);
+  }
+
+  function updateQuickContactField<Field extends keyof QuickContactFormState>(
+    field: Field,
+    value: QuickContactFormState[Field],
+  ) {
+    setQuickContactForm((currentForm) => ({
+      ...currentForm,
+      [field]: value,
+    }));
+  }
+
+  function prepareQuickContact(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    setPreparedContact({
+      firstName: quickContactForm.firstName.trim(),
+      lastName: quickContactForm.lastName.trim(),
+      phone: quickContactForm.phone.trim(),
+      meetingPlace: quickContactForm.meetingPlace.trim(),
+      firstAnswer: quickContactForm.firstAnswer.trim(),
+      secondAnswer: quickContactForm.secondAnswer.trim(),
+      fieldNote: quickContactForm.fieldNote.trim(),
+    });
+  }
+
+  function clearQuickContact() {
+    setQuickContactForm(initialQuickContactFormState);
+    setPreparedContact(null);
   }
 
   return (
@@ -147,10 +200,178 @@ export default function StreetMarketingPage() {
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
               Contact rapide
             </p>
-            <p className="mt-4 text-sm leading-6 text-slate-300">
-              Bientôt : ajout d’un prospect avec téléphone et relance
-              automatique.
-            </p>
+
+            <form className="mt-5 grid gap-4" onSubmit={prepareQuickContact}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="grid gap-2 text-sm font-medium text-slate-200">
+                  Prénom
+                  <input
+                    className="min-h-11 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                    value={quickContactForm.firstName}
+                    onChange={(event) =>
+                      updateQuickContactField("firstName", event.target.value)
+                    }
+                    placeholder="Recommandé"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-slate-200">
+                  Nom optionnel
+                  <input
+                    className="min-h-11 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                    value={quickContactForm.lastName}
+                    onChange={(event) =>
+                      updateQuickContactField("lastName", event.target.value)
+                    }
+                    placeholder="Optionnel"
+                  />
+                </label>
+              </div>
+
+              <label className="grid gap-2 text-sm font-medium text-slate-200">
+                Téléphone
+                <input
+                  className="min-h-11 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                  value={quickContactForm.phone}
+                  onChange={(event) =>
+                    updateQuickContactField("phone", event.target.value)
+                  }
+                  placeholder="06..."
+                  required
+                  type="tel"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-medium text-slate-200">
+                Lieu de rencontre
+                <input
+                  className="min-h-11 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                  value={quickContactForm.meetingPlace}
+                  onChange={(event) =>
+                    updateQuickContactField("meetingPlace", event.target.value)
+                  }
+                  placeholder="Salon, rue, événement..."
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-medium text-slate-200">
+                <span>
+                  Réponse question 1
+                  <span className="mt-1 block text-xs font-normal leading-5 text-slate-400">
+                    {survey.questions[0]}
+                  </span>
+                </span>
+                <textarea
+                  className="min-h-24 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                  value={quickContactForm.firstAnswer}
+                  onChange={(event) =>
+                    updateQuickContactField("firstAnswer", event.target.value)
+                  }
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-medium text-slate-200">
+                <span>
+                  Réponse question 2
+                  <span className="mt-1 block text-xs font-normal leading-5 text-slate-400">
+                    {survey.questions[1]}
+                  </span>
+                </span>
+                <textarea
+                  className="min-h-24 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                  value={quickContactForm.secondAnswer}
+                  onChange={(event) =>
+                    updateQuickContactField("secondAnswer", event.target.value)
+                  }
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-medium text-slate-200">
+                Note terrain
+                <textarea
+                  className="min-h-24 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                  value={quickContactForm.fieldNote}
+                  onChange={(event) =>
+                    updateQuickContactField("fieldNote", event.target.value)
+                  }
+                  placeholder="Contexte, ressenti, prochaine accroche..."
+                />
+              </label>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
+                  type="submit"
+                >
+                  Préparer le contact
+                </button>
+                <button
+                  className="min-h-11 rounded-full border border-white/10 px-5 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
+                  type="button"
+                  onClick={clearQuickContact}
+                >
+                  Effacer
+                </button>
+              </div>
+            </form>
+
+            {preparedContact ? (
+              <section className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                  Résumé du contact
+                </p>
+                <dl className="mt-4 grid gap-3 text-sm">
+                  <div>
+                    <dt className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                      Nom
+                    </dt>
+                    <dd className="mt-1 text-slate-200">
+                      {[preparedContact.firstName, preparedContact.lastName]
+                        .filter(Boolean)
+                        .join(" ") || "Non renseigné"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                      Téléphone
+                    </dt>
+                    <dd className="mt-1 text-slate-200">{preparedContact.phone}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                      Lieu de rencontre
+                    </dt>
+                    <dd className="mt-1 text-slate-200">
+                      {preparedContact.meetingPlace || "Non renseigné"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                      Réponse question 1
+                    </dt>
+                    <dd className="mt-1 text-slate-200">
+                      {preparedContact.firstAnswer || "Non renseignée"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                      Réponse question 2
+                    </dt>
+                    <dd className="mt-1 text-slate-200">
+                      {preparedContact.secondAnswer || "Non renseignée"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                      Note terrain
+                    </dt>
+                    <dd className="mt-1 whitespace-pre-wrap text-slate-200">
+                      {preparedContact.fieldNote || "Non renseignée"}
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+            ) : null}
           </article>
         </section>
       </section>
