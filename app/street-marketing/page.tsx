@@ -1,6 +1,19 @@
 "use client";
 
 import { type FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
+import {
+  createProspectId,
+  loadProspects,
+  saveProspects,
+} from "../lib/prospectStorage";
+import { calculateProspectScore } from "../lib/prospectUtils";
+import {
+  PROSPECT_CATEGORIES,
+  PROSPECT_TAGS,
+  SOCIAL_PLATFORMS,
+  type Prospect,
+} from "../lib/types";
 import {
   DEFAULT_STREET_MARKETING_SURVEY,
   loadStreetMarketingSurvey,
@@ -40,6 +53,7 @@ export default function StreetMarketingPage() {
     useState<QuickContactFormState>(initialQuickContactFormState);
   const [preparedContact, setPreparedContact] =
     useState<QuickContactFormState | null>(null);
+  const [quickContactMessage, setQuickContactMessage] = useState("");
 
   useEffect(() => {
     const storedSurvey = loadStreetMarketingSurvey();
@@ -91,10 +105,22 @@ export default function StreetMarketingPage() {
     }));
   }
 
-  function prepareQuickContact(event: FormEvent<HTMLFormElement>) {
+  function buildStreetMarketingNotes(contact: QuickContactFormState) {
+    return [
+      `Lieu de rencontre : ${contact.meetingPlace || "Non renseigné"}`,
+      `Question 1 : ${survey.questions[0]}`,
+      `Réponse 1 : ${contact.firstAnswer || "Non renseignée"}`,
+      `Question 2 : ${survey.questions[1]}`,
+      `Réponse 2 : ${contact.secondAnswer || "Non renseignée"}`,
+      `Note terrain : ${contact.fieldNote || "Non renseignée"}`,
+      "Ajouté depuis Street Marketing",
+    ].join("\n");
+  }
+
+  function createQuickContactProspect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    setPreparedContact({
+    const contact: QuickContactFormState = {
       firstName: quickContactForm.firstName.trim(),
       lastName: quickContactForm.lastName.trim(),
       phone: quickContactForm.phone.trim(),
@@ -102,12 +128,88 @@ export default function StreetMarketingPage() {
       firstAnswer: quickContactForm.firstAnswer.trim(),
       secondAnswer: quickContactForm.secondAnswer.trim(),
       fieldNote: quickContactForm.fieldNote.trim(),
-    });
+    };
+
+    if (!contact.phone) {
+      setQuickContactMessage("Le téléphone est obligatoire.");
+      return;
+    }
+
+    const firstName = contact.firstName || "Contact terrain";
+    const displayName = `${firstName} ${contact.lastName}`.trim();
+    const now = new Date().toISOString();
+    const phonePlatform = (SOCIAL_PLATFORMS as readonly string[]).includes("Téléphone")
+      ? ("Téléphone" as Prospect["mainPlatform"])
+      : "Autre";
+    const prospectCategory = (PROSPECT_CATEGORIES as readonly string[]).includes("Prospects")
+      ? ("Prospects" as Prospect["category"])
+      : "Prospect";
+    const streetMarketingTags: Prospect["tags"] = (
+      PROSPECT_TAGS as readonly string[]
+    ).includes("Street Marketing")
+      ? ["Street Marketing" as Prospect["tags"][number]]
+      : [];
+    const newProspectBase: Prospect = {
+      id: createProspectId(),
+      firstName,
+      lastName: contact.lastName,
+      displayName,
+      jobTitle: "",
+      businessArea: "",
+      city: "",
+      region: "",
+      country: "",
+      phone: contact.phone,
+      whatsapp: contact.phone,
+      email: "",
+      mainPlatform: phonePlatform,
+      profileUrl: "",
+      socialLinks: {
+        facebook: "",
+        instagram: "",
+        linkedin: "",
+        tiktok: "",
+        youtube: "",
+        other: "",
+      },
+      category: prospectCategory,
+      status: "À contacter",
+      temperature: "Tiède",
+      colorType: "Aucun",
+      score: 0,
+      tags: streetMarketingTags,
+      isFollower: false,
+      hasSentMessage: false,
+      interactionStats: {
+        followerSinceDate: "",
+        commentsCount: 0,
+        interactionsCount: 0,
+        likesCount: 0,
+        messagesCount: 0,
+      },
+      lastInteractionDate: "",
+      nextActionDate: "",
+      conversationHistory: [],
+      notes: buildStreetMarketingNotes(contact),
+      createdAt: now,
+      updatedAt: now,
+    };
+    const newProspect: Prospect = {
+      ...newProspectBase,
+      score: calculateProspectScore(newProspectBase),
+    };
+    const currentProspects = loadProspects();
+
+    saveProspects([newProspect, ...currentProspects]);
+    setPreparedContact(contact);
+    setQuickContactForm(initialQuickContactFormState);
+    setQuickContactMessage("Contact ajouté aux prospects.");
   }
 
   function clearQuickContact() {
     setQuickContactForm(initialQuickContactFormState);
     setPreparedContact(null);
+    setQuickContactMessage("");
   }
 
   return (
@@ -201,7 +303,7 @@ export default function StreetMarketingPage() {
               Contact rapide
             </p>
 
-            <form className="mt-5 grid gap-4" onSubmit={prepareQuickContact}>
+            <form className="mt-5 grid gap-4" onSubmit={createQuickContactProspect}>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="grid gap-2 text-sm font-medium text-slate-200">
                   Prénom
@@ -303,7 +405,7 @@ export default function StreetMarketingPage() {
                   className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
                   type="submit"
                 >
-                  Préparer le contact
+                  Ajouter aux prospects
                 </button>
                 <button
                   className="min-h-11 rounded-full border border-white/10 px-5 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
@@ -314,6 +416,22 @@ export default function StreetMarketingPage() {
                 </button>
               </div>
             </form>
+
+            {quickContactMessage ? (
+              <div className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-4">
+                <p className="text-sm font-semibold text-emerald-200">
+                  {quickContactMessage}
+                </p>
+                {quickContactMessage === "Contact ajouté aux prospects." ? (
+                  <Link
+                    className="mt-3 inline-flex min-h-10 items-center rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+                    href="/prospects"
+                  >
+                    Voir les prospects
+                  </Link>
+                ) : null}
+              </div>
+            ) : null}
 
             {preparedContact ? (
               <section className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-4">
