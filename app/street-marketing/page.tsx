@@ -7,7 +7,11 @@ import {
   loadProspects,
   saveProspects,
 } from "../lib/prospectStorage";
-import { calculateProspectScore } from "../lib/prospectUtils";
+import {
+  calculateProspectScore,
+  getFutureDateString,
+  getTodayDateString,
+} from "../lib/prospectUtils";
 import {
   PROSPECT_CATEGORIES,
   PROSPECT_TAGS,
@@ -113,6 +117,7 @@ export default function StreetMarketingPage() {
       `Question 2 : ${survey.questions[1]}`,
       `Réponse 2 : ${contact.secondAnswer || "Non renseignée"}`,
       `Note terrain : ${contact.fieldNote || "Non renseignée"}`,
+      "Relance automatique prévue sous 24h.",
       "Ajouté depuis Street Marketing",
     ].join("\n");
   }
@@ -138,6 +143,8 @@ export default function StreetMarketingPage() {
     const firstName = contact.firstName || "Contact terrain";
     const displayName = `${firstName} ${contact.lastName}`.trim();
     const now = new Date().toISOString();
+    const today = getTodayDateString();
+    const followUpDate = getFutureDateString(1);
     const phonePlatform = (SOCIAL_PLATFORMS as readonly string[]).includes("Téléphone")
       ? ("Téléphone" as Prospect["mainPlatform"])
       : "Autre";
@@ -188,8 +195,16 @@ export default function StreetMarketingPage() {
         messagesCount: 0,
       },
       lastInteractionDate: "",
-      nextActionDate: "",
-      conversationHistory: [],
+      nextActionDate: followUpDate,
+      conversationHistory: [
+        {
+          id: createProspectId(),
+          date: today,
+          channel: phonePlatform,
+          content: "Contact ajouté depuis Street Marketing.",
+          nextAction: "Relancer le contact Street Marketing",
+        },
+      ],
       notes: buildStreetMarketingNotes(contact),
       createdAt: now,
       updatedAt: now,
