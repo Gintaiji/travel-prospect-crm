@@ -277,7 +277,7 @@ export default function StreetMarketingPage() {
       `Lieu de rencontre : ${contact.meetingPlace || "Non renseigné"}`,
       ...surveyAnswerLines,
       `Note terrain : ${contact.fieldNote || "Non renseignée"}`,
-      "Relance automatique prévue sous 24h.",
+      "Relance automatique prévue dans 3 jours.",
       "Ajouté depuis Street Marketing",
     ].join("\n");
   }
@@ -305,7 +305,7 @@ export default function StreetMarketingPage() {
     const displayName = `${firstName} ${contact.lastName}`.trim();
     const now = new Date().toISOString();
     const today = getTodayDateString();
-    const followUpDate = getFutureDateString(1);
+    const followUpDate = getFutureDateString(3);
     const phonePlatform = (SOCIAL_PLATFORMS as readonly string[]).includes("Téléphone")
       ? ("Téléphone" as Prospect["mainPlatform"])
       : "Autre";
