@@ -1,3 +1,5 @@
+import { markLocalDataChanged } from "./localChangeTracker";
+
 export type StreetMarketingSurvey = {
   id: string;
   name: string;
@@ -220,4 +222,5 @@ export function saveStreetMarketingSurvey(storage: StreetMarketingSurveyStorage)
     STREET_MARKETING_SURVEY_STORAGE_KEY,
     JSON.stringify(normalizeStorage(storage)),
   );
+  markLocalDataChanged();
 }

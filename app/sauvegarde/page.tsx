@@ -49,6 +49,11 @@ import {
   loadSettings,
   saveSettings,
 } from "../lib/settingsStorage";
+import {
+  loadStreetMarketingSurvey,
+  saveStreetMarketingSurvey,
+  type StreetMarketingSurveyStorage,
+} from "../lib/streetMarketingSurveyStorage";
 import type { AppSettings, Prospect, Resource } from "../lib/types";
 import {
   createBrowserSupabaseClient,
@@ -57,11 +62,12 @@ import {
 
 type BackupFile = {
   appName: "Travel Prospect CRM";
-  version: 1 | 2 | 3;
+  version: 1 | 2 | 3 | 4;
   exportedAt: string;
   prospects: Prospect[];
   resources: Resource[];
   settings?: AppSettings;
+  streetMarketingSurvey?: StreetMarketingSurveyStorage;
   customMessageTemplates?: CustomMessageTemplates;
 };
 
@@ -101,6 +107,15 @@ function hasBackupCustomMessageTemplates(
   return Boolean(
     value.customMessageTemplates &&
       typeof value.customMessageTemplates === "object",
+  );
+}
+
+function hasBackupStreetMarketingSurvey(
+  value: BackupFile,
+): value is BackupFile & { streetMarketingSurvey: StreetMarketingSurveyStorage } {
+  return Boolean(
+    value.streetMarketingSurvey &&
+      typeof value.streetMarketingSurvey === "object",
   );
 }
 
@@ -181,6 +196,8 @@ export default function BackupPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [streetMarketingSurvey, setStreetMarketingSurvey] =
+    useState<StreetMarketingSurveyStorage | null>(null);
   const [customMessageTemplates, setCustomMessageTemplates] =
     useState<CustomMessageTemplates>({});
   const [lastReadAt, setLastReadAt] = useState("");
@@ -229,6 +246,7 @@ export default function BackupPage() {
     setProspects(loadProspects());
     setResources(loadResources());
     setSettings(loadSettings());
+    setStreetMarketingSurvey(loadStreetMarketingSurvey());
     setCustomMessageTemplates(loadCustomMessageTemplates());
     setLocalDataSummary(getLocalDataSummary());
     setLastReadAt(new Date().toLocaleString("fr-FR"));
@@ -345,6 +363,7 @@ export default function BackupPage() {
 
   const totalConversationCount = getTotalConversationCount(prospects);
   const customSettingsLabel = hasCustomSettings(settings) ? "Oui" : "Non";
+  const streetMarketingSurveyCount = streetMarketingSurvey?.surveys.length ?? 0;
   const customMessageTemplatesLabel = hasCustomMessageTemplates(customMessageTemplates)
     ? "Oui"
     : "Non";
@@ -363,11 +382,12 @@ export default function BackupPage() {
   function exportCompleteBackup() {
     const backup: BackupFile = {
       appName: backupAppName,
-      version: 3,
+      version: 4,
       exportedAt: new Date().toISOString(),
       prospects,
       resources,
       settings,
+      streetMarketingSurvey: streetMarketingSurvey ?? loadStreetMarketingSurvey(),
       customMessageTemplates,
     };
     const backupBlob = new Blob([JSON.stringify(backup, null, 2)], {
@@ -473,7 +493,7 @@ export default function BackupPage() {
       setSyncMessage(
         `Données envoyées vers le cloud avec succès. ${summary.prospectsCount} prospect(s), ${summary.resourcesCount} ressource(s), paramètres ${
           summary.settingsSent ? "envoyés" : "non envoyés"
-        }, modèles personnalisés ${
+        }, ${summary.streetMarketingSurveysCount} sondage(s) terrain, modèles personnalisés ${
           summary.customMessageTemplatesSent ? "envoyés" : "non envoyés"
         }.`,
       );
@@ -506,6 +526,8 @@ export default function BackupPage() {
       setSyncMessage(
         `Données chargées depuis le cloud avec succès. ${summary.prospectsCount} prospect(s), ${summary.resourcesCount} ressource(s), paramètres ${
           summary.settingsRestored ? "chargés" : "non chargés"
+        }, sondages terrain ${
+          summary.streetMarketingSurveyRestored ? "chargés" : "non chargés"
         }, modèles personnalisés ${
           summary.customMessageTemplatesRestored ? "chargés" : "non chargés"
         }.`,
@@ -549,7 +571,7 @@ export default function BackupPage() {
         }
 
         const shouldImport = window.confirm(
-          "Charger cette sauvegarde complète ? Les prospects, ressources, paramètres et modèles personnalisés seront remplacés si la sauvegarde les contient.",
+          "Charger cette sauvegarde complète ? Les prospects, ressources, paramètres, sondages terrain et modèles personnalisés seront remplacés si la sauvegarde les contient.",
         );
 
         if (!shouldImport) {
@@ -565,6 +587,10 @@ export default function BackupPage() {
 
           saveSettings(importedSettings);
           setSettings(importedSettings);
+        }
+        if (hasBackupStreetMarketingSurvey(parsedBackup)) {
+          saveStreetMarketingSurvey(parsedBackup.streetMarketingSurvey);
+          setStreetMarketingSurvey(loadStreetMarketingSurvey());
         }
         if (hasBackupCustomMessageTemplates(parsedBackup)) {
           saveCustomMessageTemplates(parsedBackup.customMessageTemplates);
@@ -634,6 +660,14 @@ export default function BackupPage() {
                 </p>
                 <p className="mt-2 text-3xl font-bold text-white">
                   {customSettingsLabel}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Sondages terrain
+                </p>
+                <p className="mt-2 text-3xl font-bold text-white">
+                  {streetMarketingSurveyCount}
                 </p>
               </article>
               <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
@@ -1011,7 +1045,7 @@ export default function BackupPage() {
             <h2 className="text-xl font-bold text-white">
               Sécurité anti-écrasement
             </h2>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
               <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                   Prospects cloud
@@ -1038,6 +1072,14 @@ export default function BackupPage() {
                       ? "Oui"
                       : "Non"
                     : "-"}
+                </p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Sondages terrain cloud
+                </p>
+                <p className="mt-2 text-3xl font-bold text-white">
+                  {cloudDataSummary?.streetMarketingSurveysCount ?? "-"}
                 </p>
               </article>
               <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">

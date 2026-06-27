@@ -12,6 +12,12 @@ import {
   saveSettings,
 } from "./settingsStorage";
 import {
+  DEFAULT_STREET_MARKETING_SURVEY_STORAGE,
+  loadStreetMarketingSurvey,
+  saveStreetMarketingSurvey,
+  type StreetMarketingSurveyStorage,
+} from "./streetMarketingSurveyStorage";
+import {
   pauseLocalChangeTracking,
   resumeLocalChangeTracking,
 } from "./localChangeTracker";
@@ -25,10 +31,16 @@ type CloudSyncStateRow = {
   last_sync_at: string | null;
 };
 
+type CloudSettingsPayload = {
+  appSettings: AppSettings;
+  streetMarketingSurvey: StreetMarketingSurveyStorage;
+};
+
 export type UploadCloudSummary = {
   prospectsCount: number;
   resourcesCount: number;
   settingsSent: boolean;
+  streetMarketingSurveysCount: number;
   customMessageTemplatesSent: boolean;
 };
 
@@ -36,6 +48,7 @@ export type RestoreCloudSummary = {
   prospectsCount: number;
   resourcesCount: number;
   settingsRestored: boolean;
+  streetMarketingSurveyRestored: boolean;
   customMessageTemplatesRestored: boolean;
 };
 
@@ -57,6 +70,7 @@ export type CloudDataSummary = {
   prospectsCount: number;
   resourcesCount: number;
   hasSettings: boolean;
+  streetMarketingSurveysCount: number;
   hasCustomMessageTemplates: boolean;
   lastCloudSyncAt: string | null;
   hasCloudData: boolean;
@@ -66,6 +80,7 @@ export type LocalDataSummary = {
   prospectsCount: number;
   resourcesCount: number;
   hasSettings: boolean;
+  streetMarketingSurveysCount: number;
   hasCustomMessageTemplates: boolean;
   hasLocalData: boolean;
 };
@@ -160,6 +175,71 @@ function hasCustomSettings(settings: AppSettings) {
   );
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object");
+}
+
+function isCloudSettingsPayload(value: unknown): value is Partial<CloudSettingsPayload> {
+  return isRecord(value) && ("appSettings" in value || "streetMarketingSurvey" in value);
+}
+
+function getAppSettingsFromCloudData(value: unknown): AppSettings | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  if (isCloudSettingsPayload(value)) {
+    return isRecord(value.appSettings)
+      ? (value.appSettings as AppSettings)
+      : undefined;
+  }
+
+  return value as AppSettings;
+}
+
+function getStreetMarketingSurveyFromCloudData(
+  value: unknown,
+): StreetMarketingSurveyStorage | undefined {
+  if (!isCloudSettingsPayload(value) || !isRecord(value.streetMarketingSurvey)) {
+    return undefined;
+  }
+
+  return value.streetMarketingSurvey as StreetMarketingSurveyStorage;
+}
+
+function buildCloudSettingsPayload(
+  settings: AppSettings,
+  streetMarketingSurvey: StreetMarketingSurveyStorage,
+): CloudSettingsPayload {
+  return {
+    appSettings: settings,
+    streetMarketingSurvey,
+  };
+}
+
+function hasCustomStreetMarketingSurvey(storage: StreetMarketingSurveyStorage) {
+  const defaultStorage = DEFAULT_STREET_MARKETING_SURVEY_STORAGE;
+
+  return (
+    storage.activeSurveyId !== defaultStorage.activeSurveyId ||
+    storage.surveys.length !== defaultStorage.surveys.length ||
+    storage.surveys.some((survey, index) => {
+      const defaultSurvey = defaultStorage.surveys[index];
+
+      return (
+        !defaultSurvey ||
+        survey.id !== defaultSurvey.id ||
+        survey.name !== defaultSurvey.name ||
+        survey.questions.length !== defaultSurvey.questions.length ||
+        survey.questions.some(
+          (question, questionIndex) =>
+            question !== defaultSurvey.questions[questionIndex],
+        )
+      );
+    })
+  );
+}
+
 function hasCustomMessageTemplates(customMessageTemplates: CustomMessageTemplates) {
   return Object.values(customMessageTemplates).some((stepTemplates) =>
     stepTemplates
@@ -172,12 +252,19 @@ export function getLocalDataLastUpdatedAt(): string | null {
   const prospects = loadProspects();
   const resources = loadResources();
   const settings = loadSettings();
+  const streetMarketingSurvey = loadStreetMarketingSurvey();
+  const streetMarketingSurveyDates = hasCustomStreetMarketingSurvey(
+    streetMarketingSurvey,
+  )
+    ? streetMarketingSurvey.surveys.map((survey) => survey.updatedAt)
+    : [];
 
   loadCustomMessageTemplates();
 
   return getMostRecentIsoDate([
     ...prospects.map((prospect) => prospect.updatedAt),
     ...resources.map((resource) => resource.updatedAt),
+    ...streetMarketingSurveyDates,
     settings.updatedAt,
   ]);
 }
@@ -186,18 +273,23 @@ export function getLocalDataSummary(): LocalDataSummary {
   const prospects = loadProspects();
   const resources = loadResources();
   const settings = loadSettings();
+  const streetMarketingSurvey = loadStreetMarketingSurvey();
   const customMessageTemplates = loadCustomMessageTemplates();
   const settingsAreCustom = hasCustomSettings(settings);
+  const streetMarketingSurveyIsCustom =
+    hasCustomStreetMarketingSurvey(streetMarketingSurvey);
   const templatesAreCustom = hasCustomMessageTemplates(customMessageTemplates);
 
   return {
     prospectsCount: prospects.length,
     resourcesCount: resources.length,
     hasSettings: settingsAreCustom,
+    streetMarketingSurveysCount: streetMarketingSurvey.surveys.length,
     hasCustomMessageTemplates: templatesAreCustom,
     hasLocalData:
       prospects.length > 0 ||
       resources.length > 0 ||
+      streetMarketingSurveyIsCustom ||
       settingsAreCustom ||
       templatesAreCustom,
   };
@@ -250,7 +342,7 @@ export async function getCloudDataSummary(): Promise<CloudDataSummary> {
 
   const { data: settingsRow, error: settingsError } = await supabase
     .from("crm_settings")
-    .select("user_id")
+    .select("data")
     .eq("user_id", userId)
     .maybeSingle();
   throwIfSupabaseError(settingsError);
@@ -265,18 +357,30 @@ export async function getCloudDataSummary(): Promise<CloudDataSummary> {
   const cloudSyncState = await getCloudSyncState();
   const safeProspectsCount = prospectsCount ?? 0;
   const safeResourcesCount = resourcesCount ?? 0;
-  const hasSettings = Boolean(settingsRow);
+  const settingsData = (settingsRow as CloudDataRow<unknown> | null)?.data;
+  const cloudSettings = getAppSettingsFromCloudData(settingsData);
+  const cloudStreetMarketingSurvey =
+    getStreetMarketingSurveyFromCloudData(settingsData);
+  const hasSettings = Boolean(cloudSettings && hasCustomSettings(cloudSettings));
+  const streetMarketingSurveysCount =
+    cloudStreetMarketingSurvey?.surveys.length ?? 0;
+  const hasStreetMarketingSurvey = Boolean(
+    cloudStreetMarketingSurvey &&
+      hasCustomStreetMarketingSurvey(cloudStreetMarketingSurvey),
+  );
   const hasCustomMessageTemplates = Boolean(templateRow);
 
   return {
     prospectsCount: safeProspectsCount,
     resourcesCount: safeResourcesCount,
     hasSettings,
+    streetMarketingSurveysCount,
     hasCustomMessageTemplates,
     lastCloudSyncAt: cloudSyncState.lastSyncAt,
     hasCloudData:
       safeProspectsCount > 0 ||
       safeResourcesCount > 0 ||
+      hasStreetMarketingSurvey ||
       hasSettings ||
       hasCustomMessageTemplates,
   };
@@ -371,6 +475,7 @@ export async function uploadLocalDataToCloud(): Promise<UploadCloudSummary> {
   const prospects = loadProspects();
   const resources = loadResources();
   const settings = loadSettings();
+  const streetMarketingSurvey = loadStreetMarketingSurvey();
   const customMessageTemplates = loadCustomMessageTemplates();
 
   const { error: deleteProspectsError } = await supabase
@@ -409,7 +514,13 @@ export async function uploadLocalDataToCloud(): Promise<UploadCloudSummary> {
 
   const { error: settingsError } = await supabase
     .from("crm_settings")
-    .upsert({ user_id: userId, data: settings }, { onConflict: "user_id" });
+    .upsert(
+      {
+        user_id: userId,
+        data: buildCloudSettingsPayload(settings, streetMarketingSurvey),
+      },
+      { onConflict: "user_id" },
+    );
   throwIfSupabaseError(settingsError);
 
   const { error: templatesError } = await supabase
@@ -436,6 +547,7 @@ export async function uploadLocalDataToCloud(): Promise<UploadCloudSummary> {
     prospectsCount: prospects.length,
     resourcesCount: resources.length,
     settingsSent: true,
+    streetMarketingSurveysCount: streetMarketingSurvey.surveys.length,
     customMessageTemplatesSent: true,
   };
 }
@@ -475,7 +587,10 @@ export async function restoreCloudDataToLocal(): Promise<RestoreCloudSummary> {
   const resources = ((resourceRows ?? []) as CloudDataRow<Resource>[]).map(
     (row) => row.data,
   );
-  const settings = (settingsRow as CloudDataRow<AppSettings> | null)?.data;
+  const settingsData = (settingsRow as CloudDataRow<unknown> | null)?.data;
+  const settings = getAppSettingsFromCloudData(settingsData);
+  const streetMarketingSurvey =
+    getStreetMarketingSurveyFromCloudData(settingsData);
   const customMessageTemplates = (
     templateRow as CloudDataRow<CustomMessageTemplates> | null
   )?.data;
@@ -490,6 +605,10 @@ export async function restoreCloudDataToLocal(): Promise<RestoreCloudSummary> {
       saveSettings(settings);
     }
 
+    if (streetMarketingSurvey) {
+      saveStreetMarketingSurvey(streetMarketingSurvey);
+    }
+
     if (customMessageTemplates) {
       saveCustomMessageTemplates(customMessageTemplates);
     }
@@ -501,6 +620,7 @@ export async function restoreCloudDataToLocal(): Promise<RestoreCloudSummary> {
     prospectsCount: prospects.length,
     resourcesCount: resources.length,
     settingsRestored: Boolean(settings),
+    streetMarketingSurveyRestored: Boolean(streetMarketingSurvey),
     customMessageTemplatesRestored: Boolean(customMessageTemplates),
   };
 }
