@@ -32,6 +32,7 @@ type QuickContactFormState = {
   lastName: string;
   phone: string;
   meetingPlace: string;
+  colorType: Prospect["colorType"];
   answers: string[];
   fieldNote: string;
 };
@@ -45,9 +46,18 @@ const initialQuickContactFormState: QuickContactFormState = {
   lastName: "",
   phone: "",
   meetingPlace: "",
+  colorType: "Aucun",
   answers: [],
   fieldNote: "",
 };
+
+const STREET_MARKETING_COLOR_TYPES: Prospect["colorType"][] = [
+  "Aucun",
+  "Jaune",
+  "Bleu",
+  "Vert",
+  "Rouge",
+];
 
 function isStreetMarketingProspect(prospect: Prospect) {
   const prospectWithSource = prospect as ProspectWithOptionalSource;
@@ -290,6 +300,7 @@ export default function StreetMarketingPage() {
       lastName: quickContactForm.lastName.trim(),
       phone: quickContactForm.phone.trim(),
       meetingPlace: quickContactForm.meetingPlace.trim(),
+      colorType: quickContactForm.colorType,
       answers: activeSurvey.questions.map((_, index) =>
         (quickContactForm.answers[index] ?? "").trim(),
       ),
@@ -341,7 +352,7 @@ export default function StreetMarketingPage() {
       category: prospectCategory,
       status: "À contacter",
       temperature: "Tiède",
-      colorType: "Aucun",
+      colorType: contact.colorType,
       score: 0,
       tags: streetMarketingTags,
       isFollower: false,
@@ -592,6 +603,26 @@ export default function StreetMarketingPage() {
                 />
               </label>
 
+              <label className="grid gap-2 text-sm font-medium text-slate-200">
+                Couleur du prospect
+                <select
+                  className="min-h-11 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400"
+                  value={quickContactForm.colorType}
+                  onChange={(event) =>
+                    updateQuickContactField(
+                      "colorType",
+                      event.target.value as Prospect["colorType"],
+                    )
+                  }
+                >
+                  {STREET_MARKETING_COLOR_TYPES.map((colorType) => (
+                    <option key={colorType} value={colorType}>
+                      {colorType}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               {activeSurvey.questions.map((question, index) => (
                 <label
                   className="grid gap-2 text-sm font-medium text-slate-200"
@@ -686,6 +717,14 @@ export default function StreetMarketingPage() {
                     </dt>
                     <dd className="mt-1 text-slate-200">
                       {preparedContact.meetingPlace || "Non renseigné"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                      Couleur du prospect
+                    </dt>
+                    <dd className="mt-1 text-slate-200">
+                      {preparedContact.colorType}
                     </dd>
                   </div>
                   {activeSurvey.questions.map((question, index) => (
