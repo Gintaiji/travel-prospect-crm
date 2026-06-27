@@ -302,6 +302,17 @@ export default function MessagesPage() {
                 Tu peux adapter les modèles à ta façon de parler. Les textes
                 modifiés seront utilisés dans l’assistant des fiches prospects.
               </p>
+              <div className="mt-4 max-w-3xl rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-sm leading-6 text-slate-200">
+                  Variables disponibles : {"{{prenom}}"}, {"{{nom}}"},{" "}
+                  {"{{nom_complet}}"}, {"{{telephone}}"},{" "}
+                  {"{{lieu_rencontre}}"}, {"{{date_relance}}"}, {"{{statut}}"}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-400">
+                  Exemple : Bonjour {"{{prenom}}"}, c’est Kévin. Nous nous
+                  étions rencontrés à {"{{lieu_rencontre}}"}.
+                </p>
+              </div>
               {appSettings.messageSignature.trim() ? (
                 <p className="mt-3 max-w-3xl text-sm leading-6 text-emerald-100">
                   Ta signature personnalisée pourra être ajoutée depuis

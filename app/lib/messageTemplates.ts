@@ -29,6 +29,60 @@ export type MessageTunnelStepTemplate = {
   suggestedStatus: Prospect["status"] | null;
 };
 
+type ProspectWithOptionalMeetingPlace = Prospect & {
+  meetingPlace?: unknown;
+};
+
+function cleanMessageVariableValue(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getProspectFullName(prospect: Prospect) {
+  return [prospect.firstName, prospect.lastName]
+    .map((namePart) => namePart.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+function getMeetingPlaceFromNotes(notes: string) {
+  const meetingPlaceLine = notes
+    .split(/\r?\n/)
+    .find((line) => /^Lieu de rencontre\s*:/i.test(line.trim()));
+
+  if (!meetingPlaceLine) {
+    return "";
+  }
+
+  const meetingPlace = meetingPlaceLine.replace(/^Lieu de rencontre\s*:/i, "").trim();
+
+  return meetingPlace && !/^Non renseign/i.test(meetingPlace) ? meetingPlace : "";
+}
+
+function getProspectMeetingPlace(prospect: Prospect) {
+  const prospectWithMeetingPlace = prospect as ProspectWithOptionalMeetingPlace;
+  const dedicatedMeetingPlace = cleanMessageVariableValue(
+    prospectWithMeetingPlace.meetingPlace,
+  );
+
+  return dedicatedMeetingPlace || getMeetingPlaceFromNotes(prospect.notes);
+}
+
+export function replaceMessageVariables(template: string, prospect: Prospect) {
+  const variableValues: Record<string, string> = {
+    prenom: cleanMessageVariableValue(prospect.firstName),
+    nom: cleanMessageVariableValue(prospect.lastName),
+    nom_complet: getProspectFullName(prospect),
+    telephone: cleanMessageVariableValue(prospect.phone),
+    statut: cleanMessageVariableValue(prospect.status),
+    date_relance: cleanMessageVariableValue(prospect.nextActionDate),
+    lieu_rencontre: getProspectMeetingPlace(prospect),
+  };
+
+  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, variableName) =>
+    variableValues[variableName] ?? match,
+  );
+}
+
 export const MESSAGE_TUNNEL_STEPS: MessageTunnelStepTemplate[] = [
   {
     step: "Commentaire public",

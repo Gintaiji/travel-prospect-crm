@@ -16,6 +16,7 @@ import {
 } from "../lib/prospectUtils";
 import {
   MESSAGE_TUNNEL_STEPS,
+  replaceMessageVariables,
   type MessageStyle,
   type MessageTunnelStep,
 } from "../lib/messageTemplates";
@@ -1134,7 +1135,7 @@ function generateProspectMessage(
     context,
   );
 
-  return applyAppSettingsToMessage(message, settings);
+  return replaceMessageVariables(applyAppSettingsToMessage(message, settings), prospect);
 }
 
 export default function ProspectsPage () {
