@@ -37,6 +37,16 @@ function cleanMessageVariableValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function normalizeMessageVariableName(variableName: string) {
+  return variableName
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 function getProspectFullName(prospect: Prospect) {
   return [prospect.firstName, prospect.lastName]
     .map((namePart) => namePart.trim())
@@ -75,12 +85,16 @@ export function replaceMessageVariables(template: string, prospect: Prospect) {
     telephone: cleanMessageVariableValue(prospect.phone),
     statut: cleanMessageVariableValue(prospect.status),
     date_relance: cleanMessageVariableValue(prospect.nextActionDate),
+    date_de_relance: cleanMessageVariableValue(prospect.nextActionDate),
     lieu_rencontre: getProspectMeetingPlace(prospect),
+    lieu_de_rencontre: getProspectMeetingPlace(prospect),
   };
 
-  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, variableName) =>
-    variableValues[variableName] ?? match,
-  );
+  return template.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (match, variableName) => {
+    const normalizedVariableName = normalizeMessageVariableName(variableName);
+
+    return variableValues[normalizedVariableName] ?? match;
+  });
 }
 
 export const MESSAGE_TUNNEL_STEPS: MessageTunnelStepTemplate[] = [

@@ -2349,6 +2349,14 @@ export default function ProspectsPage () {
     updateProspectStatus(prospect.id, PROSPECT_STATUSES[currentStatusIndex + 1]);
   }
 
+  function getGeneratedMessageForProspect(prospectId: string) {
+    const prospect = prospects.find((currentProspect) => currentProspect.id === prospectId);
+
+    return prospect
+      ? replaceMessageVariables(messageAssistantState.generatedMessage, prospect)
+      : messageAssistantState.generatedMessage;
+  }
+
   function handleGenerateProspectMessage(prospect: Prospect) {
     setMessageAssistantState((currentState) => ({
       ...currentState,
@@ -2397,7 +2405,7 @@ export default function ProspectsPage () {
     }
 
     await navigator.clipboard.writeText(
-      buildMessageWithResource(messageAssistantState.generatedMessage, resource),
+      buildMessageWithResource(getGeneratedMessageForProspect(prospectId), resource),
     );
     setMessageAssistantState((currentState) => ({
       ...currentState,
@@ -2446,7 +2454,7 @@ export default function ProspectsPage () {
 
     await navigator.clipboard.writeText(
       buildMessageWithPresentationLink(
-        messageAssistantState.generatedMessage,
+        getGeneratedMessageForProspect(prospectId),
         presentationLink,
       ),
     );
@@ -2581,7 +2589,7 @@ export default function ProspectsPage () {
       return;
     }
 
-    await navigator.clipboard.writeText(messageAssistantState.generatedMessage);
+    await navigator.clipboard.writeText(getGeneratedMessageForProspect(prospectId));
     setMessageAssistantState((currentState) => ({
       ...currentState,
       copiedProspectId: prospectId,
@@ -2596,15 +2604,19 @@ export default function ProspectsPage () {
     const selectedResource = resources.find(
       (resource) => resource.id === messageAssistantState.selectedResourceId,
     );
+    const generatedMessage = replaceMessageVariables(
+      messageAssistantState.generatedMessage,
+      prospect,
+    );
     const presentationLink = appSettings.defaultPresentationLink.trim();
     const shouldAddPresentationLink =
       messageAssistantState.situation === "Invitation présentation" && presentationLink;
     const messageWithPresentationLink = shouldAddPresentationLink
       ? buildConversationContentWithPresentationLink(
-          messageAssistantState.generatedMessage,
+          generatedMessage,
           presentationLink,
         )
-      : messageAssistantState.generatedMessage.trim();
+      : generatedMessage.trim();
     const today = getTodayDateString();
     const newConversationEntry: ConversationEntry = {
       id: createProspectId(),

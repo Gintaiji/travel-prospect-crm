@@ -312,6 +312,9 @@ export default function MessagesPage() {
                   Exemple : Bonjour {"{{prenom}}"}, c’est Kévin. Nous nous
                   étions rencontrés à {"{{lieu_rencontre}}"}.
                 </p>
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  Utilise de préférence les variables en minuscules, sans accent.
+                </p>
               </div>
               {appSettings.messageSignature.trim() ? (
                 <p className="mt-3 max-w-3xl text-sm leading-6 text-emerald-100">
