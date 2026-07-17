@@ -22,12 +22,15 @@ import {
 import {
   canUploadLocalDataSafely,
   EMPTY_LOCAL_PROSPECTS_CLOUD_BLOCK_MESSAGE,
+  getCloudBackupHistory,
   getCloudDataSummary,
   getCloudFreshnessStatus,
   getCloudSyncStatus,
   getLocalDataSummary,
+  restoreCloudBackupHistoryToLocal,
   restoreCloudDataToLocal,
   uploadLocalDataToCloud,
+  type CloudBackupHistoryEntry,
   type CloudDataSummary,
   type CloudFreshnessStatus,
   type CloudSyncStatus,
@@ -193,6 +196,10 @@ function formatOptionalDateTime(value: string) {
   }).format(new Date(value));
 }
 
+function formatCloudBackupType(backupType: CloudBackupHistoryEntry["backupType"]) {
+  return backupType === "auto" ? "auto" : "manual";
+}
+
 export default function BackupPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
@@ -233,8 +240,15 @@ export default function BackupPage() {
   const [cloudDataMessage, setCloudDataMessage] = useState(
     "Connecte-toi pour connaître les données cloud.",
   );
+  const [cloudBackupHistory, setCloudBackupHistory] = useState<
+    CloudBackupHistoryEntry[]
+  >([]);
+  const [cloudBackupHistoryMessage, setCloudBackupHistoryMessage] = useState(
+    "Connecte-toi pour voir les anciennes sauvegardes cloud.",
+  );
   const [syncMessage, setSyncMessage] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
+  const [restoringBackupId, setRestoringBackupId] = useState<string | null>(null);
   const [cloudSyncSettings, setCloudSyncSettings] =
     useState<CloudSyncSettings>(DEFAULT_CLOUD_SYNC_SETTINGS);
   const [autoSyncSettingsMessage, setAutoSyncSettingsMessage] = useState("");
@@ -294,6 +308,24 @@ export default function BackupPage() {
     }
   }
 
+  async function refreshCloudBackupHistory() {
+    try {
+      const backupHistory = await getCloudBackupHistory();
+
+      setCloudBackupHistory(backupHistory);
+      setCloudBackupHistoryMessage(
+        backupHistory.length > 0
+          ? ""
+          : "Aucune ancienne sauvegarde cloud enregistrée.",
+      );
+    } catch {
+      setCloudBackupHistory([]);
+      setCloudBackupHistoryMessage(
+        "Connecte-toi pour voir les anciennes sauvegardes cloud.",
+      );
+    }
+  }
+
   async function refreshSession() {
     const supabase = createBrowserSupabaseClient();
 
@@ -303,6 +335,10 @@ export default function BackupPage() {
       setCloudSyncStatus(null);
       setCloudSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
       setCloudFreshnessStatus(null);
+      setCloudBackupHistory([]);
+      setCloudBackupHistoryMessage(
+        "Connecte-toi pour voir les anciennes sauvegardes cloud.",
+      );
       return;
     }
 
@@ -314,6 +350,10 @@ export default function BackupPage() {
       setCloudSyncStatus(null);
       setCloudSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
       setCloudFreshnessStatus(null);
+      setCloudBackupHistory([]);
+      setCloudBackupHistoryMessage(
+        "Connecte-toi pour voir les anciennes sauvegardes cloud.",
+      );
       return;
     }
 
@@ -325,6 +365,7 @@ export default function BackupPage() {
 
     await refreshCloudSyncState();
     await refreshCloudDataOverview();
+    await refreshCloudBackupHistory();
   }
 
   useEffect(() => {
@@ -544,6 +585,39 @@ export default function BackupPage() {
         error instanceof Error ? error.message : "Erreur de chargement.",
       );
     } finally {
+      setIsSyncing(false);
+    }
+  }
+
+  async function restoreFromCloudBackupHistory(backupId: string) {
+    const shouldRestore = window.confirm(
+      "Cette action va remplacer les données de cet appareil par cette ancienne sauvegarde.",
+    );
+
+    if (!shouldRestore) {
+      return;
+    }
+
+    setIsSyncing(true);
+    setRestoringBackupId(backupId);
+    setCloudBackupHistoryMessage("");
+
+    try {
+      await restoreCloudBackupHistoryToLocal(backupId);
+
+      refreshLocalSnapshot();
+      await refreshSession();
+      setCloudBackupHistoryMessage(
+        'Sauvegarde restaurée sur cet appareil. Clique sur "Sauvegarder dans le cloud" pour remettre cette version dans le cloud principal.',
+      );
+    } catch (error) {
+      setCloudBackupHistoryMessage(
+        error instanceof Error
+          ? error.message
+          : "Erreur de restauration de la sauvegarde cloud.",
+      );
+    } finally {
+      setRestoringBackupId(null);
       setIsSyncing(false);
     }
   }
@@ -1159,6 +1233,99 @@ export default function BackupPage() {
             {!cloudDataSummary && cloudDataMessage ? (
               <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-medium leading-6 text-white">
                 {cloudDataMessage}
+              </p>
+            ) : null}
+          </section>
+
+          <section className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-emerald-100">
+                  Anciennes sauvegardes cloud
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-emerald-100/80">
+                  Restaurer une ancienne sauvegarde remplace seulement les
+                  données de cet appareil. Le cloud principal ne change pas tant
+                  que tu ne cliques pas sur Sauvegarder dans le cloud.
+                </p>
+              </div>
+              <button
+                className="min-h-11 rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                onClick={refreshCloudBackupHistory}
+                disabled={isSyncing}
+              >
+                Actualiser
+              </button>
+            </div>
+
+            {cloudBackupHistory.length > 0 ? (
+              <div className="mt-5 grid gap-3">
+                {cloudBackupHistory.map((backup) => (
+                  <article
+                    className="rounded-2xl border border-white/10 bg-slate-950/70 p-4"
+                    key={backup.id}
+                  >
+                    <div className="grid gap-3 lg:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr_1fr_auto] lg:items-center">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                          Date et heure
+                        </p>
+                        <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                          {formatOptionalDateTime(backup.createdAt)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                          Type
+                        </p>
+                        <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                          {formatCloudBackupType(backup.backupType)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                          Prospects
+                        </p>
+                        <p className="mt-2 text-lg font-bold text-white">
+                          {backup.prospectsCount}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                          Ressources
+                        </p>
+                        <p className="mt-2 text-lg font-bold text-white">
+                          {backup.resourcesCount}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                          Messages personnalisés
+                        </p>
+                        <p className="mt-2 text-lg font-bold text-white">
+                          {backup.messageTemplatesCount}
+                        </p>
+                      </div>
+                      <button
+                        className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                        type="button"
+                        onClick={() => restoreFromCloudBackupHistory(backup.id)}
+                        disabled={isSyncing}
+                      >
+                        {restoringBackupId === backup.id
+                          ? "Restauration..."
+                          : "Restaurer cette sauvegarde"}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+
+            {cloudBackupHistoryMessage ? (
+              <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-medium leading-6 text-white">
+                {cloudBackupHistoryMessage}
               </p>
             ) : null}
           </section>

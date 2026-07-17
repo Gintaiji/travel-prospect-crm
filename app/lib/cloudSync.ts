@@ -5,7 +5,11 @@ import {
   type CustomMessageTemplates,
 } from "./messageTemplateStorage";
 import { loadProspects, saveProspects } from "./prospectStorage";
-import { loadResources, saveResources } from "./resourceStorage";
+import {
+  loadResources,
+  normalizeResources,
+  saveResources,
+} from "./resourceStorage";
 import {
   DEFAULT_APP_SETTINGS,
   loadSettings,
@@ -53,6 +57,16 @@ type UploadLocalDataToCloudOptions = {
   backupType?: CloudBackupType;
 };
 
+type CloudBackupHistoryRow = {
+  id: string;
+  backup_type: CloudBackupType;
+  prospects_count: number | null;
+  resources_count: number | null;
+  message_templates_count: number | null;
+  created_at: string;
+  payload: unknown;
+};
+
 export type UploadCloudSummary = {
   prospectsCount: number;
   resourcesCount: number;
@@ -67,6 +81,15 @@ export type RestoreCloudSummary = {
   settingsRestored: boolean;
   streetMarketingSurveyRestored: boolean;
   customMessageTemplatesRestored: boolean;
+};
+
+export type CloudBackupHistoryEntry = {
+  id: string;
+  backupType: CloudBackupType;
+  prospectsCount: number;
+  resourcesCount: number;
+  messageTemplatesCount: number;
+  createdAt: string;
 };
 
 export type CloudSyncState = {
@@ -231,6 +254,38 @@ function getStreetMarketingSurveyFromCloudData(
   }
 
   return value.streetMarketingSurvey as StreetMarketingSurveyStorage;
+}
+
+function isCloudBackupHistoryPayload(
+  value: unknown,
+): value is Partial<CloudBackupHistoryPayload> {
+  return Boolean(
+    isRecord(value) &&
+      Array.isArray(value.prospects) &&
+      Array.isArray(value.resources),
+  );
+}
+
+function getAppSettingsFromBackupPayload(
+  value: Partial<CloudBackupHistoryPayload>,
+): AppSettings | undefined {
+  return isRecord(value.settings) ? (value.settings as AppSettings) : undefined;
+}
+
+function getCustomMessageTemplatesFromBackupPayload(
+  value: Partial<CloudBackupHistoryPayload>,
+): CustomMessageTemplates | undefined {
+  return isRecord(value.customMessageTemplates)
+    ? (value.customMessageTemplates as CustomMessageTemplates)
+    : undefined;
+}
+
+function getStreetMarketingSurveyFromBackupPayload(
+  value: Partial<CloudBackupHistoryPayload>,
+): StreetMarketingSurveyStorage | undefined {
+  return isRecord(value.streetMarketingSurvey)
+    ? (value.streetMarketingSurvey as StreetMarketingSurveyStorage)
+    : undefined;
 }
 
 function buildCloudSettingsPayload(
@@ -559,6 +614,111 @@ async function createCloudBackupHistory(
   await pruneOldCloudBackupHistory(supabase, userId);
 }
 
+async function buildLocalCloudBackupHistoryPayload(
+  exportedAt: string,
+): Promise<CloudBackupHistoryPayload> {
+  const cloudSyncState = await getCloudSyncState();
+
+  return {
+    prospects: loadProspects(),
+    resources: loadResources(),
+    settings: loadSettings(),
+    customMessageTemplates: loadCustomMessageTemplates(),
+    streetMarketingSurvey: loadStreetMarketingSurvey(),
+    syncState: cloudSyncState.lastSyncAt ? cloudSyncState : null,
+    localLastUpdatedAt: getLocalDataLastUpdatedAt(),
+    exportedAt,
+  };
+}
+
+export async function getCloudBackupHistory(): Promise<CloudBackupHistoryEntry[]> {
+  const { supabase, userId } = await getConnectedUserId();
+  const { data, error } = await supabase
+    .from("crm_backup_history")
+    .select(
+      "id, backup_type, prospects_count, resources_count, message_templates_count, created_at",
+    )
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(CLOUD_BACKUP_HISTORY_LIMIT);
+  throwIfSupabaseError(error);
+
+  return ((data ?? []) as CloudBackupHistoryRow[]).map((row) => ({
+    id: row.id,
+    backupType: row.backup_type,
+    prospectsCount: row.prospects_count ?? 0,
+    resourcesCount: row.resources_count ?? 0,
+    messageTemplatesCount: row.message_templates_count ?? 0,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function restoreCloudBackupHistoryToLocal(
+  backupId: string,
+): Promise<RestoreCloudSummary> {
+  const { supabase, userId } = await getConnectedUserId();
+  const { data, error } = await supabase
+    .from("crm_backup_history")
+    .select("payload")
+    .eq("user_id", userId)
+    .eq("id", backupId)
+    .maybeSingle();
+  throwIfSupabaseError(error);
+
+  const payload = (data as { payload?: unknown } | null)?.payload;
+
+  if (!isCloudBackupHistoryPayload(payload)) {
+    throw new Error("Sauvegarde cloud invalide. Restauration impossible.");
+  }
+
+  const currentBackupPayload = await buildLocalCloudBackupHistoryPayload(
+    new Date().toISOString(),
+  );
+
+  await createCloudBackupHistory(
+    supabase,
+    userId,
+    "manual",
+    currentBackupPayload,
+  );
+
+  const prospects = payload.prospects as Prospect[];
+  const normalizedResources = normalizeResources(payload.resources as Resource[]);
+  const settings = getAppSettingsFromBackupPayload(payload);
+  const streetMarketingSurvey = getStreetMarketingSurveyFromBackupPayload(payload);
+  const customMessageTemplates =
+    getCustomMessageTemplatesFromBackupPayload(payload);
+
+  pauseLocalChangeTracking();
+
+  try {
+    saveProspects(prospects);
+    saveResources(normalizedResources.resources);
+
+    if (settings) {
+      saveSettings(settings);
+    }
+
+    if (streetMarketingSurvey) {
+      saveStreetMarketingSurvey(streetMarketingSurvey);
+    }
+
+    if (customMessageTemplates) {
+      saveCustomMessageTemplates(customMessageTemplates);
+    }
+  } finally {
+    resumeLocalChangeTracking();
+  }
+
+  return {
+    prospectsCount: prospects.length,
+    resourcesCount: normalizedResources.resources.length,
+    settingsRestored: Boolean(settings),
+    streetMarketingSurveyRestored: Boolean(streetMarketingSurvey),
+    customMessageTemplatesRestored: Boolean(customMessageTemplates),
+  };
+}
+
 export async function uploadLocalDataToCloud(
   options: UploadLocalDataToCloudOptions = {},
 ): Promise<UploadCloudSummary> {
@@ -569,24 +729,16 @@ export async function uploadLocalDataToCloud(
     throw new Error(uploadSafetyCheck.reason);
   }
 
-  const prospects = loadProspects();
-  const resources = loadResources();
-  const settings = loadSettings();
-  const streetMarketingSurvey = loadStreetMarketingSurvey();
-  const customMessageTemplates = loadCustomMessageTemplates();
   const exportedAt = new Date().toISOString();
   const backupType = options.backupType ?? "manual";
-  const cloudSyncState = await getCloudSyncState();
-  const backupPayload: CloudBackupHistoryPayload = {
+  const backupPayload = await buildLocalCloudBackupHistoryPayload(exportedAt);
+  const {
     prospects,
     resources,
     settings,
-    customMessageTemplates,
     streetMarketingSurvey,
-    syncState: cloudSyncState.lastSyncAt ? cloudSyncState : null,
-    localLastUpdatedAt: getLocalDataLastUpdatedAt(),
-    exportedAt,
-  };
+    customMessageTemplates,
+  } = backupPayload;
 
   try {
     await createCloudBackupHistory(supabase, userId, backupType, backupPayload);
