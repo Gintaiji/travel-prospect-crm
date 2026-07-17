@@ -31,9 +31,26 @@ type CloudSyncStateRow = {
   last_sync_at: string | null;
 };
 
+type CloudBackupType = "manual" | "auto";
+
 type CloudSettingsPayload = {
   appSettings: AppSettings;
   streetMarketingSurvey: StreetMarketingSurveyStorage;
+};
+
+type CloudBackupHistoryPayload = {
+  prospects: Prospect[];
+  resources: Resource[];
+  settings: AppSettings;
+  customMessageTemplates: CustomMessageTemplates;
+  streetMarketingSurvey: StreetMarketingSurveyStorage;
+  syncState: CloudSyncState | null;
+  localLastUpdatedAt: string | null;
+  exportedAt: string;
+};
+
+type UploadLocalDataToCloudOptions = {
+  backupType?: CloudBackupType;
 };
 
 export type UploadCloudSummary = {
@@ -96,6 +113,10 @@ export type UploadSafetyCheck = {
 
 export const EMPTY_LOCAL_PROSPECTS_CLOUD_BLOCK_MESSAGE =
   "Sauvegarde bloquée : les données locales sont vides alors que le cloud contient des prospects.";
+
+const CLOUD_BACKUP_HISTORY_LIMIT = 10;
+const CLOUD_BACKUP_HISTORY_ERROR_MESSAGE =
+  "Sauvegarde cloud bloquée : impossible de créer l'historique de sécurité. Le cloud n'a pas été écrasé.";
 
 export type CloudFreshnessStatus = {
   cloudHasData: boolean;
@@ -250,6 +271,21 @@ function hasCustomMessageTemplates(customMessageTemplates: CustomMessageTemplate
     stepTemplates
       ? Object.values(stepTemplates).some((message) => typeof message === "string")
       : false,
+  );
+}
+
+function countCustomMessageTemplates(
+  customMessageTemplates: CustomMessageTemplates,
+) {
+  return Object.values(customMessageTemplates).reduce(
+    (totalTemplates, stepTemplates) =>
+      totalTemplates +
+      (stepTemplates
+        ? Object.values(stepTemplates).filter(
+            (message) => typeof message === "string" && message.trim() !== "",
+          ).length
+        : 0),
+    0,
   );
 }
 
@@ -474,7 +510,58 @@ export async function canUploadLocalDataSafely(): Promise<UploadSafetyCheck> {
   };
 }
 
-export async function uploadLocalDataToCloud(): Promise<UploadCloudSummary> {
+async function pruneOldCloudBackupHistory(
+  supabase: NonNullable<ReturnType<typeof createBrowserSupabaseClient>>,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from("crm_backup_history")
+    .select("created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .range(CLOUD_BACKUP_HISTORY_LIMIT, CLOUD_BACKUP_HISTORY_LIMIT);
+  throwIfSupabaseError(error);
+
+  const cutoffCreatedAt = (data?.[0] as { created_at?: string } | undefined)
+    ?.created_at;
+
+  if (!cutoffCreatedAt) {
+    return;
+  }
+
+  const { error: deleteError } = await supabase
+    .from("crm_backup_history")
+    .delete()
+    .eq("user_id", userId)
+    .lte("created_at", cutoffCreatedAt);
+  throwIfSupabaseError(deleteError);
+}
+
+async function createCloudBackupHistory(
+  supabase: NonNullable<ReturnType<typeof createBrowserSupabaseClient>>,
+  userId: string,
+  backupType: CloudBackupType,
+  payload: CloudBackupHistoryPayload,
+) {
+  const { error } = await supabase.from("crm_backup_history").insert({
+    user_id: userId,
+    backup_type: backupType,
+    prospects_count: payload.prospects.length,
+    resources_count: payload.resources.length,
+    message_templates_count: countCustomMessageTemplates(
+      payload.customMessageTemplates,
+    ),
+    created_at: payload.exportedAt,
+    payload,
+  });
+  throwIfSupabaseError(error);
+
+  await pruneOldCloudBackupHistory(supabase, userId);
+}
+
+export async function uploadLocalDataToCloud(
+  options: UploadLocalDataToCloudOptions = {},
+): Promise<UploadCloudSummary> {
   const { supabase, userId } = await getConnectedUserId();
   const uploadSafetyCheck = await canUploadLocalDataSafely();
 
@@ -487,6 +574,26 @@ export async function uploadLocalDataToCloud(): Promise<UploadCloudSummary> {
   const settings = loadSettings();
   const streetMarketingSurvey = loadStreetMarketingSurvey();
   const customMessageTemplates = loadCustomMessageTemplates();
+  const exportedAt = new Date().toISOString();
+  const backupType = options.backupType ?? "manual";
+  const cloudSyncState = await getCloudSyncState();
+  const backupPayload: CloudBackupHistoryPayload = {
+    prospects,
+    resources,
+    settings,
+    customMessageTemplates,
+    streetMarketingSurvey,
+    syncState: cloudSyncState.lastSyncAt ? cloudSyncState : null,
+    localLastUpdatedAt: getLocalDataLastUpdatedAt(),
+    exportedAt,
+  };
+
+  try {
+    await createCloudBackupHistory(supabase, userId, backupType, backupPayload);
+  } catch (error) {
+    console.warn("Historique de sauvegarde cloud impossible.", error);
+    throw new Error(CLOUD_BACKUP_HISTORY_ERROR_MESSAGE);
+  }
 
   const { error: deleteProspectsError } = await supabase
     .from("crm_prospects")
@@ -546,8 +653,11 @@ export async function uploadLocalDataToCloud(): Promise<UploadCloudSummary> {
     .upsert(
       {
         user_id: userId,
-        last_sync_at: new Date().toISOString(),
-        sync_note: "Synchronisation manuelle depuis le navigateur",
+        last_sync_at: exportedAt,
+        sync_note:
+          backupType === "auto"
+            ? "Synchronisation automatique depuis le navigateur"
+            : "Synchronisation manuelle depuis le navigateur",
       },
       { onConflict: "user_id" },
     );

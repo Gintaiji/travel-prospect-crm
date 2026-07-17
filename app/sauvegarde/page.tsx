@@ -494,7 +494,7 @@ export default function BackupPage() {
     setIsSyncing(true);
 
     try {
-      const summary = await uploadLocalDataToCloud();
+      const summary = await uploadLocalDataToCloud({ backupType: "manual" });
 
       setSyncMessage(
         `Données envoyées vers le cloud avec succès. ${summary.prospectsCount} prospect(s), ${summary.resourcesCount} ressource(s), paramètres ${

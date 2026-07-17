@@ -95,7 +95,7 @@ export default function QuickCloudSyncButton({
     setMessage("");
 
     try {
-      await uploadLocalDataToCloud();
+      await uploadLocalDataToCloud({ backupType: "manual" });
       setMessage(
         compact ? "Données synchronisées." : "Données synchronisées avec le cloud.",
       );

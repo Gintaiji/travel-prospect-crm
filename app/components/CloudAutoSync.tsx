@@ -67,7 +67,7 @@ export default function CloudAutoSync() {
           return;
         }
 
-        await uploadLocalDataToCloud();
+        await uploadLocalDataToCloud({ backupType: "auto" });
         clearLastLocalChangeDate();
       } catch (error) {
         console.warn("Synchronisation automatique impossible.", error);
