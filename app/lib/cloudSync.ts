@@ -137,7 +137,7 @@ export type UploadSafetyCheck = {
 export const EMPTY_LOCAL_PROSPECTS_CLOUD_BLOCK_MESSAGE =
   "Sauvegarde bloquée : les données locales sont vides alors que le cloud contient des prospects.";
 
-const CLOUD_BACKUP_HISTORY_LIMIT = 10;
+const BACKUP_HISTORY_LIMIT = 20;
 const CLOUD_BACKUP_HISTORY_ERROR_MESSAGE =
   "Sauvegarde cloud bloquée : impossible de créer l'historique de sécurité. Le cloud n'a pas été écrasé.";
 
@@ -574,7 +574,7 @@ async function pruneOldCloudBackupHistory(
     .select("created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .range(CLOUD_BACKUP_HISTORY_LIMIT, CLOUD_BACKUP_HISTORY_LIMIT);
+    .range(BACKUP_HISTORY_LIMIT, BACKUP_HISTORY_LIMIT);
   throwIfSupabaseError(error);
 
   const cutoffCreatedAt = (data?.[0] as { created_at?: string } | undefined)
@@ -640,7 +640,7 @@ export async function getCloudBackupHistory(): Promise<CloudBackupHistoryEntry[]
     )
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .limit(CLOUD_BACKUP_HISTORY_LIMIT);
+    .limit(BACKUP_HISTORY_LIMIT);
   throwIfSupabaseError(error);
 
   return ((data ?? []) as CloudBackupHistoryRow[]).map((row) => ({
