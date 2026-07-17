@@ -197,7 +197,7 @@ function formatOptionalDateTime(value: string) {
 }
 
 function formatCloudBackupType(backupType: CloudBackupHistoryEntry["backupType"]) {
-  return backupType === "auto" ? "auto" : "manual";
+  return backupType === "auto" ? "automatique" : "manuelle";
 }
 
 export default function BackupPage() {
@@ -246,6 +246,7 @@ export default function BackupPage() {
   const [cloudBackupHistoryMessage, setCloudBackupHistoryMessage] = useState(
     "Connecte-toi pour voir les anciennes sauvegardes cloud.",
   );
+  const [showCloudBackupHistory, setShowCloudBackupHistory] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
   const [restoringBackupId, setRestoringBackupId] = useState<string | null>(null);
@@ -425,6 +426,7 @@ export default function BackupPage() {
     ? "Envoi bloqué pour protéger les données cloud"
     : "Aucun risque détecté";
   const hasStartupRestoreStatus = Boolean(startupRestoreStatus?.lastCheckedAt);
+  const latestCloudBackup = cloudBackupHistory[0] ?? null;
 
   function exportCompleteBackup() {
     const backup: BackupFile = {
@@ -1244,82 +1246,126 @@ export default function BackupPage() {
                   Anciennes sauvegardes cloud
                 </h2>
                 <p className="mt-3 text-sm leading-6 text-emerald-100/80">
-                  Restaurer une ancienne sauvegarde remplace seulement les
-                  données de cet appareil. Le cloud principal ne change pas tant
-                  que tu ne cliques pas sur Sauvegarder dans le cloud.
+                  Jusqu&apos;à 20 sauvegardes conservées. Restaurer une ancienne
+                  sauvegarde remplace seulement les données de cet appareil.
                 </p>
               </div>
               <button
                 className="min-h-11 rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-60"
                 type="button"
-                onClick={refreshCloudBackupHistory}
+                onClick={() =>
+                  setShowCloudBackupHistory(!showCloudBackupHistory)
+                }
                 disabled={isSyncing}
               >
-                Actualiser
+                {showCloudBackupHistory
+                  ? "Masquer les anciennes sauvegardes"
+                  : "Afficher les anciennes sauvegardes"}
               </button>
             </div>
 
-            {cloudBackupHistory.length > 0 ? (
-              <div className="mt-5 grid gap-3">
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <article className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Disponibles
+                </p>
+                <p className="mt-2 text-2xl font-bold text-white">
+                  {cloudBackupHistory.length}
+                </p>
+              </article>
+              <article className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Dernière sauvegarde
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                  {latestCloudBackup
+                    ? formatOptionalDateTime(latestCloudBackup.createdAt)
+                    : "-"}
+                </p>
+              </article>
+              <article className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                  Prospects dernière
+                </p>
+                <p className="mt-2 text-2xl font-bold text-white">
+                  {latestCloudBackup ? latestCloudBackup.prospectsCount : "-"}
+                </p>
+              </article>
+            </div>
+
+            {showCloudBackupHistory && cloudBackupHistory.length > 0 ? (
+              <div className="mt-4 grid gap-2">
                 {cloudBackupHistory.map((backup) => (
                   <article
-                    className="rounded-2xl border border-white/10 bg-slate-950/70 p-4"
+                    className="rounded-xl border border-white/10 bg-slate-950/70 p-3"
                     key={backup.id}
                   >
-                    <div className="grid gap-3 lg:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr_1fr_auto] lg:items-center">
+                    <div className="grid gap-3 md:grid-cols-[1.4fr_0.9fr_0.7fr_0.7fr_0.7fr_auto] md:items-center">
                       <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
-                          Date et heure
-                        </p>
-                        <p className="mt-2 text-sm font-semibold leading-6 text-white">
+                        <p className="text-sm font-semibold leading-6 text-white">
                           {formatOptionalDateTime(backup.createdAt)}
                         </p>
                       </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
-                          Type
-                        </p>
-                        <p className="mt-2 text-sm font-semibold leading-6 text-white">
-                          {formatCloudBackupType(backup.backupType)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                      <div className="grid grid-cols-3 gap-2 md:contents">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.14em] text-emerald-200/70">
+                            Type
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-white">
+                            {formatCloudBackupType(backup.backupType)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.14em] text-emerald-200/70">
                           Prospects
-                        </p>
-                        <p className="mt-2 text-lg font-bold text-white">
-                          {backup.prospectsCount}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-white">
+                            {backup.prospectsCount}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.14em] text-emerald-200/70">
                           Ressources
-                        </p>
-                        <p className="mt-2 text-lg font-bold text-white">
-                          {backup.resourcesCount}
-                        </p>
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-white">
+                            {backup.resourcesCount}
+                          </p>
+                        </div>
                       </div>
                       <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">
-                          Messages personnalisés
+                        <p className="text-xs uppercase tracking-[0.14em] text-emerald-200/70">
+                          Messages
                         </p>
-                        <p className="mt-2 text-lg font-bold text-white">
+                        <p className="mt-1 text-sm font-semibold text-white">
                           {backup.messageTemplatesCount}
                         </p>
                       </div>
                       <button
-                        className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="min-h-10 rounded-full bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
                         type="button"
                         onClick={() => restoreFromCloudBackupHistory(backup.id)}
                         disabled={isSyncing}
                       >
                         {restoringBackupId === backup.id
                           ? "Restauration..."
-                          : "Restaurer cette sauvegarde"}
+                          : "Restaurer"}
                       </button>
                     </div>
                   </article>
                 ))}
+              </div>
+            ) : null}
+
+            {showCloudBackupHistory ? (
+              <div className="mt-3">
+                <button
+                  className="min-h-10 rounded-full border border-emerald-300/40 bg-emerald-300/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  type="button"
+                  onClick={refreshCloudBackupHistory}
+                  disabled={isSyncing}
+                >
+                  Actualiser
+                </button>
               </div>
             ) : null}
 
