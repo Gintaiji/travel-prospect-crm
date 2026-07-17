@@ -56,6 +56,7 @@ export default function CloudAutoSync() {
         const safetyCheck = await canUploadLocalDataSafely();
 
         if (!safetyCheck.canUpload) {
+          console.warn(safetyCheck.reason);
           return;
         }
 

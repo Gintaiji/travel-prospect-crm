@@ -90,7 +90,12 @@ export type UploadSafetyCheck = {
   reason: string;
   localHasData: boolean;
   cloudHasData: boolean;
+  localProspectsCount: number;
+  cloudProspectsCount: number;
 };
+
+export const EMPTY_LOCAL_PROSPECTS_CLOUD_BLOCK_MESSAGE =
+  "Sauvegarde bloquée : les données locales sont vides alors que le cloud contient des prospects.";
 
 export type CloudFreshnessStatus = {
   cloudHasData: boolean;
@@ -445,14 +450,17 @@ export async function canUploadLocalDataSafely(): Promise<UploadSafetyCheck> {
   const cloudDataSummary = await getCloudDataSummary();
   const localHasData = localDataSummary.hasLocalData;
   const cloudHasData = cloudDataSummary.hasCloudData;
+  const localProspectsCount = localDataSummary.prospectsCount;
+  const cloudProspectsCount = cloudDataSummary.prospectsCount;
 
-  if (!localHasData && cloudHasData) {
+  if (localProspectsCount === 0 && cloudProspectsCount > 0) {
     return {
       canUpload: false,
-      reason:
-        "Le navigateur local est vide alors que le cloud contient des données. Charge d’abord les données cloud sur cet appareil.",
+      reason: EMPTY_LOCAL_PROSPECTS_CLOUD_BLOCK_MESSAGE,
       localHasData,
       cloudHasData,
+      localProspectsCount,
+      cloudProspectsCount,
     };
   }
 
@@ -461,6 +469,8 @@ export async function canUploadLocalDataSafely(): Promise<UploadSafetyCheck> {
     reason: "",
     localHasData,
     cloudHasData,
+    localProspectsCount,
+    cloudProspectsCount,
   };
 }
 

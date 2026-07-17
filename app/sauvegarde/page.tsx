@@ -21,6 +21,7 @@ import {
 } from "../lib/cloudStartupRestoreStorage";
 import {
   canUploadLocalDataSafely,
+  EMPTY_LOCAL_PROSPECTS_CLOUD_BLOCK_MESSAGE,
   getCloudDataSummary,
   getCloudFreshnessStatus,
   getCloudSyncStatus,
@@ -374,7 +375,12 @@ export default function BackupPage() {
       localDataSummary &&
       !localDataSummary.hasLocalData,
   );
-  const antiOverwriteStatusLabel = shouldSuggestCloudRestore
+  const shouldBlockEmptyLocalProspectUpload = Boolean(
+    localDataSummary &&
+      localDataSummary.prospectsCount === 0 &&
+      (cloudDataSummary?.prospectsCount ?? 0) > 0,
+  );
+  const antiOverwriteStatusLabel = shouldBlockEmptyLocalProspectUpload
     ? "Envoi bloqué pour protéger les données cloud"
     : "Aucun risque détecté";
   const hasStartupRestoreStatus = Boolean(startupRestoreStatus?.lastCheckedAt);
@@ -953,7 +959,7 @@ export default function BackupPage() {
                 className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
                 type="button"
                 onClick={uploadToCloud}
-                disabled={isSyncing || shouldSuggestCloudRestore}
+                disabled={isSyncing || shouldBlockEmptyLocalProspectUpload}
               >
                 Sauvegarder dans le cloud
               </button>
@@ -1045,7 +1051,15 @@ export default function BackupPage() {
             <h2 className="text-xl font-bold text-white">
               Sécurité anti-écrasement
             </h2>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Prospects locaux
+                </p>
+                <p className="mt-2 text-3xl font-bold text-white">
+                  {localDataSummary?.prospectsCount ?? "-"}
+                </p>
+              </article>
               <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                   Prospects cloud
@@ -1104,7 +1118,25 @@ export default function BackupPage() {
               </article>
             </div>
 
-            {shouldSuggestCloudRestore ? (
+            {shouldBlockEmptyLocalProspectUpload ? (
+              <div className="mt-4 rounded-xl border border-red-300/30 bg-red-400/10 p-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-semibold leading-6 text-red-100">
+                    {EMPTY_LOCAL_PROSPECTS_CLOUD_BLOCK_MESSAGE}
+                  </p>
+                  <button
+                    className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    onClick={restoreFromCloud}
+                    disabled={isSyncing}
+                  >
+                    Charger les données cloud sur cet appareil
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {shouldSuggestCloudRestore && !shouldBlockEmptyLocalProspectUpload ? (
               <div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm font-medium leading-6 text-amber-100">

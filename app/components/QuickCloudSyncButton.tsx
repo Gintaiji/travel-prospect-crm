@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   canUploadLocalDataSafely,
+  EMPTY_LOCAL_PROSPECTS_CLOUD_BLOCK_MESSAGE,
   getCloudSyncStatus,
   uploadLocalDataToCloud,
   type CloudSyncStatus,
@@ -78,9 +79,7 @@ export default function QuickCloudSyncButton({
 
   async function syncNow() {
     if (safetyCheck && !safetyCheck.canUpload) {
-      setMessage(
-        "Synchronisation bloquée : charge d’abord les données cloud sur cet appareil.",
-      );
+      setMessage(safetyCheck.reason || EMPTY_LOCAL_PROSPECTS_CLOUD_BLOCK_MESSAGE);
       return;
     }
 
@@ -122,8 +121,7 @@ export default function QuickCloudSyncButton({
     return (
       <div className="grid gap-2">
         <p className={messageClassName}>
-          Synchronisation bloquée : charge d’abord les données cloud sur cet
-          appareil.
+          {safetyCheck.reason || EMPTY_LOCAL_PROSPECTS_CLOUD_BLOCK_MESSAGE}
         </p>
         <Link
           href="/sauvegarde#protection-anti-ecrasement"
