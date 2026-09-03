@@ -25,7 +25,6 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   defaultCountry: "France",
   defaultRegion: "",
   defaultCity: "",
-  defaultMessageStyle: "Naturel",
   defaultFollowUpDays: 3,
   defaultPresentationLink: "",
   messageSignature: "",

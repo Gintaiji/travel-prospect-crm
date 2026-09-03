@@ -16,12 +16,6 @@ import {
 } from "../lib/notificationSettingsStorage";
 import type { AppSettings } from "../lib/types";
 
-const messageStyles: AppSettings["defaultMessageStyle"][] = [
-  "Doux",
-  "Naturel",
-  "Direct",
-];
-
 function createDefaultSettings() {
   return {
     ...DEFAULT_APP_SETTINGS,
@@ -296,26 +290,6 @@ export default function SettingsPage() {
                   onChange={handleTextChange("defaultCity")}
                   type="text"
                 />
-              </label>
-
-              <label className="flex flex-col gap-2 text-sm font-medium text-slate-200">
-                Style de message par défaut
-                <select
-                  className="min-h-11 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
-                  value={settings.defaultMessageStyle}
-                  onChange={(event) =>
-                    updateSetting(
-                      "defaultMessageStyle",
-                      event.target.value as AppSettings["defaultMessageStyle"],
-                    )
-                  }
-                >
-                  {messageStyles.map((messageStyle) => (
-                    <option key={messageStyle} value={messageStyle}>
-                      {messageStyle}
-                    </option>
-                  ))}
-                </select>
               </label>
 
               <label className="flex flex-col gap-2 text-sm font-medium text-slate-200">

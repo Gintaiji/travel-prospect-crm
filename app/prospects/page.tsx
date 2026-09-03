@@ -16,10 +16,9 @@ import {
   getTodayDateString,
 } from "../lib/prospectUtils";
 import {
-  MESSAGE_TUNNEL_STEPS,
+  FOLLOW_UP_MESSAGE_TEMPLATES,
   replaceMessageVariables,
-  type MessageStyle,
-  type MessageTunnelStep,
+  type FollowUpMessageTemplateId,
 } from "../lib/messageTemplates";
 import {
   loadCustomMessageTemplates,
@@ -174,11 +173,9 @@ type QualificationQuickAction =
   | "avoid"
   | "not-now";
 
-const MESSAGE_ASSISTANT_SITUATIONS = MESSAGE_TUNNEL_STEPS.map(
-  (messageStep) => messageStep.step,
+const MESSAGE_ASSISTANT_SITUATIONS = FOLLOW_UP_MESSAGE_TEMPLATES.map(
+  (messageTemplate) => messageTemplate.id,
 );
-
-const MESSAGE_ASSISTANT_STYLES = ["Doux", "Naturel", "Direct"] satisfies MessageStyle[];
 
 const qualificationFilterOptions: Array<{ id: QualificationFilter; label: string }> = [
   { id: "all", label: "Tous les prospects à qualifier" },
@@ -203,8 +200,7 @@ const qualificationActionButtons: Array<{
   { id: "not-now", label: "Pas maintenant", variant: "quiet" },
 ];
 
-type MessageAssistantSituation = MessageTunnelStep;
-type MessageAssistantStyle = MessageStyle;
+type MessageAssistantSituation = FollowUpMessageTemplateId;
 
 const PROSPECT_CSV_COLUMNS = [
   "firstName",
@@ -267,15 +263,12 @@ const SOCIAL_CONTACT_CSV_COLUMNS = [
 
 type MessageAssistantState = {
   situation: MessageAssistantSituation;
-  style: MessageAssistantStyle;
   generatedMessage: string;
   selectedResourceId: string;
   copiedProspectId: string | null;
   addedHistoryProspectId: string | null;
   copiedResourceProspectId: string | null;
   copiedMessageWithResourceProspectId: string | null;
-  copiedPresentationLinkProspectId: string | null;
-  copiedMessageWithPresentationLinkProspectId: string | null;
   suggestedFollowUpAppliedProspectId: string | null;
   suggestedStatusAppliedProspectId: string | null;
 };
@@ -898,15 +891,12 @@ const initialProspectFilters: ProspectFilters = {
 
 const initialMessageAssistantState: MessageAssistantState = {
   situation: MESSAGE_ASSISTANT_SITUATIONS[0],
-  style: MESSAGE_ASSISTANT_STYLES[1],
   generatedMessage: "",
   selectedResourceId: "",
   copiedProspectId: null,
   addedHistoryProspectId: null,
   copiedResourceProspectId: null,
   copiedMessageWithResourceProspectId: null,
-  copiedPresentationLinkProspectId: null,
-  copiedMessageWithPresentationLinkProspectId: null,
   suggestedFollowUpAppliedProspectId: null,
   suggestedStatusAppliedProspectId: null,
 };
@@ -923,218 +913,68 @@ const socialLinkLabels: Array<{
   { key: "other", label: "Autre" },
 ];
 
-function getNaturalNoteHint(notes: string) {
-  const cleanNotes = notes.trim();
-  const normalizedNotes = cleanNotes.toLowerCase();
-  const vagueNotes = [
-    "test",
-    "à relancer",
-    "a relancer",
-    "chaud",
-    "tiède",
-    "tiede",
-    "froid",
-    "famille",
-    "ok",
-    "vu",
-  ];
-
-  if (
-    cleanNotes.length < 18 ||
-    cleanNotes.split(/\s+/).length < 4 ||
-    vagueNotes.includes(normalizedNotes)
-  ) {
-    return "";
-  }
-
-  if (normalizedNotes.includes("famille")) {
-    return " J’ai repensé à ce que tu disais sur les voyages en famille.";
-  }
-
-  if (normalizedNotes.includes("portugal")) {
-    return " J’ai repensé à ce que tu disais sur le Portugal.";
-  }
-
-  if (normalizedNotes.includes("hôtel") || normalizedNotes.includes("hotel")) {
-    return " J’ai repensé à ce que tu disais sur les séjours et les hôtels.";
-  }
-
-  if (normalizedNotes.includes("bon plan") || normalizedNotes.includes("bons plans")) {
-    return " J’ai repensé à ce que tu disais sur les bons plans voyage.";
-  }
-
-  return "";
-}
-
-function buildMessageAssistantContext(prospect: Prospect) {
-  const firstName = prospect.firstName.trim();
-  const displayName = prospect.displayName.trim();
-  const city = prospect.city.trim();
-  const country = prospect.country.trim();
-  const notes = prospect.notes.trim();
-  const location = [city, country].filter(Boolean).join(", ");
-  const tags = prospect.tags ?? [];
-  const hasTag = (searchedTag: string) =>
-    tags.some((tag) => tag.toLowerCase() === searchedTag.toLowerCase());
-  const tagInsights = [
-    hasTag("Famille") ? "les voyages en famille" : "",
-    hasTag("Bons plans") ? "les bons plans" : "",
-    hasTag("Entrepreneur") || hasTag("Business") ? "la liberté et les projets autour du voyage" : "",
-  ].filter(Boolean);
-
-  return {
-    greetingName: firstName || displayName || "",
-    displayName,
-    location,
-    platform: prospect.mainPlatform,
-    isWarmContact: prospect.temperature === "Chaud" || prospect.temperature === "Tiède",
-    hasAvoidTag: hasTag("À éviter"),
-    qualificationHint: tagInsights.length > 0 ? tagInsights.join(", ") : "",
-    naturalNoteHint: getNaturalNoteHint(notes),
-  };
-}
-
-function getMessageTunnelStepTemplate(situation: MessageAssistantSituation) {
+function getMessageTemplate(situation: MessageAssistantSituation) {
   return (
-    MESSAGE_TUNNEL_STEPS.find((messageStep) => messageStep.step === situation) ??
-    MESSAGE_TUNNEL_STEPS[0]
+    FOLLOW_UP_MESSAGE_TEMPLATES.find((messageTemplate) => messageTemplate.id === situation) ??
+    FOLLOW_UP_MESSAGE_TEMPLATES[0]
   );
 }
 
 function getCustomTemplateMessage(
   customTemplates: CustomMessageTemplates,
-  step: MessageAssistantSituation,
-  style: MessageAssistantStyle,
+  templateId: MessageAssistantSituation,
 ) {
-  return customTemplates[step]?.[style];
+  return customTemplates[templateId];
 }
 
 function getMessageAssistantObjective(situation: MessageAssistantSituation) {
-  return `Objectif : ${getMessageTunnelStepTemplate(situation).objective}`;
+  return `Type : ${getMessageTemplate(situation).title}`;
 }
 
 function getMessageAssistantNextAction(situation: MessageAssistantSituation) {
-  return getMessageTunnelStepTemplate(situation).nextAction;
+  return getMessageTemplate(situation).nextAction;
 }
 
 function getMessageAssistantSuggestedFollowUpDays(
   situation: MessageAssistantSituation,
-  settings: AppSettings,
 ) {
-  const suggestedFollowUpDays = getMessageTunnelStepTemplate(situation).suggestedFollowUpDays;
-
-  return suggestedFollowUpDays === 3
-    ? Math.max(0, Math.round(settings.defaultFollowUpDays))
-    : suggestedFollowUpDays;
+  return getMessageTemplate(situation).followUpDays;
 }
 
 function formatSuggestedFollowUpLabel(daysToAdd: number | null) {
   if (daysToAdd === null) {
-    return "Aucune relance automatique suggérée";
+    return "Aucune relance automatique sugg?r?e";
   }
 
-  return `Relance suggérée : dans ${daysToAdd} jour${daysToAdd > 1 ? "s" : ""}`;
+  return `Relance sugg?r?e : dans ${daysToAdd} jour${daysToAdd > 1 ? "s" : ""}`;
 }
 
 function getMessageAssistantSuggestedStatus(situation: MessageAssistantSituation) {
-  return getMessageTunnelStepTemplate(situation).suggestedStatus;
-}
-
-function applyMessageAssistantContext(
-  message: string,
-  context: ReturnType<typeof buildMessageAssistantContext>,
-) {
-  const greeting = context.greetingName ? `Salut ${context.greetingName}, ` : "Salut, ";
-  const platformMention = context.platform ? ` sur ${context.platform}` : "";
-  const warmTemperatureMention = context.isWarmContact
-    ? "Comme le sujet voyage semble déjà te parler, "
-    : "";
-  const qualificationQuestion = context.qualificationHint
-    ? `Quand tu voyages, tu es plutôt sensible à ${context.qualificationHint}, ou tu cherches autre chose en priorité ?`
-    : "Quand tu voyages, tu cherches plutôt les bons plans, le confort, ou les expériences qui sortent un peu du classique ?";
-
-  return message
-    .replaceAll("{greeting}", greeting)
-    .replaceAll("{platformMention}", platformMention)
-    .replaceAll("{naturalNoteHint}", context.naturalNoteHint)
-    .replaceAll("{qualificationQuestion}", qualificationQuestion)
-    .replaceAll("{warmTemperatureMention}", warmTemperatureMention);
-}
-
-function getConfiguredClubName(settings: AppSettings) {
-  return settings.clubName.trim() || DEFAULT_APP_SETTINGS.clubName;
-}
-
-function getConfiguredPublicWording(settings: AppSettings) {
-  return settings.publicWording.trim() || DEFAULT_APP_SETTINGS.publicWording;
-}
-
-function sanitizeOutgoingMessage(message: string) {
-  return message
-    .replace(/\bCRM\b/gi, "outil")
-    .replace(/\bprospect\b/gi, "contact")
-    .replace(/\btunnel\b/gi, "parcours")
-    .replace(/\bstatut\b/gi, "situation")
-    .replace(/\btempérature\b/gi, "ressenti")
-    .replace(/dans mon suivi/gi, "de mon côté")
-    .replace(/j[’']ai noté/gi, "je me souviens")
-    .replace(/\bétape\b/gi, "moment");
+  return getMessageTemplate(situation).suggestedStatus;
 }
 
 function applyAppSettingsToMessage(message: string, settings: AppSettings) {
-  const configuredClubName = getConfiguredClubName(settings);
-  const configuredPublicWording = getConfiguredPublicWording(settings);
-  const cleanSignature = sanitizeOutgoingMessage(settings.messageSignature.trim());
-  const configuredMessage = message
-    .replaceAll("club privé lié au voyage", configuredClubName)
-    .replaceAll("club privé avec des avantages membres", configuredClubName)
-    .replaceAll("plateforme voyage avec avantages membres", configuredPublicWording)
-    .replaceAll("plateforme voyage", configuredPublicWording);
-  const cleanMessage = sanitizeOutgoingMessage(configuredMessage).trim();
-
-  return cleanSignature ? `${cleanMessage}\n\n${cleanSignature}` : cleanMessage;
-}
-
-function shouldShowPresentationLink(situation: MessageAssistantSituation) {
-  return situation === "Invitation présentation" || situation === "Suivi après présentation";
-}
-
-function buildMessageWithPresentationLink(message: string, presentationLink: string) {
   const cleanMessage = message.trim();
-  const cleanPresentationLink = presentationLink.trim();
+  const cleanSignature = settings.messageSignature.trim();
 
-  return cleanMessage
-    ? `${cleanMessage}\n\n${cleanPresentationLink}`
-    : cleanPresentationLink;
-}
+  if (!cleanMessage) {
+    return "";
+  }
 
-function buildConversationContentWithPresentationLink(message: string, presentationLink: string) {
-  const cleanMessage = message.trim();
-  const cleanPresentationLink = presentationLink.trim();
+  return cleanSignature ? `${cleanMessage}
 
-  return cleanMessage
-    ? `${cleanMessage}\n\nLien de présentation : ${cleanPresentationLink}`
-    : `Lien de présentation : ${cleanPresentationLink}`;
+${cleanSignature}` : cleanMessage;
 }
 
 function generateProspectMessage(
   prospect: Prospect,
   situation: MessageAssistantSituation,
-  style: MessageAssistantStyle,
   settings: AppSettings,
   customTemplates: CustomMessageTemplates,
 ) {
-  const context = buildMessageAssistantContext(prospect);
-  const messageStep = getMessageTunnelStepTemplate(situation);
-  const messageVariant =
-    messageStep.variants.find((variant) => variant.tone === style) ??
-    messageStep.variants[0];
-  const customMessage = getCustomTemplateMessage(customTemplates, situation, style);
-
-  const message = applyMessageAssistantContext(
-    customMessage ?? messageVariant.assistantTemplate ?? messageVariant.message,
-    context,
-  );
+  const messageTemplate = getMessageTemplate(situation);
+  const customMessage = getCustomTemplateMessage(customTemplates, situation);
+  const message = customMessage ?? messageTemplate.message;
 
   return replaceMessageVariables(applyAppSettingsToMessage(message, settings), prospect);
 }
@@ -1212,7 +1052,6 @@ export default function ProspectsPage () {
       setCustomMessageTemplates(loadCustomMessageTemplates());
       setMessageAssistantState((currentState) => ({
         ...currentState,
-        style: loadedSettings.defaultMessageStyle,
       }));
       setHasLoadedProspects(true);
     }, 0);
@@ -1340,7 +1179,7 @@ export default function ProspectsPage () {
     }));
   }
 
-  function updateMessageAssistantField<Field extends "situation" | "style">(
+  function updateMessageAssistantField<Field extends "situation">(
     field: Field,
     value: MessageAssistantState[Field],
   ) {
@@ -1351,8 +1190,6 @@ export default function ProspectsPage () {
       addedHistoryProspectId: null,
       copiedResourceProspectId: null,
       copiedMessageWithResourceProspectId: null,
-      copiedPresentationLinkProspectId: null,
-      copiedMessageWithPresentationLinkProspectId: null,
       suggestedFollowUpAppliedProspectId: null,
       suggestedStatusAppliedProspectId: null,
     }));
@@ -1364,8 +1201,6 @@ export default function ProspectsPage () {
       selectedResourceId: resourceId,
       copiedResourceProspectId: null,
       copiedMessageWithResourceProspectId: null,
-      copiedPresentationLinkProspectId: null,
-      copiedMessageWithPresentationLinkProspectId: null,
     }));
   }
 
@@ -1448,7 +1283,6 @@ export default function ProspectsPage () {
     );
     setMessageAssistantState({
       ...initialMessageAssistantState,
-      style: appSettings.defaultMessageStyle,
     });
   }
 
@@ -1466,7 +1300,6 @@ export default function ProspectsPage () {
     setActiveMessageAssistantProspectId(prospectId);
     setMessageAssistantState({
       ...initialMessageAssistantState,
-      style: appSettings.defaultMessageStyle,
     });
     setHighlightedProspectId(prospectId);
   }
@@ -2090,7 +1923,6 @@ export default function ProspectsPage () {
       setActiveMessageAssistantProspectId(null);
       setMessageAssistantState({
         ...initialMessageAssistantState,
-        style: appSettings.defaultMessageStyle,
       });
     }
   }
@@ -2202,7 +2034,6 @@ export default function ProspectsPage () {
       setActiveMessageAssistantProspectId(null);
       setMessageAssistantState({
         ...initialMessageAssistantState,
-        style: appSettings.defaultMessageStyle,
       });
     }
   }
@@ -2364,7 +2195,6 @@ export default function ProspectsPage () {
       generatedMessage: generateProspectMessage(
         prospect,
         currentState.situation,
-        currentState.style,
         appSettings,
         customMessageTemplates,
       ),
@@ -2372,8 +2202,6 @@ export default function ProspectsPage () {
       addedHistoryProspectId: null,
       copiedResourceProspectId: null,
       copiedMessageWithResourceProspectId: null,
-      copiedPresentationLinkProspectId: null,
-      copiedMessageWithPresentationLinkProspectId: null,
       suggestedFollowUpAppliedProspectId: null,
       suggestedStatusAppliedProspectId: null,
     }));
@@ -2423,62 +2251,8 @@ export default function ProspectsPage () {
     }, 1800);
   }
 
-  async function handleCopyPresentationLink(prospectId: string) {
-    const presentationLink = appSettings.defaultPresentationLink.trim();
-
-    if (!presentationLink || !navigator.clipboard?.writeText) {
-      return;
-    }
-
-    await navigator.clipboard.writeText(presentationLink);
-    setMessageAssistantState((currentState) => ({
-      ...currentState,
-      copiedPresentationLinkProspectId: prospectId,
-    }));
-    window.setTimeout(() => {
-      setMessageAssistantState((currentState) => ({
-        ...currentState,
-        copiedPresentationLinkProspectId:
-          currentState.copiedPresentationLinkProspectId === prospectId
-            ? null
-            : currentState.copiedPresentationLinkProspectId,
-      }));
-    }, 1800);
-  }
-
-  async function handleCopyMessageWithPresentationLink(prospectId: string) {
-    const presentationLink = appSettings.defaultPresentationLink.trim();
-
-    if (!presentationLink || !navigator.clipboard?.writeText) {
-      return;
-    }
-
-    await navigator.clipboard.writeText(
-      buildMessageWithPresentationLink(
-        getGeneratedMessageForProspect(prospectId),
-        presentationLink,
-      ),
-    );
-    setMessageAssistantState((currentState) => ({
-      ...currentState,
-      copiedMessageWithPresentationLinkProspectId: prospectId,
-    }));
-    window.setTimeout(() => {
-      setMessageAssistantState((currentState) => ({
-        ...currentState,
-        copiedMessageWithPresentationLinkProspectId:
-          currentState.copiedMessageWithPresentationLinkProspectId === prospectId
-            ? null
-            : currentState.copiedMessageWithPresentationLinkProspectId,
-      }));
-    }, 1800);
-  }
-
   function handleApplySuggestedFollowUp(prospect: Prospect) {
-    const suggestedFollowUpDays = getMessageAssistantSuggestedFollowUpDays(
-      messageAssistantState.situation,
-      appSettings,
-    );
+    const suggestedFollowUpDays = getMessageAssistantSuggestedFollowUpDays(messageAssistantState.situation);
 
     if (suggestedFollowUpDays === null) {
       return;
@@ -2609,15 +2383,7 @@ export default function ProspectsPage () {
       messageAssistantState.generatedMessage,
       prospect,
     );
-    const presentationLink = appSettings.defaultPresentationLink.trim();
-    const shouldAddPresentationLink =
-      messageAssistantState.situation === "Invitation présentation" && presentationLink;
-    const messageWithPresentationLink = shouldAddPresentationLink
-      ? buildConversationContentWithPresentationLink(
-          generatedMessage,
-          presentationLink,
-        )
-      : generatedMessage.trim();
+    const messageWithResourceBase = generatedMessage.trim();
     const today = getTodayDateString();
     const newConversationEntry: ConversationEntry = {
       id: createProspectId(),
@@ -2625,10 +2391,10 @@ export default function ProspectsPage () {
       channel: prospect.mainPlatform,
       content: selectedResource
         ? buildConversationContentWithResource(
-            messageWithPresentationLink,
+            messageWithResourceBase,
             selectedResource,
           )
-        : messageWithPresentationLink,
+        : messageWithResourceBase,
       nextAction: getMessageAssistantNextAction(messageAssistantState.situation),
     };
     const updatedProspects = prospects.map((currentProspect) => {
@@ -3257,7 +3023,6 @@ export default function ProspectsPage () {
         setActiveMessageAssistantProspectId(null);
         setMessageAssistantState({
           ...initialMessageAssistantState,
-          style: appSettings.defaultMessageStyle,
         });
         setBackupMessage("CSV chargé avec succès.");
         setIsBackupError(false);
@@ -3323,7 +3088,6 @@ export default function ProspectsPage () {
         setActiveMessageAssistantProspectId(null);
         setMessageAssistantState({
           ...initialMessageAssistantState,
-          style: appSettings.defaultMessageStyle,
         });
         setBackupMessage("Sauvegarde chargée avec succès.");
         setIsBackupError(false);
@@ -5506,11 +5270,9 @@ export default function ProspectsPage () {
                 const selectedSharedResource = sortedResources.find(
                   (resource) => resource.id === selectedSharedResourceId,
                 );
+                const messageAssistantTemplate = getMessageTemplate(messageAssistantState.situation);
                 const messageAssistantNextAction = getMessageAssistantNextAction(messageAssistantState.situation);
-                const messageAssistantSuggestedFollowUpDays = getMessageAssistantSuggestedFollowUpDays(
-                  messageAssistantState.situation,
-                  appSettings,
-                );
+                const messageAssistantSuggestedFollowUpDays = getMessageAssistantSuggestedFollowUpDays(messageAssistantState.situation);
                 const messageAssistantSuggestedFollowUpLabel = formatSuggestedFollowUpLabel(
                   messageAssistantSuggestedFollowUpDays,
                 );
@@ -5519,9 +5281,6 @@ export default function ProspectsPage () {
                 );
                 const messageAssistantSuggestedStatusLabel =
                   messageAssistantSuggestedStatus ?? "garder le statut actuel";
-                const defaultPresentationLink = appSettings.defaultPresentationLink.trim();
-                const shouldDisplayDefaultPresentationLink =
-                  defaultPresentationLink && shouldShowPresentationLink(messageAssistantState.situation);
                 const priorityLabel =
                   prospect.score >= 75
                     ? "Priorité haute"
@@ -5872,7 +5631,6 @@ export default function ProspectsPage () {
                               setActiveMessageAssistantProspectId(null);
                               setMessageAssistantState({
                                 ...initialMessageAssistantState,
-                                style: appSettings.defaultMessageStyle,
                               });
                             }}
                           >
@@ -5888,10 +5646,10 @@ export default function ProspectsPage () {
 
                         <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
                           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
-                            Étape du tunnel
+                            Type de relance
                           </p>
                           <p className="mt-1 text-sm text-slate-200">
-                            {messageAssistantState.situation}
+                            {messageAssistantTemplate.title}
                           </p>
                           <p className="mt-1 text-xs leading-5 text-slate-400">
                             {messageAssistantObjective}
@@ -5900,7 +5658,7 @@ export default function ProspectsPage () {
 
                         <div className="grid gap-3 md:grid-cols-2">
                           <label className="grid gap-1 text-xs text-slate-300">
-                            Situation
+                            Relance
                             <select
                               className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-sky-400"
                               value={messageAssistantState.situation}
@@ -5911,29 +5669,9 @@ export default function ProspectsPage () {
                                 )
                               }
                             >
-                              {MESSAGE_ASSISTANT_SITUATIONS.map((situation) => (
-                                <option key={situation} value={situation}>
-                                  {situation}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-
-                          <label className="grid gap-1 text-xs text-slate-300">
-                            Style
-                            <select
-                              className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-sky-400"
-                              value={messageAssistantState.style}
-                              onChange={(event) =>
-                                updateMessageAssistantField(
-                                  "style",
-                                  event.target.value as MessageAssistantStyle,
-                                )
-                              }
-                            >
-                              {MESSAGE_ASSISTANT_STYLES.map((style) => (
-                                <option key={style} value={style}>
-                                  {style}
+                              {FOLLOW_UP_MESSAGE_TEMPLATES.map((messageTemplate) => (
+                                <option key={messageTemplate.id} value={messageTemplate.id}>
+                                  {messageTemplate.title}
                                 </option>
                               ))}
                             </select>
@@ -6031,46 +5769,6 @@ export default function ProspectsPage () {
                                   </p>
                                 ) : null}
                               </div>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                        {shouldDisplayDefaultPresentationLink ? (
-                          <div className="grid gap-3 rounded-2xl border border-sky-400/20 bg-sky-400/5 p-3">
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-300">
-                                Lien de présentation par défaut
-                              </p>
-                              <p className="mt-2 break-all text-xs text-sky-100">
-                                {defaultPresentationLink}
-                              </p>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                className="min-h-10 rounded-full border border-sky-400/30 px-4 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/10"
-                                type="button"
-                                onClick={() => handleCopyPresentationLink(prospect.id)}
-                              >
-                                Copier le lien
-                              </button>
-                              <button
-                                className="min-h-10 rounded-full border border-emerald-400/30 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-50"
-                                type="button"
-                                disabled={!messageAssistantState.generatedMessage}
-                                onClick={() => handleCopyMessageWithPresentationLink(prospect.id)}
-                              >
-                                Copier message + lien
-                              </button>
-                            </div>
-                            {messageAssistantState.copiedPresentationLinkProspectId === prospect.id ? (
-                              <p className="text-xs font-medium text-sky-300">
-                                Lien copié.
-                              </p>
-                            ) : null}
-                            {messageAssistantState.copiedMessageWithPresentationLinkProspectId === prospect.id ? (
-                              <p className="text-xs font-medium text-emerald-300">
-                                Message et lien copiés.
-                              </p>
                             ) : null}
                           </div>
                         ) : null}

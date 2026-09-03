@@ -82,7 +82,6 @@ export type AppSettings = {
   defaultCountry: string;
   defaultRegion: string;
   defaultCity: string;
-  defaultMessageStyle: "Doux" | "Naturel" | "Direct";
   defaultFollowUpDays: number;
   defaultPresentationLink: string;
   messageSignature: string;

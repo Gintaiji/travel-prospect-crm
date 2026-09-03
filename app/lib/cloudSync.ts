@@ -1,6 +1,7 @@
 import { createBrowserSupabaseClient } from "./supabaseClient";
 import {
   loadCustomMessageTemplates,
+  normalizeCustomMessageTemplates,
   saveCustomMessageTemplates,
   type CustomMessageTemplates,
 } from "./messageTemplateStorage";
@@ -215,7 +216,6 @@ function hasCustomSettings(settings: AppSettings) {
     settings.defaultCountry.trim() !== DEFAULT_APP_SETTINGS.defaultCountry ||
     settings.defaultRegion.trim() !== DEFAULT_APP_SETTINGS.defaultRegion ||
     settings.defaultCity.trim() !== DEFAULT_APP_SETTINGS.defaultCity ||
-    settings.defaultMessageStyle !== DEFAULT_APP_SETTINGS.defaultMessageStyle ||
     settings.defaultFollowUpDays !== DEFAULT_APP_SETTINGS.defaultFollowUpDays ||
     settings.defaultPresentationLink.trim() !==
       DEFAULT_APP_SETTINGS.defaultPresentationLink ||
@@ -276,7 +276,7 @@ function getCustomMessageTemplatesFromBackupPayload(
   value: Partial<CloudBackupHistoryPayload>,
 ): CustomMessageTemplates | undefined {
   return isRecord(value.customMessageTemplates)
-    ? (value.customMessageTemplates as CustomMessageTemplates)
+    ? normalizeCustomMessageTemplates(value.customMessageTemplates)
     : undefined;
 }
 
@@ -322,10 +322,8 @@ function hasCustomStreetMarketingSurvey(storage: StreetMarketingSurveyStorage) {
 }
 
 function hasCustomMessageTemplates(customMessageTemplates: CustomMessageTemplates) {
-  return Object.values(customMessageTemplates).some((stepTemplates) =>
-    stepTemplates
-      ? Object.values(stepTemplates).some((message) => typeof message === "string")
-      : false,
+  return Object.values(customMessageTemplates).some(
+    (message) => typeof message === "string" && message.trim() !== "",
   );
 }
 
@@ -333,13 +331,8 @@ function countCustomMessageTemplates(
   customMessageTemplates: CustomMessageTemplates,
 ) {
   return Object.values(customMessageTemplates).reduce(
-    (totalTemplates, stepTemplates) =>
-      totalTemplates +
-      (stepTemplates
-        ? Object.values(stepTemplates).filter(
-            (message) => typeof message === "string" && message.trim() !== "",
-          ).length
-        : 0),
+    (totalTemplates, message) =>
+      totalTemplates + (typeof message === "string" && message.trim() !== "" ? 1 : 0),
     0,
   );
 }
@@ -445,7 +438,7 @@ export async function getCloudDataSummary(): Promise<CloudDataSummary> {
 
   const { data: templateRow, error: templatesError } = await supabase
     .from("crm_message_templates")
-    .select("user_id")
+    .select("data")
     .eq("user_id", userId)
     .maybeSingle();
   throwIfSupabaseError(templatesError);
@@ -464,21 +457,25 @@ export async function getCloudDataSummary(): Promise<CloudDataSummary> {
     cloudStreetMarketingSurvey &&
       hasCustomStreetMarketingSurvey(cloudStreetMarketingSurvey),
   );
-  const hasCustomMessageTemplates = Boolean(templateRow);
+  const cloudMessageTemplates = normalizeCustomMessageTemplates(
+    (templateRow as CloudDataRow<unknown> | null)?.data,
+  );
+  const cloudHasCustomMessageTemplates =
+    hasCustomMessageTemplates(cloudMessageTemplates);
 
   return {
     prospectsCount: safeProspectsCount,
     resourcesCount: safeResourcesCount,
     hasSettings,
     streetMarketingSurveysCount,
-    hasCustomMessageTemplates,
+    hasCustomMessageTemplates: cloudHasCustomMessageTemplates,
     lastCloudSyncAt: cloudSyncState.lastSyncAt,
     hasCloudData:
       safeProspectsCount > 0 ||
       safeResourcesCount > 0 ||
       hasStreetMarketingSurvey ||
       hasSettings ||
-      hasCustomMessageTemplates,
+      cloudHasCustomMessageTemplates,
   };
 }
 
@@ -703,7 +700,10 @@ export async function restoreCloudBackupHistoryToLocal(
       saveStreetMarketingSurvey(streetMarketingSurvey);
     }
 
-    if (customMessageTemplates) {
+    if (
+      customMessageTemplates &&
+      Object.keys(customMessageTemplates).length > 0
+    ) {
       saveCustomMessageTemplates(customMessageTemplates);
     }
   } finally {
@@ -715,7 +715,10 @@ export async function restoreCloudBackupHistoryToLocal(
     resourcesCount: normalizedResources.resources.length,
     settingsRestored: Boolean(settings),
     streetMarketingSurveyRestored: Boolean(streetMarketingSurvey),
-    customMessageTemplatesRestored: Boolean(customMessageTemplates),
+    customMessageTemplatesRestored: Boolean(
+      customMessageTemplates &&
+        Object.keys(customMessageTemplates).length > 0,
+    ),
   };
 }
 
@@ -863,9 +866,9 @@ export async function restoreCloudDataToLocal(): Promise<RestoreCloudSummary> {
   const settings = getAppSettingsFromCloudData(settingsData);
   const streetMarketingSurvey =
     getStreetMarketingSurveyFromCloudData(settingsData);
-  const customMessageTemplates = (
-    templateRow as CloudDataRow<CustomMessageTemplates> | null
-  )?.data;
+  const customMessageTemplates = normalizeCustomMessageTemplates(
+    (templateRow as CloudDataRow<unknown> | null)?.data,
+  );
 
   pauseLocalChangeTracking();
 
@@ -881,7 +884,7 @@ export async function restoreCloudDataToLocal(): Promise<RestoreCloudSummary> {
       saveStreetMarketingSurvey(streetMarketingSurvey);
     }
 
-    if (customMessageTemplates) {
+    if (Object.keys(customMessageTemplates).length > 0) {
       saveCustomMessageTemplates(customMessageTemplates);
     }
   } finally {
@@ -893,7 +896,7 @@ export async function restoreCloudDataToLocal(): Promise<RestoreCloudSummary> {
     resourcesCount: resources.length,
     settingsRestored: Boolean(settings),
     streetMarketingSurveyRestored: Boolean(streetMarketingSurvey),
-    customMessageTemplatesRestored: Boolean(customMessageTemplates),
+    customMessageTemplatesRestored: Object.keys(customMessageTemplates).length > 0,
   };
 }
 

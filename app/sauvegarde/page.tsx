@@ -38,6 +38,7 @@ import {
 } from "../lib/cloudSync";
 import {
   loadCustomMessageTemplates,
+  normalizeCustomMessageTemplates,
   saveCustomMessageTemplates,
   type CustomMessageTemplates,
 } from "../lib/messageTemplateStorage";
@@ -146,7 +147,6 @@ function hasCustomSettings(settings: AppSettings) {
     settings.defaultCountry.trim() !== DEFAULT_APP_SETTINGS.defaultCountry ||
     settings.defaultRegion.trim() !== DEFAULT_APP_SETTINGS.defaultRegion ||
     settings.defaultCity.trim() !== DEFAULT_APP_SETTINGS.defaultCity ||
-    settings.defaultMessageStyle !== DEFAULT_APP_SETTINGS.defaultMessageStyle ||
     settings.defaultFollowUpDays !== DEFAULT_APP_SETTINGS.defaultFollowUpDays ||
     settings.defaultPresentationLink.trim() !== DEFAULT_APP_SETTINGS.defaultPresentationLink ||
     settings.messageSignature.trim() !== DEFAULT_APP_SETTINGS.messageSignature ||
@@ -155,10 +155,8 @@ function hasCustomSettings(settings: AppSettings) {
 }
 
 function hasCustomMessageTemplates(customMessageTemplates: CustomMessageTemplates) {
-  return Object.values(customMessageTemplates).some((stepTemplates) =>
-    stepTemplates
-      ? Object.values(stepTemplates).some((message) => typeof message === "string")
-      : false,
+  return Object.values(customMessageTemplates).some(
+    (message) => typeof message === "string" && message.trim() !== "",
   );
 }
 
@@ -675,8 +673,12 @@ export default function BackupPage() {
           setStreetMarketingSurvey(loadStreetMarketingSurvey());
         }
         if (hasBackupCustomMessageTemplates(parsedBackup)) {
-          saveCustomMessageTemplates(parsedBackup.customMessageTemplates);
-          setCustomMessageTemplates(parsedBackup.customMessageTemplates);
+          const normalizedTemplates = normalizeCustomMessageTemplates(
+            parsedBackup.customMessageTemplates,
+          );
+
+          saveCustomMessageTemplates(normalizedTemplates);
+          setCustomMessageTemplates(normalizedTemplates);
         }
         setProspects(parsedBackup.prospects);
         setResources(importedResources.resources);
