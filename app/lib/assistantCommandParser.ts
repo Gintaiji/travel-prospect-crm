@@ -34,6 +34,7 @@ function normalizeForDetection(value: string) {
   return normalizeSpaces(value)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[’‘`´]/g, "'")
     .toLowerCase();
 }
 
@@ -103,6 +104,30 @@ function removeTrailingColorExpression(value: string) {
   return normalizeSpaces(
     value.replace(/\s+(comme prospect|couleur|en)?\s*(jaune|rouge|bleu|vert|verte)$/i, ""),
   );
+}
+
+function parseGetTodayFollowUpsCommand(normalizedText: string) {
+  const todayFollowUpCommands = [
+    "montre moi les relances du jour",
+    "montre les relances du jour",
+    "affiche les relances du jour",
+    "quelles sont mes relances aujourd'hui",
+    "qui dois je relancer aujourd'hui",
+    "mes relances du jour",
+    "relances du jour",
+  ];
+  const commandText = normalizeSpaces(
+    normalizedText.replace(/-/g, " ").replace(/[?!.]+$/g, ""),
+  );
+
+  if (!todayFollowUpCommands.includes(commandText)) {
+    return null;
+  }
+
+  return successIfValid({
+    action: "getTodayFollowUps",
+    payload: {},
+  });
 }
 
 function parseSearchCommand(originalText: string, normalizedText: string) {
@@ -302,6 +327,7 @@ export function parseAssistantCommand(text: string): AssistantCommandParseResult
 
   return (
     parseAddNoteCommand(originalText) ??
+    parseGetTodayFollowUpsCommand(normalizedText) ??
     parseSearchCommand(originalText, normalizedText) ??
     parseColorUpdateCommand(originalText, normalizedText) ??
     parseTemperatureUpdateCommand(originalText, normalizedText) ??
