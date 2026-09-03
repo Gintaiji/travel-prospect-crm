@@ -25,6 +25,11 @@ export type SearchProspectCommand = {
   };
 };
 
+export type GetTodayFollowUpsCommand = {
+  action: "getTodayFollowUps";
+  payload: Record<string, never>;
+};
+
 // CRM-controlled fields such as id, score, dates and history are intentionally excluded.
 export type CreateProspectPayload = Pick<Prospect, "firstName"> &
   Partial<
@@ -81,6 +86,7 @@ export type UpdateProspectCommand = {
 
 export type AiCommand =
   | SearchProspectCommand
+  | GetTodayFollowUpsCommand
   | CreateProspectCommand
   | AddNoteCommand
   | UpdateProspectCommand;
