@@ -961,7 +961,10 @@ function getMessageAssistantSuggestedStatus(situation: MessageAssistantSituation
 }
 
 function applyAppSettingsToMessage(message: string, settings: AppSettings) {
-  const cleanMessage = message.trim();
+  const cleanDisplayName = settings.userDisplayName.trim();
+  const cleanMessage = message
+    .replace(/\{\{\s*nom_affiche\s*\}\}/gi, cleanDisplayName)
+    .trim();
   const cleanSignature = settings.messageSignature.trim();
 
   if (!cleanMessage) {
