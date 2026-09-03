@@ -14,10 +14,6 @@ export type FollowUpMessageTemplate = {
   suggestedStatus: Prospect["status"] | null;
 };
 
-type ProspectWithOptionalMeetingPlace = Prospect & {
-  meetingPlace?: unknown;
-};
-
 function cleanMessageVariableValue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -56,10 +52,7 @@ function getMeetingPlaceFromNotes(notes: string) {
 }
 
 function getProspectMeetingPlace(prospect: Prospect) {
-  const prospectWithMeetingPlace = prospect as ProspectWithOptionalMeetingPlace;
-  const dedicatedMeetingPlace = cleanMessageVariableValue(
-    prospectWithMeetingPlace.meetingPlace,
-  );
+  const dedicatedMeetingPlace = cleanMessageVariableValue(prospect.meetingPlace);
 
   return dedicatedMeetingPlace || getMeetingPlaceFromNotes(prospect.notes);
 }
@@ -75,6 +68,7 @@ export function replaceMessageVariables(template: string, prospect: Prospect) {
     date_de_relance: cleanMessageVariableValue(prospect.nextActionDate),
     lieu_rencontre: getProspectMeetingPlace(prospect),
     lieu_de_rencontre: getProspectMeetingPlace(prospect),
+    lieurencontre: getProspectMeetingPlace(prospect),
   };
 
   return template.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (match, variableName) => {

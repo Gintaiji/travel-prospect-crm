@@ -331,6 +331,7 @@ export default function StreetMarketingPage() {
       firstName,
       lastName: contact.lastName,
       displayName,
+      meetingPlace: contact.meetingPlace,
       jobTitle: "",
       businessArea: "",
       city: "",

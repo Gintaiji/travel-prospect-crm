@@ -120,6 +120,7 @@ export type Prospect = {
   firstName: string;
   lastName: string;
   displayName: string;
+  meetingPlace?: string;
 
   jobTitle: string;
   businessArea: string;

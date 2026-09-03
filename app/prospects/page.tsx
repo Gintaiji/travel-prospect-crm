@@ -42,6 +42,7 @@ type ProspectFormState = {
   firstName: string;
   lastName: string;
   displayName: string;
+  meetingPlace: string;
   jobTitle: string;
   businessArea: string;
   mainPlatform: Prospect["mainPlatform"];
@@ -206,6 +207,7 @@ const PROSPECT_CSV_COLUMNS = [
   "firstName",
   "lastName",
   "displayName",
+  "meetingPlace",
   "jobTitle",
   "businessArea",
   "city",
@@ -546,6 +548,10 @@ function mergeProspectData(keptProspect: Prospect, mergedProspect: Prospect) {
     firstName: pickFilledText(keptProspect.firstName, mergedProspect.firstName),
     lastName: pickFilledText(keptProspect.lastName, mergedProspect.lastName),
     displayName: pickFilledText(keptProspect.displayName, mergedProspect.displayName),
+    meetingPlace: pickFilledText(
+      keptProspect.meetingPlace ?? "",
+      mergedProspect.meetingPlace ?? "",
+    ),
     jobTitle: pickFilledText(keptProspect.jobTitle, mergedProspect.jobTitle),
     businessArea: pickFilledText(keptProspect.businessArea, mergedProspect.businessArea),
     city: pickFilledText(keptProspect.city, mergedProspect.city),
@@ -810,6 +816,7 @@ const initialFormState: ProspectFormState = {
   firstName: "",
   lastName: "",
   displayName: "",
+  meetingPlace: "",
   jobTitle: "",
   businessArea: "",
   mainPlatform: SOCIAL_PLATFORMS[0],
@@ -1367,6 +1374,7 @@ export default function ProspectsPage () {
       firstName: prospect.firstName,
       lastName: prospect.lastName,
       displayName: prospect.displayName,
+      meetingPlace: prospect.meetingPlace ?? "",
       jobTitle: prospect.jobTitle,
       businessArea: prospect.businessArea,
       mainPlatform: prospect.mainPlatform,
@@ -1673,6 +1681,7 @@ export default function ProspectsPage () {
       firstName: formState.firstName.trim(),
       lastName: formState.lastName.trim(),
       displayName: formState.displayName.trim(),
+      meetingPlace: formState.meetingPlace.trim(),
       jobTitle: formState.jobTitle.trim(),
       businessArea: formState.businessArea.trim(),
       city: formState.city.trim(),
@@ -1844,6 +1853,7 @@ export default function ProspectsPage () {
         firstName: fullProspectFormState.firstName.trim(),
         lastName: fullProspectFormState.lastName.trim(),
         displayName: fullProspectFormState.displayName.trim(),
+        meetingPlace: fullProspectFormState.meetingPlace.trim(),
         jobTitle: fullProspectFormState.jobTitle.trim(),
         businessArea: fullProspectFormState.businessArea.trim(),
         city: fullProspectFormState.city.trim(),
@@ -2538,6 +2548,7 @@ export default function ProspectsPage () {
         firstName: prospect.firstName,
         lastName: prospect.lastName,
         displayName: prospect.displayName,
+        meetingPlace: prospect.meetingPlace ?? "",
         jobTitle: prospect.jobTitle,
         businessArea: prospect.businessArea,
         city: prospect.city,
@@ -2666,6 +2677,7 @@ export default function ProspectsPage () {
       firstName: getCell("firstName"),
       lastName: getCell("lastName"),
       displayName: getCell("displayName"),
+      meetingPlace: getCell("meetingPlace"),
       jobTitle: getCell("jobTitle"),
       businessArea: getCell("businessArea"),
       city: getCell("city"),
@@ -3804,6 +3816,16 @@ export default function ProspectsPage () {
                   placeholder="@pseudo"
                 />
               </label>
+
+                  <label className="grid gap-2 text-sm text-slate-300">
+                    Lieu de rencontre
+                    <input
+                      className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
+                      value={formState.meetingPlace}
+                      onChange={(event) => updateFormField("meetingPlace", event.target.value)}
+                      placeholder="Auchan Boulazac, salon, Instagram..."
+                    />
+                  </label>
 
                   <label className="grid gap-2 text-sm text-slate-300">
                     Métier / poste
@@ -5888,6 +5910,10 @@ export default function ProspectsPage () {
                               <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.displayName} onChange={(event) => updateFullProspectFormField("displayName", event.target.value)} />
                             </label>
                             <label className="grid gap-1 text-xs text-slate-300">
+                              Lieu de rencontre
+                              <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400" value={fullProspectFormState.meetingPlace} onChange={(event) => updateFullProspectFormField("meetingPlace", event.target.value)} placeholder="Auchan Boulazac, salon, Instagram..." />
+                            </label>
+                            <label className="grid gap-1 text-xs text-slate-300">
                               Métier / poste
                               <input className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400" value={fullProspectFormState.jobTitle} onChange={(event) => updateFullProspectFormField("jobTitle", event.target.value)} />
                             </label>
@@ -6403,6 +6429,12 @@ export default function ProspectsPage () {
                         <p className="mt-1 font-medium text-white">
                           {[prospect.city, prospect.region, prospect.country].filter(Boolean).join(" / ") || "—"}
                         </p>
+                      </div>
+                      ) : null}
+                      {isDetailedView ? (
+                      <div className="rounded-2xl bg-white/5 p-3">
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Lieu de rencontre</p>
+                        <p className="mt-1 font-medium text-white">{prospect.meetingPlace || "—"}</p>
                       </div>
                       ) : null}
                       {isDetailedView && hasContactDetails ? (
