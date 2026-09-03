@@ -574,28 +574,28 @@ export default function TodayPage() {
             className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
             type="button"
             onClick={() =>
-              updateProspectNextActionDate(prospect.id, getFutureDateString(1))
+              updateProspectNextActionDate(prospect.id, getFutureDateString(2))
             }
           >
-            Reporter demain
+            Reporter 2 jours
           </button>
           <button
             className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
             type="button"
             onClick={() =>
-              updateProspectNextActionDate(prospect.id, getFutureDateString(3))
+              updateProspectNextActionDate(prospect.id, getFutureDateString(4))
             }
           >
-            Reporter +3 jours
+            Reporter 4 jours
           </button>
           <button
             className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
             type="button"
             onClick={() =>
-              updateProspectNextActionDate(prospect.id, getFutureDateString(7))
+              updateProspectNextActionDate(prospect.id, getFutureDateString(30))
             }
           >
-            Reporter +7 jours
+            Reporter 30 jours
           </button>
           <Link
             className="flex min-h-12 items-center justify-center rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-center text-sm font-semibold text-sky-200 transition hover:bg-sky-400/20"
@@ -852,28 +852,28 @@ export default function TodayPage() {
                         className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
                         type="button"
                         onClick={() =>
-                          updateProspectNextActionDate(prospect.id, getFutureDateString(1))
+                          updateProspectNextActionDate(prospect.id, getFutureDateString(2))
                         }
                       >
-                        Reporter demain
+                        Reporter 2 jours
                       </button>
                       <button
                         className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
                         type="button"
                         onClick={() =>
-                          updateProspectNextActionDate(prospect.id, getFutureDateString(3))
+                          updateProspectNextActionDate(prospect.id, getFutureDateString(4))
                         }
                       >
-                        Reporter +3 jours
+                        Reporter 4 jours
                       </button>
                       <button
                         className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
                         type="button"
                         onClick={() =>
-                          updateProspectNextActionDate(prospect.id, getFutureDateString(7))
+                          updateProspectNextActionDate(prospect.id, getFutureDateString(30))
                         }
                       >
-                        Reporter +7 jours
+                        Reporter 30 jours
                       </button>
                       {googleCalendarUrl ? (
                         <a

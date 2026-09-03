@@ -196,8 +196,8 @@ const qualificationActionButtons: Array<{
   { id: "keep-contact", label: "Garder à contacter", variant: "quiet" },
   { id: "make-warm", label: "Passer en tiède", variant: "primary" },
   { id: "make-hot", label: "Passer en chaud", variant: "primary" },
-  { id: "follow-up-tomorrow", label: "Relancer demain", variant: "quiet" },
-  { id: "follow-up-plus-three", label: "Relancer +3 jours", variant: "quiet" },
+  { id: "follow-up-tomorrow", label: "Relancer 2 jours", variant: "quiet" },
+  { id: "follow-up-plus-three", label: "Relancer 4 jours", variant: "quiet" },
   { id: "avoid", label: "Marquer à éviter", variant: "danger" },
   { id: "not-now", label: "Pas maintenant", variant: "quiet" },
 ];
@@ -1577,15 +1577,15 @@ export default function ProspectsPage () {
 
   function getQuickAddNextActionDate(option: QuickAddFollowUpOption) {
     if (option === "tomorrow") {
-      return getFutureDateString(1);
+      return getFutureDateString(2);
     }
 
     if (option === "plus3") {
-      return getFutureDateString(3);
+      return getFutureDateString(4);
     }
 
     if (option === "plus7") {
-      return getFutureDateString(7);
+      return getFutureDateString(30);
     }
 
     return "";
@@ -2308,11 +2308,11 @@ export default function ProspectsPage () {
       }
 
       if (action === "follow-up-tomorrow") {
-        nextProspect.nextActionDate = getFutureDateString(1);
+        nextProspect.nextActionDate = getFutureDateString(2);
       }
 
       if (action === "follow-up-plus-three") {
-        nextProspect.nextActionDate = getFutureDateString(3);
+        nextProspect.nextActionDate = getFutureDateString(4);
       }
 
       if (action === "avoid") {
@@ -3367,23 +3367,23 @@ export default function ProspectsPage () {
           <button
             className="min-h-10 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
             type="button"
-            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(1))}
+            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(2))}
           >
-            Demain
+            2 jours
           </button>
           <button
             className="min-h-10 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
             type="button"
-            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(3))}
+            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(4))}
           >
-            +3 jours
+            4 jours
           </button>
           <button
             className="min-h-10 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
             type="button"
-            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(7))}
+            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(30))}
           >
-            +7 jours
+            30 jours
           </button>
           <button
             className="min-h-10 rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
@@ -3897,9 +3897,9 @@ export default function ProspectsPage () {
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { value: "none", label: "Aucune" },
-                    { value: "tomorrow", label: "Demain" },
-                    { value: "plus3", label: "+3 jours" },
-                    { value: "plus7", label: "+7 jours" },
+                    { value: "tomorrow", label: "2 jours" },
+                    { value: "plus3", label: "4 jours" },
+                    { value: "plus7", label: "30 jours" },
                   ].map((followUpOption) => (
                     <label
                       className={`flex min-h-12 items-center justify-center rounded-2xl border px-3 py-2 text-center text-sm font-semibold transition ${
@@ -5286,23 +5286,23 @@ export default function ProspectsPage () {
                             <button
                               className="min-h-12 rounded-2xl border border-emerald-400/30 px-2 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
                               type="button"
-                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(1))}
+                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(2))}
                             >
-                              Demain
+                              2 jours
                             </button>
                             <button
                               className="min-h-12 rounded-2xl border border-emerald-400/30 px-2 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
                               type="button"
-                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(3))}
+                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(4))}
                             >
-                              +3 jours
+                              4 jours
                             </button>
                             <button
                               className="min-h-12 rounded-2xl border border-emerald-400/30 px-2 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
                               type="button"
-                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(7))}
+                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(30))}
                             >
-                              +7 jours
+                              30 jours
                             </button>
                           </div>
                         </div>
