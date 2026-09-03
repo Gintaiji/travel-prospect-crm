@@ -6,7 +6,11 @@ import {
   type AssistantCommandParseResult,
 } from "../lib/assistantCommandParser";
 import type { AiCommand } from "../lib/aiCommandTypes";
-import { appendProspectNote } from "../lib/prospectActions";
+import {
+  appendProspectNote,
+  updateProspectColorAndTemperature,
+  type UpdateProspectColorAndTemperatureChanges,
+} from "../lib/prospectActions";
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
 import { getProspectDisplayName, isDateToday } from "../lib/prospectUtils";
 import type { Prospect } from "../lib/types";
@@ -120,6 +124,83 @@ function resolveProspectTarget(
   };
 }
 
+function getSupportedUpdateChanges(
+  changes: Extract<AiCommand, { action: "updateProspect" }>["payload"]["changes"],
+) {
+  const changeKeys = Object.keys(changes);
+  const hasUnsupportedChange = changeKeys.some(
+    (changeKey) => changeKey !== "colorType" && changeKey !== "temperature",
+  );
+
+  if (hasUnsupportedChange) {
+    return null;
+  }
+
+  const supportedChanges: UpdateProspectColorAndTemperatureChanges = {};
+
+  if (changes.colorType !== undefined) {
+    supportedChanges.colorType = changes.colorType;
+  }
+
+  if (changes.temperature !== undefined) {
+    supportedChanges.temperature = changes.temperature;
+  }
+
+  return Object.keys(supportedChanges).length > 0 ? supportedChanges : null;
+}
+
+function getUpdateResultItems(changes: UpdateProspectColorAndTemperatureChanges) {
+  const updates: Array<{ label: string; value: string }> = [];
+
+  if (changes.colorType !== undefined) {
+    updates.push({ label: "Couleur", value: changes.colorType });
+  }
+
+  if (changes.temperature !== undefined) {
+    updates.push({ label: "March\u00e9", value: changes.temperature });
+  }
+
+  return updates;
+}
+
+function getUpdateSuccessMessage(
+  prospectName: string,
+  updates: Array<{ label: string; value: string }>,
+) {
+  if (updates.length === 1 && updates[0].label === "Couleur") {
+    return `Couleur de ${prospectName} modifi\u00e9e : ${updates[0].value}.`;
+  }
+
+  if (updates.length === 1 && updates[0].label === "March\u00e9") {
+    return `March\u00e9 de ${prospectName} modifi\u00e9 : ${updates[0].value}.`;
+  }
+
+  const updateText = updates
+    .map((update) => `${update.label} : ${update.value}`)
+    .join(" \u00b7 ");
+
+  return `${prospectName} modifi\u00e9 : ${updateText}.`;
+}
+
+function getUpdateUnchangedMessage(
+  prospectName: string,
+  updates: Array<{ label: string; value: string }>,
+) {
+  if (updates.length === 1 && updates[0].label === "Couleur") {
+    return `${prospectName} est d\u00e9j\u00e0 en ${updates[0].value}.`;
+  }
+
+  if (updates.length === 1 && updates[0].label === "March\u00e9") {
+    return `${prospectName} est d\u00e9j\u00e0 en march\u00e9 ${updates[0].value}.`;
+  }
+
+  const updateText = updates
+    .map((update) => `${update.label} : ${update.value}`)
+    .join(" \u00b7 ");
+
+  return `${prospectName} a d\u00e9j\u00e0 ces valeurs : ${updateText}.`;
+}
+
 function ResultLine({ label, value }: { label: string; value?: string }) {
   if (!value) {
     return null;
@@ -223,8 +304,7 @@ function ResultPanel({ result }: { result: AssistantCommandParseResult | null })
         Commande reconnue
       </p>
       <div className="mt-4 grid gap-3">{renderCommandSummary(result.command)}</div>
-      {result.command.action === "createProspect" ||
-      result.command.action === "updateProspect" ? (
+      {result.command.action === "createProspect" ? (
         <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/50 p-3 text-sm font-medium text-emerald-100">
           Cette action n&apos;est pas encore activ{"\u00e9"}e.
         </p>
@@ -259,6 +339,33 @@ type AssistantAddNoteResult =
     }
   | {
       status: "emptyNote";
+    }
+  | {
+      status: "notReady";
+    };
+
+type AssistantUpdateProspectResult =
+  | {
+      status: "success";
+      prospectName: string;
+      updates: Array<{ label: string; value: string }>;
+    }
+  | {
+      status: "unchanged";
+      prospectName: string;
+      updates: Array<{ label: string; value: string }>;
+    }
+  | {
+      status: "unsupported";
+    }
+  | {
+      status: "notFound";
+      targetLabel: string;
+    }
+  | {
+      status: "ambiguous";
+      targetLabel: string;
+      matches: Prospect[];
     }
   | {
       status: "notReady";
@@ -357,6 +464,99 @@ function AddNoteResultPanel({ result }: { result: AssistantAddNoteResult | null 
           </article>
         ))}
       </div>
+    </section>
+  );
+}
+
+function UpdateProspectResultPanel({
+  result,
+}: {
+  result: AssistantUpdateProspectResult | null;
+}) {
+  if (!result) {
+    return null;
+  }
+
+  if (result.status === "notReady") {
+    return (
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-slate-300">
+          Chargement des prospects...
+        </p>
+      </section>
+    );
+  }
+
+  if (result.status === "unsupported") {
+    return (
+      <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-amber-100">
+          Cette modification n&apos;est pas encore activ{"\u00e9"}e.
+        </p>
+      </section>
+    );
+  }
+
+  if (result.status === "notFound") {
+    return (
+      <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-amber-100">
+          Aucun prospect trouv{"\u00e9"} pour {"\u00ab"} {result.targetLabel}{" "}
+          {"\u00bb"}.
+        </p>
+      </section>
+    );
+  }
+
+  if (result.status === "ambiguous") {
+    return (
+      <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-amber-100">
+          Plusieurs prospects correspondent {"\u00e0"} {"\u00ab"}{" "}
+          {result.targetLabel} {"\u00bb"}. Pr{"\u00e9"}cise lequel.
+        </p>
+        <div className="mt-4 grid gap-3">
+          {result.matches.map((prospect) => (
+            <article
+              className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
+              key={prospect.id}
+            >
+              <h3 className="text-base font-bold text-white">
+                {getProspectDisplayName(prospect)}
+              </h3>
+              <p className="mt-2 text-sm text-slate-300">
+                {[prospect.colorType, prospect.temperature, prospect.status]
+                  .filter(Boolean)
+                  .join(" \u00b7 ")}
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (result.status === "unchanged") {
+    return (
+      <section className="rounded-3xl border border-cyan-300/30 bg-cyan-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
+          R{"\u00e9"}sultat
+        </p>
+        <h2 className="mt-3 text-xl font-bold text-white">
+          {getUpdateUnchangedMessage(result.prospectName, result.updates)}
+        </h2>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-3xl border border-cyan-300/30 bg-cyan-300/10 p-4 shadow-xl sm:p-5">
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
+        R{"\u00e9"}sultat
+      </p>
+      <h2 className="mt-3 text-xl font-bold text-white">
+        {getUpdateSuccessMessage(result.prospectName, result.updates)}
+      </h2>
     </section>
   );
 }
@@ -517,6 +717,8 @@ export default function AssistantPage() {
     useState<AssistantTodayFollowUpsResult | null>(null);
   const [addNoteResult, setAddNoteResult] =
     useState<AssistantAddNoteResult | null>(null);
+  const [updateProspectResult, setUpdateProspectResult] =
+    useState<AssistantUpdateProspectResult | null>(null);
 
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
@@ -546,6 +748,7 @@ export default function AssistantPage() {
       });
       setTodayFollowUpsResult(null);
       setAddNoteResult(null);
+      setUpdateProspectResult(null);
       return;
     }
 
@@ -558,6 +761,7 @@ export default function AssistantPage() {
       });
       setSearchResult(null);
       setAddNoteResult(null);
+      setUpdateProspectResult(null);
       return;
     }
 
@@ -568,6 +772,7 @@ export default function AssistantPage() {
         setAddNoteResult({ status: "notReady" });
         setSearchResult(null);
         setTodayFollowUpsResult(null);
+        setUpdateProspectResult(null);
         return;
       }
 
@@ -575,6 +780,7 @@ export default function AssistantPage() {
         setAddNoteResult({ status: "emptyNote" });
         setSearchResult(null);
         setTodayFollowUpsResult(null);
+        setUpdateProspectResult(null);
         return;
       }
 
@@ -587,6 +793,7 @@ export default function AssistantPage() {
         setAddNoteResult({ status: "notFound", targetLabel: label });
         setSearchResult(null);
         setTodayFollowUpsResult(null);
+        setUpdateProspectResult(null);
         return;
       }
 
@@ -598,6 +805,7 @@ export default function AssistantPage() {
         });
         setSearchResult(null);
         setTodayFollowUpsResult(null);
+        setUpdateProspectResult(null);
         return;
       }
 
@@ -608,6 +816,7 @@ export default function AssistantPage() {
         setAddNoteResult({ status: "emptyNote" });
         setSearchResult(null);
         setTodayFollowUpsResult(null);
+        setUpdateProspectResult(null);
         return;
       }
 
@@ -624,12 +833,99 @@ export default function AssistantPage() {
       });
       setSearchResult(null);
       setTodayFollowUpsResult(null);
+      setUpdateProspectResult(null);
+      return;
+    }
+
+    if (
+      nextParseResult.success &&
+      nextParseResult.command.action === "updateProspect"
+    ) {
+      const supportedChanges = getSupportedUpdateChanges(
+        nextParseResult.command.payload.changes,
+      );
+
+      if (!supportedChanges) {
+        setUpdateProspectResult({ status: "unsupported" });
+        setSearchResult(null);
+        setTodayFollowUpsResult(null);
+        setAddNoteResult(null);
+        return;
+      }
+
+      if (!hasLoadedProspects) {
+        setUpdateProspectResult({ status: "notReady" });
+        setSearchResult(null);
+        setTodayFollowUpsResult(null);
+        setAddNoteResult(null);
+        return;
+      }
+
+      const { label, matches } = resolveProspectTarget(
+        prospects,
+        nextParseResult.command.payload.target,
+      );
+
+      if (matches.length === 0) {
+        setUpdateProspectResult({ status: "notFound", targetLabel: label });
+        setSearchResult(null);
+        setTodayFollowUpsResult(null);
+        setAddNoteResult(null);
+        return;
+      }
+
+      if (matches.length > 1) {
+        setUpdateProspectResult({
+          status: "ambiguous",
+          targetLabel: label,
+          matches,
+        });
+        setSearchResult(null);
+        setTodayFollowUpsResult(null);
+        setAddNoteResult(null);
+        return;
+      }
+
+      const targetProspect = matches[0];
+      const updatedProspect = updateProspectColorAndTemperature(
+        targetProspect,
+        supportedChanges,
+      );
+      const updates = getUpdateResultItems(supportedChanges);
+
+      if (updatedProspect === targetProspect) {
+        setUpdateProspectResult({
+          status: "unchanged",
+          prospectName: getProspectDisplayName(targetProspect),
+          updates,
+        });
+        setSearchResult(null);
+        setTodayFollowUpsResult(null);
+        setAddNoteResult(null);
+        return;
+      }
+
+      const updatedProspects = prospects.map((prospect) =>
+        prospect.id === targetProspect.id ? updatedProspect : prospect,
+      );
+
+      saveProspects(updatedProspects);
+      setProspects(updatedProspects);
+      setUpdateProspectResult({
+        status: "success",
+        prospectName: getProspectDisplayName(updatedProspect),
+        updates,
+      });
+      setSearchResult(null);
+      setTodayFollowUpsResult(null);
+      setAddNoteResult(null);
       return;
     }
 
     setSearchResult(null);
     setTodayFollowUpsResult(null);
     setAddNoteResult(null);
+    setUpdateProspectResult(null);
   }
 
   return (
@@ -698,6 +994,7 @@ export default function AssistantPage() {
           hasLoadedProspects={hasLoadedProspects}
         />
         <AddNoteResultPanel result={addNoteResult} />
+        <UpdateProspectResultPanel result={updateProspectResult} />
       </section>
     </main>
   );
