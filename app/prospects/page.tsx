@@ -1041,6 +1041,8 @@ export default function ProspectsPage () {
   const [quickAddMessage, setQuickAddMessage] = useState("");
   const [contactImportMessage, setContactImportMessage] = useState("");
   const [isContactImportError, setIsContactImportError] = useState(false);
+  const [contactExportMessage, setContactExportMessage] = useState("");
+  const [isContactExportError, setIsContactExportError] = useState(false);
   const [socialContactImportMessage, setSocialContactImportMessage] = useState("");
   const [isSocialContactImportError, setIsSocialContactImportError] = useState(false);
   const [resourceShareSelections, setResourceShareSelections] = useState<Record<string, string>>({});
@@ -2471,11 +2473,40 @@ export default function ProspectsPage () {
     }, 1800);
   }
 
-  async function handleDownloadProspectVCard(prospect: Prospect) {
+  function showContactExportMessage(message: string, isError = false) {
+    setContactExportMessage(message);
+    setIsContactExportError(isError);
+    window.setTimeout(() => {
+      setContactExportMessage("");
+      setIsContactExportError(false);
+    }, 3000);
+  }
+
+  async function handleAddToContacts(
+    prospect: Prospect,
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    console.info("[VCARD] button clicked");
+    console.info("[VCARD] prospect", prospect);
+    showContactExportMessage("Création du contact...");
+
     try {
-      await downloadProspectVCard(prospect);
-    } catch {
-      window.alert("Impossible de créer le contact. Vérifiez les informations du prospect.");
+      const exportResult = await downloadProspectVCard(prospect);
+
+      if (exportResult === "dismissed") {
+        showContactExportMessage("Création du contact annulée.");
+        return;
+      }
+
+      showContactExportMessage("Fichier contact créé.");
+    } catch (error) {
+      console.error("[VCARD] export failed", error);
+      showContactExportMessage(
+        "Impossible de créer le contact. Vérifiez les informations du prospect.",
+        true,
+      );
     }
   }
 
@@ -3464,6 +3495,18 @@ export default function ProspectsPage () {
         {quickAddMessage ? (
           <p className="mb-6 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-200">
             {quickAddMessage}
+          </p>
+        ) : null}
+
+        {contactExportMessage ? (
+          <p
+            className={`mb-6 rounded-2xl border px-4 py-3 text-sm font-semibold ${
+              isContactExportError
+                ? "border-red-400/30 bg-red-500/10 text-red-200"
+                : "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+            }`}
+          >
+            {contactExportMessage}
           </p>
         ) : null}
 
@@ -5057,7 +5100,7 @@ export default function ProspectsPage () {
                           <button
                             className="min-h-12 rounded-2xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
                             type="button"
-                            onClick={() => void handleDownloadProspectVCard(prospect)}
+                            onClick={(event) => void handleAddToContacts(prospect, event)}
                           >
                             Ajouter au répertoire
                           </button>
@@ -5414,7 +5457,7 @@ export default function ProspectsPage () {
                       <button
                         className="min-h-10 w-full rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5 sm:w-auto"
                         type="button"
-                        onClick={() => void handleDownloadProspectVCard(prospect)}
+                        onClick={(event) => void handleAddToContacts(prospect, event)}
                       >
                         Ajouter au répertoire
                       </button>
@@ -5540,7 +5583,7 @@ export default function ProspectsPage () {
                           <button
                             className="min-h-10 rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
                             type="button"
-                            onClick={() => void handleDownloadProspectVCard(prospect)}
+                            onClick={(event) => void handleAddToContacts(prospect, event)}
                           >
                             Ajouter au répertoire
                           </button>

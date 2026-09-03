@@ -193,7 +193,7 @@ export function createVCardFromProspect(prospect: Prospect) {
   return `${vCardLines.map(foldVCardLine).join("\r\n")}\r\n`;
 }
 
-export type ProspectVCardExportResult = "shared" | "downloaded" | "dismissed";
+export type ProspectVCardExportResult = "downloaded" | "shared" | "dismissed";
 
 function isShareDismissError(error: unknown) {
   return (
@@ -210,6 +210,27 @@ export async function downloadProspectVCard(
   const vCardBlob = new Blob([vCardContent], {
     type: "text/vcard;charset=utf-8",
   });
+
+  console.info("[VCARD] generated", { fileName });
+
+  try {
+    const downloadUrl = URL.createObjectURL(vCardBlob);
+    const downloadLink = document.createElement("a");
+
+    downloadLink.href = downloadUrl;
+    downloadLink.download = fileName;
+    downloadLink.rel = "noopener";
+    downloadLink.style.display = "none";
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    console.info("[VCARD] download triggered", { fileName });
+
+    return "downloaded";
+  } catch (downloadError) {
+    console.error("[VCARD] download failed", downloadError);
+  }
 
   if (
     typeof navigator !== "undefined" &&
@@ -244,18 +265,7 @@ export async function downloadProspectVCard(
       }
     }
   }
-
-  const downloadUrl = URL.createObjectURL(vCardBlob);
-  const downloadLink = document.createElement("a");
-
-  downloadLink.href = downloadUrl;
-  downloadLink.download = fileName;
-  document.body.appendChild(downloadLink);
-  downloadLink.click();
-  downloadLink.remove();
-  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-
-  return "downloaded";
+  throw new Error("VCard export failed");
 }
 
 function formatGoogleCalendarDateTime(date: string, time: string) {
