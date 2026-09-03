@@ -13,6 +13,22 @@ const allowedTemplateIds = new Set<FollowUpMessageTemplateId>(
   FOLLOW_UP_MESSAGE_TEMPLATES.map((template) => template.id),
 );
 
+function normalizeFollowUp4DaysMessage(message: string) {
+  return message
+    .replaceAll("[lieu de rencontre]", "{{lieu de rencontre}}")
+    .replaceAll("c’est Kévin", "c’est {{nom_affiche}}")
+    .replaceAll("Je suis désolée", "Je suis désolé");
+}
+
+function normalizeCustomMessageTemplate(
+  templateId: FollowUpMessageTemplateId,
+  message: string,
+) {
+  return templateId === "follow-up-4-days"
+    ? normalizeFollowUp4DaysMessage(message)
+    : message;
+}
+
 function isBrowser() {
   return typeof window !== "undefined";
 }
@@ -27,7 +43,11 @@ export function normalizeCustomMessageTemplates(
   return Object.entries(value as Record<string, unknown>).reduce<CustomMessageTemplates>(
     (normalizedTemplates, [templateId, message]) => {
       if (allowedTemplateIds.has(templateId as FollowUpMessageTemplateId) && typeof message === "string") {
-        normalizedTemplates[templateId as FollowUpMessageTemplateId] = message;
+        const allowedTemplateId = templateId as FollowUpMessageTemplateId;
+        normalizedTemplates[allowedTemplateId] = normalizeCustomMessageTemplate(
+          allowedTemplateId,
+          message,
+        );
       }
 
       return normalizedTemplates;
@@ -48,7 +68,13 @@ export function loadCustomMessageTemplates(): CustomMessageTemplates {
   }
 
   try {
-    return normalizeCustomMessageTemplates(JSON.parse(storedTemplates));
+    const customTemplates = normalizeCustomMessageTemplates(JSON.parse(storedTemplates));
+
+    if (storedTemplates !== JSON.stringify(customTemplates)) {
+      saveCustomMessageTemplates(customTemplates);
+    }
+
+    return customTemplates;
   } catch {
     return {};
   }
