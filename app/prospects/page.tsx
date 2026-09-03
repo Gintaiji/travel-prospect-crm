@@ -6,6 +6,7 @@ import {
   loadProspects,
   saveProspects,
 } from "../lib/prospectStorage";
+import { createProspectFromInput } from "../lib/prospectActions";
 import { loadResources } from "../lib/resourceStorage";
 import {
   buildGoogleCalendarFollowUpUrl,
@@ -474,7 +475,7 @@ function findPotentialDuplicates(prospectsToCheck: Prospect[]) {
         prospects: [prospect, comparedProspect],
         reasons,
       });
-    });
+    };
   });
 
   return duplicateGroups;
@@ -1242,7 +1243,7 @@ export default function ProspectsPage () {
       city: currentFormState.city.trim()
         ? currentFormState.city
         : appSettings.defaultCity,
-    };
+    });
   }
 
   function openNewProspectForm(isQuickAdd = false) {
@@ -1338,7 +1339,7 @@ export default function ProspectsPage () {
       interactionsCount: 0,
       likesCount: 0,
       messagesCount: 0,
-    };
+    });
 
     setActiveQualificationProspectId(prospect.id);
     setQualificationFormState({
@@ -1676,60 +1677,45 @@ export default function ProspectsPage () {
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const now = new Date().toISOString();
     const commentsCount = Number(formState.commentsCount);
     const interactionsCount = Number(formState.interactionsCount);
     const likesCount = Number(formState.likesCount);
     const messagesCount = Number(formState.messagesCount);
-    const newProspectBase: Prospect = {
-      id: createProspectId(),
-      firstName: formState.firstName.trim(),
-      lastName: formState.lastName.trim(),
-      displayName: formState.displayName.trim(),
-      meetingPlace: formState.meetingPlace.trim(),
-      jobTitle: formState.jobTitle.trim(),
-      businessArea: formState.businessArea.trim(),
-      city: formState.city.trim(),
-      region: formState.region.trim(),
-      country: formState.country.trim(),
-      phone: formState.phone.trim(),
-      whatsapp: formState.whatsapp.trim(),
-      email: formState.email.trim(),
+    const newProspect = createProspectFromInput({
+      firstName: formState.firstName,
+      lastName: formState.lastName,
+      displayName: formState.displayName,
+      meetingPlace: formState.meetingPlace,
+      jobTitle: formState.jobTitle,
+      businessArea: formState.businessArea,
+      city: formState.city,
+      region: formState.region,
+      country: formState.country,
+      phone: formState.phone,
+      whatsapp: formState.whatsapp,
+      email: formState.email,
       mainPlatform: formState.mainPlatform,
-      profileUrl: formState.profileUrl.trim(),
+      profileUrl: formState.profileUrl,
       socialLinks: {
-        facebook: formState.facebookUrl.trim(),
-        instagram: formState.instagramUrl.trim(),
-        linkedin: formState.linkedinUrl.trim(),
-        tiktok: formState.tiktokUrl.trim(),
-        youtube: formState.youtubeUrl.trim(),
-        other: formState.otherUrl.trim(),
+        facebook: formState.facebookUrl,
+        instagram: formState.instagramUrl,
+        linkedin: formState.linkedinUrl,
+        tiktok: formState.tiktokUrl,
+        youtube: formState.youtubeUrl,
+        other: formState.otherUrl,
       },
       category: formState.category,
-      status: "À contacter",
       temperature: formState.temperature,
       colorType: formState.colorType,
-      score: 0,
       tags: formState.tags,
       isFollower: formState.isFollower,
       hasSentMessage: formState.hasSentMessage,
-      interactionStats: {
-        followerSinceDate: formState.followerSinceDate,
-        commentsCount: Number.isNaN(commentsCount) ? 0 : commentsCount,
-        interactionsCount: Number.isNaN(interactionsCount) ? 0 : interactionsCount,
-        likesCount: Number.isNaN(likesCount) ? 0 : likesCount,
-        messagesCount: Number.isNaN(messagesCount) ? 0 : messagesCount,
-      },
-      lastInteractionDate: "",
-      nextActionDate: "",
-      conversationHistory: [],
-      notes: formState.notes.trim(),
-      createdAt: now,
-      updatedAt: now,
-    };
-    const newProspect: Prospect = {
-      ...newProspectBase,
-      score: calculateProspectScore(newProspectBase),
+      followerSinceDate: formState.followerSinceDate,
+      commentsCount,
+      interactionsCount,
+      likesCount,
+      messagesCount,
+      notes: formState.notes,
     };
     const hasPotentialDuplicate = findPotentialDuplicates([newProspect, ...prospects]).some(
       (duplicateGroup) =>
