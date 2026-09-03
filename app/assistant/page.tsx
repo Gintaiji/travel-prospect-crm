@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   parseAssistantCommand,
   type AssistantCommandParseResult,
 } from "../lib/assistantCommandParser";
 import type { AiCommand } from "../lib/aiCommandTypes";
+import { loadProspects } from "../lib/prospectStorage";
+import { getProspectDisplayName } from "../lib/prospectUtils";
+import type { Prospect } from "../lib/types";
 
 const exampleCommands = [
   "Ajoute Paul comme prospect jaune",
@@ -16,6 +19,79 @@ const exampleCommands = [
 
 function getTargetLabel(target: { prospectId?: string; query?: string }) {
   return target.query || target.prospectId || "Non précisé";
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function getProspectSearchText(prospect: Prospect) {
+  return normalizeSearchText(
+    [prospect.firstName, prospect.lastName, prospect.displayName].join(" "),
+  );
+}
+
+function getProspectSearchRank(prospect: Prospect, normalizedQuery: string) {
+  const displayName = normalizeSearchText(getProspectDisplayName(prospect));
+  const fullName = normalizeSearchText(
+    `${prospect.firstName} ${prospect.lastName}`.trim(),
+  );
+  const searchText = getProspectSearchText(prospect);
+
+  if (displayName === normalizedQuery || fullName === normalizedQuery) {
+    return 0;
+  }
+
+  if (
+    displayName.startsWith(normalizedQuery) ||
+    fullName.startsWith(normalizedQuery)
+  ) {
+    return 1;
+  }
+
+  if (searchText.includes(normalizedQuery)) {
+    return 2;
+  }
+
+  return 3;
+}
+
+function searchProspectsByName(prospects: Prospect[], query: string) {
+  const normalizedQuery = normalizeSearchText(query);
+  const queryTokens = normalizedQuery.split(" ").filter(Boolean);
+
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  return prospects
+    .filter((prospect) => {
+      const searchText = getProspectSearchText(prospect);
+
+      return (
+        searchText.includes(normalizedQuery) ||
+        queryTokens.every((queryToken) => searchText.includes(queryToken))
+      );
+    })
+    .sort((firstProspect, secondProspect) => {
+      const rankDifference =
+        getProspectSearchRank(firstProspect, normalizedQuery) -
+        getProspectSearchRank(secondProspect, normalizedQuery);
+
+      if (rankDifference !== 0) {
+        return rankDifference;
+      }
+
+      return getProspectDisplayName(firstProspect).localeCompare(
+        getProspectDisplayName(secondProspect),
+        "fr",
+      );
+    });
 }
 
 function ResultLine({ label, value }: { label: string; value?: string }) {
@@ -113,6 +189,113 @@ function ResultPanel({ result }: { result: AssistantCommandParseResult | null })
         Commande reconnue
       </p>
       <div className="mt-4 grid gap-3">{renderCommandSummary(result.command)}</div>
+      {result.command.action !== "searchProspect" ? (
+        <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/50 p-3 text-sm font-medium text-emerald-100">
+          Cette action n&apos;est pas encore activ{"\u00e9"}e.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+type AssistantSearchResult = {
+  query: string;
+  matches: Prospect[];
+};
+
+function ProspectSummary({ prospect }: { prospect: Prospect }) {
+  return (
+    <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+      <h3 className="text-lg font-bold text-white">
+        {getProspectDisplayName(prospect)}
+      </h3>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <ResultLine label={"Pr\u00e9nom"} value={prospect.firstName} />
+        <ResultLine label="Nom" value={prospect.lastName} />
+        <ResultLine label="Couleur" value={prospect.colorType} />
+        <ResultLine label={"March\u00e9"} value={prospect.temperature} />
+        <ResultLine label="Statut" value={prospect.status} />
+        <ResultLine label="Relance" value={prospect.nextActionDate} />
+      </div>
+    </article>
+  );
+}
+
+function SearchResultPanel({
+  result,
+  hasLoadedProspects,
+}: {
+  result: AssistantSearchResult | null;
+  hasLoadedProspects: boolean;
+}) {
+  if (!result) {
+    return null;
+  }
+
+  if (!hasLoadedProspects) {
+    return (
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-slate-300">
+          Chargement des prospects...
+        </p>
+      </section>
+    );
+  }
+
+  if (result.matches.length === 0) {
+    return (
+      <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-amber-100">
+          Aucun prospect trouv{"\u00e9"} pour {"\u00ab"} {result.query} {"\u00bb"}.
+        </p>
+      </section>
+    );
+  }
+
+  if (result.matches.length === 1) {
+    return (
+      <section className="rounded-3xl border border-cyan-300/30 bg-cyan-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
+          Prospect trouv{"\u00e9"}
+        </p>
+        <div className="mt-4">
+          <ProspectSummary prospect={result.matches[0]} />
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-3xl border border-cyan-300/30 bg-cyan-300/10 p-4 shadow-xl sm:p-5">
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
+        Prospects trouv{"\u00e9"}s
+      </p>
+      <p className="mt-3 text-sm text-cyan-50">
+        {result.matches.length} r{"\u00e9"}sultats pour {"\u00ab"} {result.query}{" "}
+        {"\u00bb"}.
+      </p>
+      <div className="mt-4 grid gap-3">
+        {result.matches.map((prospect) => (
+          <article
+            className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
+            key={prospect.id}
+          >
+            <h3 className="text-base font-bold text-white">
+              {getProspectDisplayName(prospect)}
+            </h3>
+            <p className="mt-2 text-sm text-slate-300">
+              {[
+                prospect.colorType,
+                prospect.temperature,
+                prospect.status,
+                prospect.nextActionDate ? `Relance ${prospect.nextActionDate}` : "",
+              ]
+                .filter(Boolean)
+                .join(" \u00b7 ")}
+            </p>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
@@ -121,10 +304,42 @@ export default function AssistantPage() {
   const [commandText, setCommandText] = useState("");
   const [parseResult, setParseResult] =
     useState<AssistantCommandParseResult | null>(null);
+  const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [hasLoadedProspects, setHasLoadedProspects] = useState(false);
+  const [searchResult, setSearchResult] = useState<AssistantSearchResult | null>(
+    null,
+  );
+
+  useEffect(() => {
+    const loadStoredProspects = window.setTimeout(() => {
+      setProspects(loadProspects());
+      setHasLoadedProspects(true);
+    }, 0);
+
+    return () => window.clearTimeout(loadStoredProspects);
+  }, []);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setParseResult(parseAssistantCommand(commandText));
+    const nextParseResult = parseAssistantCommand(commandText);
+
+    setParseResult(nextParseResult);
+
+    if (
+      nextParseResult.success &&
+      nextParseResult.command.action === "searchProspect"
+    ) {
+      setSearchResult({
+        query: nextParseResult.command.payload.query,
+        matches: searchProspectsByName(
+          prospects,
+          nextParseResult.command.payload.query,
+        ),
+      });
+      return;
+    }
+
+    setSearchResult(null);
   }
 
   return (
@@ -184,6 +399,10 @@ export default function AssistantPage() {
         </form>
 
         <ResultPanel result={parseResult} />
+        <SearchResultPanel
+          result={searchResult}
+          hasLoadedProspects={hasLoadedProspects}
+        />
       </section>
     </main>
   );
