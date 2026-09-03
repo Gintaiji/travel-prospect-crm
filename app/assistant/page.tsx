@@ -7,7 +7,7 @@ import {
 } from "../lib/assistantCommandParser";
 import type { AiCommand } from "../lib/aiCommandTypes";
 import { loadProspects } from "../lib/prospectStorage";
-import { getProspectDisplayName } from "../lib/prospectUtils";
+import { getProspectDisplayName, isDateToday } from "../lib/prospectUtils";
 import type { Prospect } from "../lib/types";
 
 const exampleCommands = [
@@ -94,6 +94,12 @@ function searchProspectsByName(prospects: Prospect[], query: string) {
     });
 }
 
+function getTodayFollowUpProspects(prospects: Prospect[]) {
+  return prospects.filter(
+    (prospect) => prospect.nextActionDate && isDateToday(prospect.nextActionDate),
+  );
+}
+
 function ResultLine({ label, value }: { label: string; value?: string }) {
   if (!value) {
     return null;
@@ -113,6 +119,14 @@ function renderCommandSummary(command: AiCommand) {
       <>
         <ResultLine label="Action" value="Rechercher un prospect" />
         <ResultLine label="Recherche" value={command.payload.query} />
+      </>
+    );
+  }
+
+  if (command.action === "getTodayFollowUps") {
+    return (
+      <>
+        <ResultLine label="Action" value="Afficher les relances du jour" />
       </>
     );
   }
@@ -189,7 +203,8 @@ function ResultPanel({ result }: { result: AssistantCommandParseResult | null })
         Commande reconnue
       </p>
       <div className="mt-4 grid gap-3">{renderCommandSummary(result.command)}</div>
-      {result.command.action !== "searchProspect" ? (
+      {result.command.action !== "searchProspect" &&
+      result.command.action !== "getTodayFollowUps" ? (
         <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/50 p-3 text-sm font-medium text-emerald-100">
           Cette action n&apos;est pas encore activ{"\u00e9"}e.
         </p>
@@ -200,6 +215,10 @@ function ResultPanel({ result }: { result: AssistantCommandParseResult | null })
 
 type AssistantSearchResult = {
   query: string;
+  matches: Prospect[];
+};
+
+type AssistantTodayFollowUpsResult = {
   matches: Prospect[];
 };
 
@@ -218,6 +237,70 @@ function ProspectSummary({ prospect }: { prospect: Prospect }) {
         <ResultLine label="Relance" value={prospect.nextActionDate} />
       </div>
     </article>
+  );
+}
+
+function TodayFollowUpsResultPanel({
+  result,
+  hasLoadedProspects,
+}: {
+  result: AssistantTodayFollowUpsResult | null;
+  hasLoadedProspects: boolean;
+}) {
+  if (!result) {
+    return null;
+  }
+
+  if (!hasLoadedProspects) {
+    return (
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-slate-300">
+          Chargement des prospects...
+        </p>
+      </section>
+    );
+  }
+
+  if (result.matches.length === 0) {
+    return (
+      <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-amber-100">
+          Aucune relance pr{"\u00e9"}vue aujourd&apos;hui.
+        </p>
+      </section>
+    );
+  }
+
+  if (result.matches.length === 1) {
+    return (
+      <section className="rounded-3xl border border-cyan-300/30 bg-cyan-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
+          R{"\u00e9"}sultat
+        </p>
+        <p className="mt-3 text-sm font-semibold text-cyan-50">
+          1 relance pr{"\u00e9"}vue aujourd&apos;hui
+        </p>
+        <div className="mt-4">
+          <ProspectSummary prospect={result.matches[0]} />
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-3xl border border-cyan-300/30 bg-cyan-300/10 p-4 shadow-xl sm:p-5">
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
+        R{"\u00e9"}sultat
+      </p>
+      <p className="mt-3 text-sm font-semibold text-cyan-50">
+        {result.matches.length} relances pr{"\u00e9"}vues aujourd&apos;hui
+      </p>
+      <div className="mt-4 grid gap-3">
+        {result.matches.map((prospect) => (
+          <ProspectSummary prospect={prospect} key={prospect.id} />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -309,6 +392,8 @@ export default function AssistantPage() {
   const [searchResult, setSearchResult] = useState<AssistantSearchResult | null>(
     null,
   );
+  const [todayFollowUpsResult, setTodayFollowUpsResult] =
+    useState<AssistantTodayFollowUpsResult | null>(null);
 
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
@@ -336,10 +421,23 @@ export default function AssistantPage() {
           nextParseResult.command.payload.query,
         ),
       });
+      setTodayFollowUpsResult(null);
+      return;
+    }
+
+    if (
+      nextParseResult.success &&
+      nextParseResult.command.action === "getTodayFollowUps"
+    ) {
+      setTodayFollowUpsResult({
+        matches: getTodayFollowUpProspects(prospects),
+      });
+      setSearchResult(null);
       return;
     }
 
     setSearchResult(null);
+    setTodayFollowUpsResult(null);
   }
 
   return (
@@ -401,6 +499,10 @@ export default function AssistantPage() {
         <ResultPanel result={parseResult} />
         <SearchResultPanel
           result={searchResult}
+          hasLoadedProspects={hasLoadedProspects}
+        />
+        <TodayFollowUpsResultPanel
+          result={todayFollowUpsResult}
           hasLoadedProspects={hasLoadedProspects}
         />
       </section>
