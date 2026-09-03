@@ -23,6 +23,7 @@ const desktopPrincipalLinks = [
 ];
 
 const toolLinks = [
+  { href: "/assistant", label: "Assistant" },
   { href: "/ressources", label: "Ressources" },
   { href: "/messages", label: "Messages" },
 ];

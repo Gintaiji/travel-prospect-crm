@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const bottomNavigationLinks = [
   { href: "/aujourdhui", label: "Aujourd’hui" },
   { href: "/prospects", label: "Prospects" },
+  { href: "/assistant", label: "Assistant" },
   { href: "/activite", label: "Activité" },
   { href: "/ressources", label: "Ressources" },
   { href: "/sauvegarde", label: "Sauvegarde" },
@@ -20,7 +21,7 @@ export default function MobileBottomNav() {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-slate-950/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-2xl shadow-black/40 backdrop-blur md:hidden">
-      <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
+      <div className="mx-auto grid max-w-md grid-cols-6 gap-1">
         {bottomNavigationLinks.map((navigationLink) => {
           const isActive = isActivePath(pathname, navigationLink.href);
 
