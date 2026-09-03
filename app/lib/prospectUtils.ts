@@ -272,12 +272,77 @@ function formatGoogleCalendarDateTime(date: string, time: string) {
   return `${date.replace(/-/g, "")}T${time}`;
 }
 
+function parseLocalDate(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  return new Date(year, month - 1, day, 12, 0, 0, 0);
+}
+
+function getFollowUpTitleFromAction(nextAction: string) {
+  const followUpMatch = nextAction.trim().match(/^Relance\s+(2|4|30)\s+jours?$/i);
+
+  if (!followUpMatch) {
+    return "";
+  }
+
+  return `Relance ${followUpMatch[1]} jours`;
+}
+
+function getLastExplicitFollowUpTitle(prospect: Prospect) {
+  const conversationHistory = prospect.conversationHistory ?? [];
+
+  for (let index = conversationHistory.length - 1; index >= 0; index -= 1) {
+    const followUpTitle = getFollowUpTitleFromAction(
+      conversationHistory[index]?.nextAction ?? "",
+    );
+
+    if (followUpTitle) {
+      return followUpTitle;
+    }
+  }
+
+  return "";
+}
+
+function getFollowUpTitleFromDate(nextActionDate: string) {
+  const todayDate = parseLocalDate(getTodayDateString());
+  const followUpDate = parseLocalDate(nextActionDate);
+
+  if (!todayDate || !followUpDate) {
+    return "";
+  }
+
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const daysUntilFollowUp = Math.round(
+    (followUpDate.getTime() - todayDate.getTime()) / oneDayMs,
+  );
+
+  if (daysUntilFollowUp === 2 || daysUntilFollowUp === 4 || daysUntilFollowUp === 30) {
+    return `Relance ${daysUntilFollowUp} jours`;
+  }
+
+  return "";
+}
+
+function getGoogleCalendarFollowUpTitle(prospect: Prospect) {
+  return (
+    getLastExplicitFollowUpTitle(prospect) ||
+    getFollowUpTitleFromDate(prospect.nextActionDate) ||
+    "Relance"
+  );
+}
+
 export function buildGoogleCalendarFollowUpUrl(prospect: Prospect) {
   if (!prospect.nextActionDate) {
     return "";
   }
 
   const prospectName = getProspectDisplayName(prospect);
+  const followUpTitle = getGoogleCalendarFollowUpTitle(prospect);
   const startDateTime = formatGoogleCalendarDateTime(
     prospect.nextActionDate,
     "180000",
@@ -296,7 +361,7 @@ export function buildGoogleCalendarFollowUpUrl(prospect: Prospect) {
     .join("\n");
   const calendarParams = new URLSearchParams({
     action: "TEMPLATE",
-    text: `Relancer ${prospectName}`,
+    text: `${followUpTitle} — ${prospectName}`,
     dates: `${startDateTime}/${endDateTime}`,
     details: description,
   });
