@@ -6,7 +6,8 @@ import {
   type AssistantCommandParseResult,
 } from "../lib/assistantCommandParser";
 import type { AiCommand } from "../lib/aiCommandTypes";
-import { loadProspects } from "../lib/prospectStorage";
+import { appendProspectNote } from "../lib/prospectActions";
+import { loadProspects, saveProspects } from "../lib/prospectStorage";
 import { getProspectDisplayName, isDateToday } from "../lib/prospectUtils";
 import type { Prospect } from "../lib/types";
 
@@ -98,6 +99,25 @@ function getTodayFollowUpProspects(prospects: Prospect[]) {
   return prospects.filter(
     (prospect) => prospect.nextActionDate && isDateToday(prospect.nextActionDate),
   );
+}
+
+function resolveProspectTarget(
+  prospects: Prospect[],
+  target: { prospectId?: string; query?: string },
+) {
+  if (target.prospectId) {
+    return {
+      label: target.prospectId,
+      matches: prospects.filter((prospect) => prospect.id === target.prospectId),
+    };
+  }
+
+  const query = target.query ?? "";
+
+  return {
+    label: query,
+    matches: searchProspectsByName(prospects, query),
+  };
 }
 
 function ResultLine({ label, value }: { label: string; value?: string }) {
@@ -203,8 +223,8 @@ function ResultPanel({ result }: { result: AssistantCommandParseResult | null })
         Commande reconnue
       </p>
       <div className="mt-4 grid gap-3">{renderCommandSummary(result.command)}</div>
-      {result.command.action !== "searchProspect" &&
-      result.command.action !== "getTodayFollowUps" ? (
+      {result.command.action === "createProspect" ||
+      result.command.action === "updateProspect" ? (
         <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/50 p-3 text-sm font-medium text-emerald-100">
           Cette action n&apos;est pas encore activ{"\u00e9"}e.
         </p>
@@ -222,6 +242,28 @@ type AssistantTodayFollowUpsResult = {
   matches: Prospect[];
 };
 
+type AssistantAddNoteResult =
+  | {
+      status: "success";
+      prospectName: string;
+      note: string;
+    }
+  | {
+      status: "notFound";
+      targetLabel: string;
+    }
+  | {
+      status: "ambiguous";
+      targetLabel: string;
+      matches: Prospect[];
+    }
+  | {
+      status: "emptyNote";
+    }
+  | {
+      status: "notReady";
+    };
+
 function ProspectSummary({ prospect }: { prospect: Prospect }) {
   return (
     <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
@@ -237,6 +279,85 @@ function ProspectSummary({ prospect }: { prospect: Prospect }) {
         <ResultLine label="Relance" value={prospect.nextActionDate} />
       </div>
     </article>
+  );
+}
+
+function AddNoteResultPanel({ result }: { result: AssistantAddNoteResult | null }) {
+  if (!result) {
+    return null;
+  }
+
+  if (result.status === "success") {
+    return (
+      <section className="rounded-3xl border border-cyan-300/30 bg-cyan-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
+          R{"\u00e9"}sultat
+        </p>
+        <h2 className="mt-3 text-xl font-bold text-white">
+          Note ajout{"\u00e9"}e {"\u00e0"} {result.prospectName}.
+        </h2>
+        <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-3 text-sm leading-6 text-slate-100">
+          {result.note}
+        </p>
+      </section>
+    );
+  }
+
+  if (result.status === "notFound") {
+    return (
+      <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-amber-100">
+          Je n&apos;ai trouv{"\u00e9"} aucun prospect correspondant {"\u00e0"}{" "}
+          {"\u00ab"} {result.targetLabel} {"\u00bb"}.
+        </p>
+      </section>
+    );
+  }
+
+  if (result.status === "emptyNote") {
+    return (
+      <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-amber-100">
+          La note est vide. Aucune donn{"\u00e9"}e n&apos;a {"\u00e9"}t{"\u00e9"} modifi{"\u00e9"}e.
+        </p>
+      </section>
+    );
+  }
+
+  if (result.status === "notReady") {
+    return (
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-slate-300">
+          Chargement des prospects...
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
+      <p className="text-sm font-semibold text-amber-100">
+        Plusieurs prospects correspondent {"\u00e0"} {"\u00ab"} {result.targetLabel}{" "}
+        {"\u00bb"}. Pr{"\u00e9"}cise lequel.
+      </p>
+      <div className="mt-4 grid gap-3">
+        {result.matches.map((prospect) => (
+          <article
+            className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
+            key={prospect.id}
+          >
+            <h3 className="text-base font-bold text-white">
+              {getProspectDisplayName(prospect)}
+            </h3>
+            <p className="mt-2 text-sm text-slate-300">
+              {[prospect.colorType, prospect.temperature, prospect.status]
+                .filter(Boolean)
+                .join(" \u00b7 ")}
+            </p>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -394,6 +515,8 @@ export default function AssistantPage() {
   );
   const [todayFollowUpsResult, setTodayFollowUpsResult] =
     useState<AssistantTodayFollowUpsResult | null>(null);
+  const [addNoteResult, setAddNoteResult] =
+    useState<AssistantAddNoteResult | null>(null);
 
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
@@ -422,6 +545,7 @@ export default function AssistantPage() {
         ),
       });
       setTodayFollowUpsResult(null);
+      setAddNoteResult(null);
       return;
     }
 
@@ -433,11 +557,79 @@ export default function AssistantPage() {
         matches: getTodayFollowUpProspects(prospects),
       });
       setSearchResult(null);
+      setAddNoteResult(null);
+      return;
+    }
+
+    if (nextParseResult.success && nextParseResult.command.action === "addNote") {
+      const trimmedNote = nextParseResult.command.payload.note.trim();
+
+      if (!hasLoadedProspects) {
+        setAddNoteResult({ status: "notReady" });
+        setSearchResult(null);
+        setTodayFollowUpsResult(null);
+        return;
+      }
+
+      if (!trimmedNote) {
+        setAddNoteResult({ status: "emptyNote" });
+        setSearchResult(null);
+        setTodayFollowUpsResult(null);
+        return;
+      }
+
+      const { label, matches } = resolveProspectTarget(
+        prospects,
+        nextParseResult.command.payload.target,
+      );
+
+      if (matches.length === 0) {
+        setAddNoteResult({ status: "notFound", targetLabel: label });
+        setSearchResult(null);
+        setTodayFollowUpsResult(null);
+        return;
+      }
+
+      if (matches.length > 1) {
+        setAddNoteResult({
+          status: "ambiguous",
+          targetLabel: label,
+          matches,
+        });
+        setSearchResult(null);
+        setTodayFollowUpsResult(null);
+        return;
+      }
+
+      const targetProspect = matches[0];
+      const updatedProspect = appendProspectNote(targetProspect, trimmedNote);
+
+      if (updatedProspect === targetProspect) {
+        setAddNoteResult({ status: "emptyNote" });
+        setSearchResult(null);
+        setTodayFollowUpsResult(null);
+        return;
+      }
+
+      const updatedProspects = prospects.map((prospect) =>
+        prospect.id === targetProspect.id ? updatedProspect : prospect,
+      );
+
+      saveProspects(updatedProspects);
+      setProspects(updatedProspects);
+      setAddNoteResult({
+        status: "success",
+        prospectName: getProspectDisplayName(updatedProspect),
+        note: trimmedNote,
+      });
+      setSearchResult(null);
+      setTodayFollowUpsResult(null);
       return;
     }
 
     setSearchResult(null);
     setTodayFollowUpsResult(null);
+    setAddNoteResult(null);
   }
 
   return (
@@ -505,6 +697,7 @@ export default function AssistantPage() {
           result={todayFollowUpsResult}
           hasLoadedProspects={hasLoadedProspects}
         />
+        <AddNoteResultPanel result={addNoteResult} />
       </section>
     </main>
   );
