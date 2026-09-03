@@ -151,7 +151,7 @@ export default function MessagesPage() {
                 <p className="text-sm leading-6 text-slate-200">
                   Variables disponibles : {"{{prenom}}"}, {"{{nom}}"},{" "}
                   {"{{nom_complet}}"}, {"{{telephone}}"},{" "}
-                  {"{{nom_affiche}}"}, {"{{lieu_rencontre}}"},{" "}
+                  {"{{nom_affiche}}"}, {"{{lieu de rencontre}}"},{" "}
                   {"{{date_relance}}"}, {"{{statut}}"}
                 </p>
                 <p className="mt-2 text-xs leading-5 text-slate-500">

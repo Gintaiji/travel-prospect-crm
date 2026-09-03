@@ -84,7 +84,7 @@ export const FOLLOW_UP_MESSAGE_TEMPLATES: FollowUpMessageTemplate[] = [
     title: "Relance 2 jours",
     followUpDays: 2,
     message:
-      "Bonjour {{prenom}}, c’est {{nom_affiche}}.\n\nJe reviens vers vous comme convenu, suite à notre échange à [lieu de rencontre].\n\nVous aviez évoqué le fait que vous étiez ouvert à des possibilités de projet professionnel. Est-ce que c’est toujours d’actualité pour vous ?",
+      "Bonjour {{prenom}}, c’est {{nom_affiche}}.\n\nJe reviens vers vous comme convenu, suite à notre échange à {{lieu de rencontre}}.\n\nVous aviez évoqué le fait que vous étiez ouvert à des possibilités de projet professionnel. Est-ce que c’est toujours d’actualité pour vous ?",
     nextAction: "Relance 2 jours",
     suggestedStatus: "À relancer",
   },
