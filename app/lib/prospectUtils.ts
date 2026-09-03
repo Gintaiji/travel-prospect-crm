@@ -99,6 +99,111 @@ export function getProspectDisplayName(prospect: Prospect) {
   return prospect.displayName.trim() || fullName || "Sans nom";
 }
 
+function escapeVCardText(value: string) {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\r?\n/g, "\\n")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,");
+}
+
+function foldVCardLine(line: string) {
+  const maxLineLength = 75;
+  const foldedLines: string[] = [];
+  let remainingLine = line;
+
+  while (remainingLine.length > maxLineLength) {
+    foldedLines.push(remainingLine.slice(0, maxLineLength));
+    remainingLine = ` ${remainingLine.slice(maxLineLength)}`;
+  }
+
+  foldedLines.push(remainingLine);
+
+  return foldedLines.join("\r\n");
+}
+
+function getVCardFileName(prospect: Prospect) {
+  const prospectName = getProspectDisplayName(prospect)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return `prospect-${prospectName || "contact"}.vcf`;
+}
+
+export function createVCardFromProspect(prospect: Prospect) {
+  const firstName = prospect.firstName.trim();
+  const lastName = prospect.lastName.trim();
+  const fullName = getProspectDisplayName(prospect);
+  const phone = prospect.phone.trim();
+  const whatsapp = prospect.whatsapp.trim();
+  const email = prospect.email.trim();
+  const city = prospect.city.trim();
+  const country = prospect.country.trim();
+  const profileUrl = prospect.profileUrl.trim();
+  const notes = ["Contact exporté depuis Travel Prospect CRM"];
+
+  if (whatsapp) {
+    notes.push(`WhatsApp : ${whatsapp}`);
+  }
+
+  const vCardLines = [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    `N:${escapeVCardText(lastName)};${escapeVCardText(firstName)};;;`,
+    `FN:${escapeVCardText(fullName)}`,
+    phone ? `TEL;TYPE=CELL:${escapeVCardText(phone)}` : "",
+    whatsapp ? `TEL;TYPE=CELL;TYPE=WHATSAPP:${escapeVCardText(whatsapp)}` : "",
+    email ? `EMAIL;TYPE=INTERNET:${escapeVCardText(email)}` : "",
+    city || country
+      ? `ADR;TYPE=HOME:;;;${escapeVCardText(city)};;;${escapeVCardText(country)}`
+      : "",
+    profileUrl ? `URL:${escapeVCardText(profileUrl)}` : "",
+    `NOTE:${escapeVCardText(notes.join("\n"))}`,
+    "END:VCARD",
+  ].filter(Boolean);
+
+  return `${vCardLines.map(foldVCardLine).join("\r\n")}\r\n`;
+}
+
+export async function downloadProspectVCard(prospect: Prospect) {
+  const vCardContent = createVCardFromProspect(prospect);
+  const fileName = getVCardFileName(prospect);
+  const vCardBlob = new Blob([vCardContent], {
+    type: "text/vcard;charset=utf-8",
+  });
+
+  if (
+    typeof File !== "undefined" &&
+    navigator.share &&
+    navigator.canShare
+  ) {
+    const vCardFile = new File([vCardBlob], fileName, {
+      type: "text/vcard",
+    });
+
+    if (navigator.canShare({ files: [vCardFile] })) {
+      await navigator.share({
+        files: [vCardFile],
+        title: getProspectDisplayName(prospect),
+      });
+      return;
+    }
+  }
+
+  const downloadUrl = URL.createObjectURL(vCardBlob);
+  const downloadLink = document.createElement("a");
+
+  downloadLink.href = downloadUrl;
+  downloadLink.download = fileName;
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  downloadLink.remove();
+  URL.revokeObjectURL(downloadUrl);
+}
+
 function formatGoogleCalendarDateTime(date: string, time: string) {
   return `${date.replace(/-/g, "")}T${time}`;
 }
