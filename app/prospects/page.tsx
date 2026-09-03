@@ -2471,6 +2471,14 @@ export default function ProspectsPage () {
     }, 1800);
   }
 
+  async function handleDownloadProspectVCard(prospect: Prospect) {
+    try {
+      await downloadProspectVCard(prospect);
+    } catch {
+      window.alert("Impossible de créer le contact. Vérifiez les informations du prospect.");
+    }
+  }
+
   async function handleCopySharedResourceLink(prospectId: string, resource: Resource) {
     if (!resource.url || !navigator.clipboard?.writeText) {
       return;
@@ -5049,7 +5057,7 @@ export default function ProspectsPage () {
                           <button
                             className="min-h-12 rounded-2xl border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
                             type="button"
-                            onClick={() => void downloadProspectVCard(prospect)}
+                            onClick={() => void handleDownloadProspectVCard(prospect)}
                           >
                             Ajouter au répertoire
                           </button>
@@ -5406,7 +5414,7 @@ export default function ProspectsPage () {
                       <button
                         className="min-h-10 w-full rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5 sm:w-auto"
                         type="button"
-                        onClick={() => void downloadProspectVCard(prospect)}
+                        onClick={() => void handleDownloadProspectVCard(prospect)}
                       >
                         Ajouter au répertoire
                       </button>
@@ -5532,7 +5540,7 @@ export default function ProspectsPage () {
                           <button
                             className="min-h-10 rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
                             type="button"
-                            onClick={() => void downloadProspectVCard(prospect)}
+                            onClick={() => void handleDownloadProspectVCard(prospect)}
                           >
                             Ajouter au répertoire
                           </button>

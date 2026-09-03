@@ -94,9 +94,13 @@ export function isDateToday(date: string) {
 }
 
 export function getProspectDisplayName(prospect: Prospect) {
-  const fullName = `${prospect.firstName} ${prospect.lastName}`.trim();
+  const fullName = `${safeTrim(prospect.firstName)} ${safeTrim(prospect.lastName)}`.trim();
 
-  return prospect.displayName.trim() || fullName || "Sans nom";
+  return safeTrim(prospect.displayName) || fullName || "Sans nom";
+}
+
+function safeTrim(value: string | null | undefined) {
+  return value?.trim() ?? "";
 }
 
 function escapeVCardText(value: string) {
@@ -133,16 +137,37 @@ function getVCardFileName(prospect: Prospect) {
   return `prospect-${prospectName || "contact"}.vcf`;
 }
 
+function getVCardNameParts(prospect: Prospect) {
+  const firstName = safeTrim(prospect.firstName);
+  const lastName = safeTrim(prospect.lastName);
+
+  if (firstName || lastName) {
+    return { firstName, lastName };
+  }
+
+  const displayName = safeTrim(prospect.displayName);
+
+  if (!displayName) {
+    return { firstName: "", lastName: "" };
+  }
+
+  const [displayFirstName = "", ...displayLastNameParts] = displayName.split(/\s+/);
+
+  return {
+    firstName: displayFirstName,
+    lastName: displayLastNameParts.join(" "),
+  };
+}
+
 export function createVCardFromProspect(prospect: Prospect) {
-  const firstName = prospect.firstName.trim();
-  const lastName = prospect.lastName.trim();
+  const { firstName, lastName } = getVCardNameParts(prospect);
   const fullName = getProspectDisplayName(prospect);
-  const phone = prospect.phone.trim();
-  const whatsapp = prospect.whatsapp.trim();
-  const email = prospect.email.trim();
-  const city = prospect.city.trim();
-  const country = prospect.country.trim();
-  const profileUrl = prospect.profileUrl.trim();
+  const phone = safeTrim(prospect.phone);
+  const whatsapp = safeTrim(prospect.whatsapp);
+  const email = safeTrim(prospect.email);
+  const city = safeTrim(prospect.city);
+  const country = safeTrim(prospect.country);
+  const profileUrl = safeTrim(prospect.profileUrl);
   const notes = ["Contact exporté depuis Travel Prospect CRM"];
 
   if (whatsapp) {
@@ -168,7 +193,18 @@ export function createVCardFromProspect(prospect: Prospect) {
   return `${vCardLines.map(foldVCardLine).join("\r\n")}\r\n`;
 }
 
-export async function downloadProspectVCard(prospect: Prospect) {
+export type ProspectVCardExportResult = "shared" | "downloaded" | "dismissed";
+
+function isShareDismissError(error: unknown) {
+  return (
+    error instanceof DOMException &&
+    (error.name === "AbortError" || error.name === "NotAllowedError")
+  );
+}
+
+export async function downloadProspectVCard(
+  prospect: Prospect,
+): Promise<ProspectVCardExportResult> {
   const vCardContent = createVCardFromProspect(prospect);
   const fileName = getVCardFileName(prospect);
   const vCardBlob = new Blob([vCardContent], {
@@ -176,20 +212,36 @@ export async function downloadProspectVCard(prospect: Prospect) {
   });
 
   if (
+    typeof navigator !== "undefined" &&
     typeof File !== "undefined" &&
-    navigator.share &&
-    navigator.canShare
+    typeof navigator.share === "function" &&
+    typeof navigator.canShare === "function"
   ) {
     const vCardFile = new File([vCardBlob], fileName, {
       type: "text/vcard",
     });
+    let canShareFile = false;
 
-    if (navigator.canShare({ files: [vCardFile] })) {
-      await navigator.share({
-        files: [vCardFile],
-        title: getProspectDisplayName(prospect),
-      });
-      return;
+    try {
+      canShareFile = navigator.canShare({ files: [vCardFile] });
+    } catch {
+      canShareFile = false;
+    }
+
+    if (canShareFile) {
+      try {
+        await navigator.share({
+          files: [vCardFile],
+          title: getProspectDisplayName(prospect),
+        });
+        return "shared";
+      } catch (error) {
+        if (isShareDismissError(error)) {
+          return "dismissed";
+        }
+
+        throw error;
+      }
     }
   }
 
@@ -201,7 +253,9 @@ export async function downloadProspectVCard(prospect: Prospect) {
   document.body.appendChild(downloadLink);
   downloadLink.click();
   downloadLink.remove();
-  URL.revokeObjectURL(downloadUrl);
+  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+
+  return "downloaded";
 }
 
 function formatGoogleCalendarDateTime(date: string, time: string) {
