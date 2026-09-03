@@ -90,7 +90,9 @@ export default function MessagesPage() {
   }
 
   function resetOneMessage(templateId: FollowUpMessageTemplateId) {
-    const shouldReset = window.confirm("Vider ce message ?");
+    const shouldReset = window.confirm(
+      "Réinitialiser ce message avec le texte par défaut ?",
+    );
 
     if (!shouldReset) {
       return;
@@ -102,11 +104,13 @@ export default function MessagesPage() {
     saveCustomMessageTemplates(nextTemplates);
     setCustomTemplates(nextTemplates);
     setEditingMessage(null);
-    showFeedback("Message vidé.");
+    showFeedback("Message réinitialisé.");
   }
 
   function resetAllMessages() {
-    const shouldReset = window.confirm("Vider les trois messages de relance ?");
+    const shouldReset = window.confirm(
+      "Réinitialiser les trois messages avec les textes par défaut ?",
+    );
 
     if (!shouldReset) {
       return;
@@ -115,7 +119,7 @@ export default function MessagesPage() {
     clearCustomMessageTemplates();
     setCustomTemplates({});
     setEditingMessage(null);
-    showFeedback("Messages vidés.");
+    showFeedback("Messages réinitialisés.");
   }
 
   return (
@@ -140,8 +144,8 @@ export default function MessagesPage() {
                 Modèles actifs
               </p>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-200">
-                Un seul message est prévu par délai de relance. Les champs vides
-                restent volontairement neutres.
+                Un seul message est prévu par délai de relance. Les textes
+                personnalisés sont utilisés dans l’assistant prospect.
               </p>
               <div className="mt-4 max-w-3xl rounded-2xl border border-white/10 bg-slate-950/70 p-4">
                 <p className="text-sm leading-6 text-slate-200">
@@ -159,7 +163,7 @@ export default function MessagesPage() {
               type="button"
               onClick={resetAllMessages}
             >
-              Vider les messages
+              Réinitialiser les messages
             </button>
           </div>
           {feedbackMessage ? (
@@ -264,7 +268,7 @@ export default function MessagesPage() {
                         disabled={!isCustomized}
                         onClick={() => resetOneMessage(template.id)}
                       >
-                        Vider
+                        Réinitialiser
                       </button>
                     </>
                   )}
