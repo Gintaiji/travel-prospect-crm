@@ -85,6 +85,35 @@ export function getFutureDateString(days: number) {
   return formatLocalDate(futureDate);
 }
 
+export function getFutureMonthDateString(months: number) {
+  const futureDate = new Date();
+  futureDate.setHours(12, 0, 0, 0);
+
+  const originalDay = futureDate.getDate();
+  const targetMonthFirstDay = new Date(
+    futureDate.getFullYear(),
+    futureDate.getMonth() + months,
+    1,
+    12,
+    0,
+    0,
+    0,
+  );
+  const targetMonthLastDay = new Date(
+    targetMonthFirstDay.getFullYear(),
+    targetMonthFirstDay.getMonth() + 1,
+    0,
+    12,
+    0,
+    0,
+    0,
+  ).getDate();
+
+  targetMonthFirstDay.setDate(Math.min(originalDay, targetMonthLastDay));
+
+  return formatLocalDate(targetMonthFirstDay);
+}
+
 export function isDateBeforeToday(date: string) {
   return date < getTodayDateString();
 }
@@ -283,13 +312,15 @@ function parseLocalDate(date: string) {
 }
 
 function getFollowUpTitleFromAction(nextAction: string) {
-  const followUpMatch = nextAction.trim().match(/^Relance\s+(2|4|30)\s+jours?$/i);
+  const followUpMatch = nextAction
+    .trim()
+    .match(/^Relance\s+((?:2|4|30)\s+jours?|6\s+mois)$/i);
 
   if (!followUpMatch) {
     return "";
   }
 
-  return `Relance ${followUpMatch[1]} jours`;
+  return `Relance ${followUpMatch[1].replace(/\s+/g, " ")}`;
 }
 
 function getLastExplicitFollowUpTitle(prospect: Prospect) {
@@ -323,6 +354,10 @@ function getFollowUpTitleFromDate(nextActionDate: string) {
 
   if (daysUntilFollowUp === 2 || daysUntilFollowUp === 4 || daysUntilFollowUp === 30) {
     return `Relance ${daysUntilFollowUp} jours`;
+  }
+
+  if (nextActionDate === getFutureMonthDateString(6)) {
+    return "Relance 6 mois";
   }
 
   return "";

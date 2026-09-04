@@ -22,6 +22,7 @@ import {
   buildGoogleCalendarFollowUpUrl,
   calculateProspectScore,
   getFutureDateString,
+  getFutureMonthDateString,
   getProspectDisplayName,
   getTodayDateString,
   isDateBeforeToday,
@@ -597,6 +598,15 @@ export default function TodayPage() {
           >
             Reporter 30 jours
           </button>
+          <button
+            className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
+            type="button"
+            onClick={() =>
+              updateProspectNextActionDate(prospect.id, getFutureMonthDateString(6))
+            }
+          >
+            Reporter 6 mois
+          </button>
           <Link
             className="flex min-h-12 items-center justify-center rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-center text-sm font-semibold text-sky-200 transition hover:bg-sky-400/20"
             href={`/prospects?focus=${encodeURIComponent(prospect.id)}`}
@@ -874,6 +884,15 @@ export default function TodayPage() {
                         }
                       >
                         Reporter 30 jours
+                      </button>
+                      <button
+                        className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
+                        type="button"
+                        onClick={() =>
+                          updateProspectNextActionDate(prospect.id, getFutureMonthDateString(6))
+                        }
+                      >
+                        Reporter 6 mois
                       </button>
                       {googleCalendarUrl ? (
                         <a

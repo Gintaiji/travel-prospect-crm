@@ -13,6 +13,7 @@ import {
   calculateProspectScore,
   downloadProspectVCard,
   getFutureDateString,
+  getFutureMonthDateString,
   getProspectDisplayName,
   getTodayDateString,
 } from "../lib/prospectUtils";
@@ -103,7 +104,7 @@ type FullProspectFormState = ProspectFormState & {
   nextActionDate: string;
 };
 
-type QuickAddFollowUpOption = "none" | "tomorrow" | "plus3" | "plus7";
+type QuickAddFollowUpOption = "none" | "tomorrow" | "plus3" | "plus7" | "plus6Months";
 
 type QuickAddFormState = {
   displayName: string;
@@ -172,6 +173,7 @@ type QualificationQuickAction =
   | "make-hot"
   | "follow-up-tomorrow"
   | "follow-up-plus-three"
+  | "follow-up-plus-six-months"
   | "avoid"
   | "not-now";
 
@@ -198,6 +200,7 @@ const qualificationActionButtons: Array<{
   { id: "make-hot", label: "Passer en chaud", variant: "primary" },
   { id: "follow-up-tomorrow", label: "Relancer 2 jours", variant: "quiet" },
   { id: "follow-up-plus-three", label: "Relancer 4 jours", variant: "quiet" },
+  { id: "follow-up-plus-six-months", label: "Relancer 6 mois", variant: "quiet" },
   { id: "avoid", label: "Marquer à éviter", variant: "danger" },
   { id: "not-now", label: "Pas maintenant", variant: "quiet" },
 ];
@@ -475,7 +478,7 @@ function findPotentialDuplicates(prospectsToCheck: Prospect[]) {
         prospects: [prospect, comparedProspect],
         reasons,
       });
-    };
+    });
   });
 
   return duplicateGroups;
@@ -1243,7 +1246,7 @@ export default function ProspectsPage () {
       city: currentFormState.city.trim()
         ? currentFormState.city
         : appSettings.defaultCity,
-    });
+    };
   }
 
   function openNewProspectForm(isQuickAdd = false) {
@@ -1339,7 +1342,7 @@ export default function ProspectsPage () {
       interactionsCount: 0,
       likesCount: 0,
       messagesCount: 0,
-    });
+    };
 
     setActiveQualificationProspectId(prospect.id);
     setQualificationFormState({
@@ -1434,6 +1437,10 @@ export default function ProspectsPage () {
 
     if (option === "plus7") {
       return getFutureDateString(30);
+    }
+
+    if (option === "plus6Months") {
+      return getFutureMonthDateString(6);
     }
 
     return "";
@@ -1716,7 +1723,7 @@ export default function ProspectsPage () {
       likesCount,
       messagesCount,
       notes: formState.notes,
-    };
+    });
     const hasPotentialDuplicate = findPotentialDuplicates([newProspect, ...prospects]).some(
       (duplicateGroup) =>
         duplicateGroup.prospects.some((prospect) => prospect.id === newProspect.id),
@@ -2146,6 +2153,10 @@ export default function ProspectsPage () {
 
       if (action === "follow-up-plus-three") {
         nextProspect.nextActionDate = getFutureDateString(4);
+      }
+
+      if (action === "follow-up-plus-six-months") {
+        nextProspect.nextActionDate = getFutureMonthDateString(6);
       }
 
       if (action === "avoid") {
@@ -3191,6 +3202,13 @@ export default function ProspectsPage () {
             30 jours
           </button>
           <button
+            className="min-h-10 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+            type="button"
+            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureMonthDateString(6))}
+          >
+            6 mois
+          </button>
+          <button
             className="min-h-10 rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
             type="button"
             onClick={() => updateQuickFollowUpDate(prospect.id, "")}
@@ -3717,6 +3735,7 @@ export default function ProspectsPage () {
                     { value: "tomorrow", label: "2 jours" },
                     { value: "plus3", label: "4 jours" },
                     { value: "plus7", label: "30 jours" },
+                    { value: "plus6Months", label: "6 mois" },
                   ].map((followUpOption) => (
                     <label
                       className={`flex min-h-12 items-center justify-center rounded-2xl border px-3 py-2 text-center text-sm font-semibold transition ${
@@ -5116,7 +5135,7 @@ export default function ProspectsPage () {
                           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
                             Relance rapide
                           </p>
-                          <div className="mt-2 grid grid-cols-3 gap-2">
+                          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
                             <button
                               className="min-h-12 rounded-2xl border border-emerald-400/30 px-2 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
                               type="button"
@@ -5137,6 +5156,13 @@ export default function ProspectsPage () {
                               onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(30))}
                             >
                               30 jours
+                            </button>
+                            <button
+                              className="min-h-12 rounded-2xl border border-emerald-400/30 px-2 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
+                              type="button"
+                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureMonthDateString(6))}
+                            >
+                              6 mois
                             </button>
                           </div>
                         </div>

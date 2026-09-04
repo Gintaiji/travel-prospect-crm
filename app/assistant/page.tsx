@@ -314,6 +314,16 @@ function renderCommandSummary(command: AiCommand) {
     );
   }
 
+  if (command.action === "createFollowUp") {
+    return (
+      <>
+        <ResultLine label="Action" value="Planifier une relance" />
+        <ResultLine label="Prospect" value={getTargetLabel(command.payload.target)} />
+        <ResultLine label="Relance" value={command.payload.date} />
+      </>
+    );
+  }
+
   return (
     <>
       <ResultLine label="Action" value="Modifier un prospect" />
