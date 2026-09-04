@@ -25,6 +25,15 @@ const unsupportedMultiActionMarkers = [
 
 const colorWords = ["jaune", "rouge", "bleu", "vert", "verte"] as const;
 const temperatureWords = ["froid", "tiede", "chaud"] as const;
+const weekDays = [
+  { name: "dimanche", day: 0 },
+  { name: "lundi", day: 1 },
+  { name: "mardi", day: 2 },
+  { name: "mercredi", day: 3 },
+  { name: "jeudi", day: 4 },
+  { name: "vendredi", day: 5 },
+  { name: "samedi", day: 6 },
+] as const;
 
 function normalizeSpaces(value: string) {
   return value.trim().replace(/\s+/g, " ");
@@ -36,6 +45,72 @@ function normalizeForDetection(value: string) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[’‘`´]/g, "'")
     .toLowerCase();
+}
+
+function formatLocalDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function addLocalDays(referenceDate: Date, days: number) {
+  const date = new Date(referenceDate);
+
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + days);
+
+  return date;
+}
+
+function getNextWeekDayDate(
+  referenceDate: Date,
+  targetDay: number,
+  mustBeFuture: boolean,
+) {
+  const referenceDay = referenceDate.getDay();
+  let daysUntilTarget = (targetDay - referenceDay + 7) % 7;
+
+  if (mustBeFuture && daysUntilTarget === 0) {
+    daysUntilTarget = 7;
+  }
+
+  return addLocalDays(referenceDate, daysUntilTarget);
+}
+
+function parseFollowUpDateExpression(
+  normalizedDateExpression: string,
+  referenceDate: Date,
+) {
+  if (
+    normalizedDateExpression === "aujourd'hui" ||
+    normalizedDateExpression === "aujourd hui"
+  ) {
+    return formatLocalDate(addLocalDays(referenceDate, 0));
+  }
+
+  if (normalizedDateExpression === "demain") {
+    return formatLocalDate(addLocalDays(referenceDate, 1));
+  }
+
+  const weekDayMatch = normalizedDateExpression.match(
+    /^(?:le )?(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)( prochain)?$/,
+  );
+
+  if (!weekDayMatch) {
+    return null;
+  }
+
+  const weekDay = weekDays.find((day) => day.name === weekDayMatch[1]);
+
+  if (!weekDay) {
+    return null;
+  }
+
+  return formatLocalDate(
+    getNextWeekDayDate(referenceDate, weekDay.day, Boolean(weekDayMatch[2])),
+  );
 }
 
 function fail(reason = "Commande non reconnue"): AssistantCommandParseResult {
@@ -313,7 +388,62 @@ function parseAddNoteCommand(originalText: string) {
   });
 }
 
-export function parseAssistantCommand(text: string): AssistantCommandParseResult {
+function parseCreateFollowUpCommand(
+  originalText: string,
+  normalizedText: string,
+  referenceDate: Date,
+) {
+  const followUpPrefixes = [
+    "relance ",
+    "programme une relance pour ",
+    "prevois une relance pour ",
+  ];
+  const matchedPrefix = followUpPrefixes.find((prefix) =>
+    normalizedText.startsWith(prefix),
+  );
+
+  if (!matchedPrefix) {
+    return null;
+  }
+
+  const dateExpressionMatch = normalizedText.match(
+    /(?:^| )((?:le )?(?:aujourd'hui|aujourd hui|demain|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?: prochain)?)$/,
+  );
+
+  if (!dateExpressionMatch) {
+    return null;
+  }
+
+  const date = parseFollowUpDateExpression(
+    dateExpressionMatch[1],
+    referenceDate,
+  );
+
+  if (!date) {
+    return null;
+  }
+
+  const targetStart = matchedPrefix.length;
+  const targetEnd = dateExpressionMatch.index ?? normalizedText.length;
+  const target = cleanPersonName(originalText.slice(targetStart, targetEnd));
+
+  if (!target || normalizeForDetection(target) === "tout le monde") {
+    return null;
+  }
+
+  return successIfValid({
+    action: "createFollowUp",
+    payload: {
+      target: { query: target },
+      date,
+    },
+  });
+}
+
+export function parseAssistantCommand(
+  text: string,
+  referenceDate: Date = new Date(),
+): AssistantCommandParseResult {
   const originalText = normalizeSpaces(text);
   const normalizedText = normalizeForDetection(originalText);
 
@@ -331,6 +461,7 @@ export function parseAssistantCommand(text: string): AssistantCommandParseResult
     parseSearchCommand(originalText, normalizedText) ??
     parseColorUpdateCommand(originalText, normalizedText) ??
     parseTemperatureUpdateCommand(originalText, normalizedText) ??
+    parseCreateFollowUpCommand(originalText, normalizedText, referenceDate) ??
     parseCreateCommand(originalText, normalizedText) ??
     fail()
   );
