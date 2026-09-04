@@ -19,10 +19,7 @@ import {
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
 import { loadNotificationSettings } from "../lib/notificationSettingsStorage";
 import {
-  buildGoogleCalendarFollowUpUrl,
   calculateProspectScore,
-  getFutureDateString,
-  getFutureMonthDateString,
   getProspectDisplayName,
   getTodayDateString,
   isDateBeforeToday,
@@ -401,7 +398,6 @@ export default function TodayPage() {
     const tags = prospect.tags ?? [];
     const lastConversationEntry = getLastConversationEntry(prospect);
     const isTreatmentFormOpen = activeTreatmentProspectId === prospect.id;
-    const googleCalendarUrl = buildGoogleCalendarFollowUpUrl(prospect);
 
     return (
       <article
@@ -556,7 +552,7 @@ export default function TodayPage() {
           </form>
         ) : null}
 
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
           <button
             className="min-h-12 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
             type="button"
@@ -564,65 +560,12 @@ export default function TodayPage() {
           >
             Marquer comme traité
           </button>
-          <button
-            className="min-h-12 rounded-full border border-emerald-400/30 px-4 py-2 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400/10"
-            type="button"
-            onClick={() => openFollowUpTreatmentForm(prospect)}
-          >
-            Traiter la relance
-          </button>
-          <button
-            className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
-            type="button"
-            onClick={() =>
-              updateProspectNextActionDate(prospect.id, getFutureDateString(2))
-            }
-          >
-            Reporter 2 jours
-          </button>
-          <button
-            className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
-            type="button"
-            onClick={() =>
-              updateProspectNextActionDate(prospect.id, getFutureDateString(4))
-            }
-          >
-            Reporter 4 jours
-          </button>
-          <button
-            className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
-            type="button"
-            onClick={() =>
-              updateProspectNextActionDate(prospect.id, getFutureDateString(30))
-            }
-          >
-            Reporter 30 jours
-          </button>
-          <button
-            className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
-            type="button"
-            onClick={() =>
-              updateProspectNextActionDate(prospect.id, getFutureMonthDateString(6))
-            }
-          >
-            Reporter 6 mois
-          </button>
           <Link
             className="flex min-h-12 items-center justify-center rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-center text-sm font-semibold text-sky-200 transition hover:bg-sky-400/20"
             href={`/prospects?focus=${encodeURIComponent(prospect.id)}`}
           >
             Voir la fiche
           </Link>
-          {googleCalendarUrl ? (
-            <a
-              className="flex min-h-12 items-center justify-center rounded-full border border-white/10 px-4 py-2 text-center text-sm font-semibold text-slate-200 transition hover:bg-white/5"
-              href={googleCalendarUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Ajouter à Google Agenda
-            </a>
-          ) : null}
         </div>
       </article>
     );
@@ -774,7 +717,6 @@ export default function TodayPage() {
                 const score = calculateProspectScore(prospect);
                 const tags = prospect.tags ?? [];
                 const lastConversationEntry = getLastConversationEntry(prospect);
-                const googleCalendarUrl = buildGoogleCalendarFollowUpUrl(prospect);
 
                 return (
                   <article
@@ -844,13 +786,7 @@ export default function TodayPage() {
                       ) : null}
                     </div>
 
-                    <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      <Link
-                        className="flex min-h-12 items-center justify-center rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-center text-sm font-semibold text-sky-200 transition hover:bg-sky-400/20"
-                        href={`/prospects?focus=${encodeURIComponent(prospect.id)}`}
-                      >
-                        Voir la fiche
-                      </Link>
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
                       <button
                         className="min-h-12 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
                         type="button"
@@ -858,52 +794,12 @@ export default function TodayPage() {
                       >
                         Marquer comme traité
                       </button>
-                      <button
-                        className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
-                        type="button"
-                        onClick={() =>
-                          updateProspectNextActionDate(prospect.id, getFutureDateString(2))
-                        }
+                      <Link
+                        className="flex min-h-12 items-center justify-center rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-center text-sm font-semibold text-sky-200 transition hover:bg-sky-400/20"
+                        href={`/prospects?focus=${encodeURIComponent(prospect.id)}`}
                       >
-                        Reporter 2 jours
-                      </button>
-                      <button
-                        className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
-                        type="button"
-                        onClick={() =>
-                          updateProspectNextActionDate(prospect.id, getFutureDateString(4))
-                        }
-                      >
-                        Reporter 4 jours
-                      </button>
-                      <button
-                        className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
-                        type="button"
-                        onClick={() =>
-                          updateProspectNextActionDate(prospect.id, getFutureDateString(30))
-                        }
-                      >
-                        Reporter 30 jours
-                      </button>
-                      <button
-                        className="min-h-12 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/5"
-                        type="button"
-                        onClick={() =>
-                          updateProspectNextActionDate(prospect.id, getFutureMonthDateString(6))
-                        }
-                      >
-                        Reporter 6 mois
-                      </button>
-                      {googleCalendarUrl ? (
-                        <a
-                          className="flex min-h-12 items-center justify-center rounded-full border border-white/10 px-4 py-2 text-center text-sm font-semibold text-slate-200 transition hover:bg-white/5"
-                          href={googleCalendarUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Ajouter à Google Agenda
-                        </a>
-                      ) : null}
+                        Voir la fiche
+                      </Link>
                     </div>
                   </article>
                 );
