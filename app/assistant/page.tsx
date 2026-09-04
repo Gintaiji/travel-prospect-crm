@@ -10,6 +10,7 @@ import {
   appendProspectNote,
   createProspectFromInput,
   updateProspectColorAndTemperature,
+  updateProspectNextActionDate,
   type UpdateProspectColorAndTemperatureChanges,
 } from "../lib/prospectActions";
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
@@ -33,6 +34,16 @@ const exampleCommands = [
 
 function getTargetLabel(target: { prospectId?: string; query?: string }) {
   return target.query || target.prospectId || "Non précisé";
+}
+
+function formatDisplayDate(date: string) {
+  const [year, month, day] = date.split("-");
+
+  if (!year || !month || !day) {
+    return date;
+  }
+
+  return `${day}/${month}/${year}`;
 }
 
 function normalizeSearchText(value: string) {
@@ -317,9 +328,9 @@ function renderCommandSummary(command: AiCommand) {
   if (command.action === "createFollowUp") {
     return (
       <>
-        <ResultLine label="Action" value="Planifier une relance" />
+        <ResultLine label="Action" value="Programmer une relance" />
         <ResultLine label="Prospect" value={getTargetLabel(command.payload.target)} />
-        <ResultLine label="Relance" value={command.payload.date} />
+        <ResultLine label="Date" value={formatDisplayDate(command.payload.date)} />
       </>
     );
   }
@@ -413,6 +424,33 @@ type AssistantAddNoteResult =
     }
   | {
       status: "notReady";
+    };
+
+type AssistantCreateFollowUpResult =
+  | {
+      status: "success";
+      prospectName: string;
+      date: string;
+    }
+  | {
+      status: "unchanged";
+      prospectName: string;
+      date: string;
+    }
+  | {
+      status: "notFound";
+      targetLabel: string;
+    }
+  | {
+      status: "ambiguous";
+      targetLabel: string;
+      matches: Prospect[];
+    }
+  | {
+      status: "notReady";
+    }
+  | {
+      status: "error";
     };
 
 type AssistantUpdateProspectResult =
@@ -576,6 +614,102 @@ function AddNoteResultPanel({ result }: { result: AssistantAddNoteResult | null 
           </article>
         ))}
       </div>
+    </section>
+  );
+}
+
+function CreateFollowUpResultPanel({
+  result,
+}: {
+  result: AssistantCreateFollowUpResult | null;
+}) {
+  if (!result) {
+    return null;
+  }
+
+  if (result.status === "success") {
+    return (
+      <section className="rounded-3xl border border-cyan-300/30 bg-cyan-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
+          R{"\u00e9"}sultat
+        </p>
+        <h2 className="mt-3 text-xl font-bold text-white">
+          {"\u2713"} Relance de {result.prospectName} programm{"\u00e9"}e pour le{" "}
+          {formatDisplayDate(result.date)}.
+        </h2>
+      </section>
+    );
+  }
+
+  if (result.status === "unchanged") {
+    return (
+      <section className="rounded-3xl border border-cyan-300/30 bg-cyan-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
+          R{"\u00e9"}sultat
+        </p>
+        <h2 className="mt-3 text-xl font-bold text-white">
+          {result.prospectName} est d{"\u00e9"}j{"\u00e0"} pr{"\u00e9"}vue en relance le{" "}
+          {formatDisplayDate(result.date)}.
+        </h2>
+      </section>
+    );
+  }
+
+  if (result.status === "notReady") {
+    return (
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-slate-300">
+          Chargement des prospects...
+        </p>
+      </section>
+    );
+  }
+
+  if (result.status === "notFound") {
+    return (
+      <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-amber-100">
+          Aucun prospect trouv{"\u00e9"} pour {"\u00ab"} {result.targetLabel}{" "}
+          {"\u00bb"}.
+        </p>
+      </section>
+    );
+  }
+
+  if (result.status === "ambiguous") {
+    return (
+      <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-amber-100">
+          Plusieurs prospects correspondent {"\u00e0"} {"\u00ab"}{" "}
+          {result.targetLabel} {"\u00bb"}. Pr{"\u00e9"}cise lequel.
+        </p>
+        <div className="mt-4 grid gap-3">
+          {result.matches.map((prospect) => (
+            <article
+              className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
+              key={prospect.id}
+            >
+              <h3 className="text-base font-bold text-white">
+                {getProspectDisplayName(prospect)}
+              </h3>
+              <p className="mt-2 text-sm text-slate-300">
+                {[prospect.colorType, prospect.temperature, prospect.status]
+                  .filter(Boolean)
+                  .join(" \u00b7 ")}
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
+      <p className="text-sm font-semibold text-amber-100">
+        Impossible de programmer cette relance. Aucune donn{"\u00e9"}e n&apos;a{" "}
+        {"\u00e9"}t{"\u00e9"} modifi{"\u00e9"}e.
+      </p>
     </section>
   );
 }
@@ -831,6 +965,8 @@ export default function AssistantPage() {
     useState<AssistantCreateProspectResult | null>(null);
   const [addNoteResult, setAddNoteResult] =
     useState<AssistantAddNoteResult | null>(null);
+  const [createFollowUpResult, setCreateFollowUpResult] =
+    useState<AssistantCreateFollowUpResult | null>(null);
   const [updateProspectResult, setUpdateProspectResult] =
     useState<AssistantUpdateProspectResult | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
@@ -850,6 +986,12 @@ export default function AssistantPage() {
     const nextParseResult = parseAssistantCommand(commandText);
 
     setParseResult(nextParseResult);
+    setSearchResult(null);
+    setTodayFollowUpsResult(null);
+    setCreateProspectResult(null);
+    setAddNoteResult(null);
+    setCreateFollowUpResult(null);
+    setUpdateProspectResult(null);
 
     if (
       nextParseResult.success &&
@@ -925,6 +1067,69 @@ export default function AssistantPage() {
       setTodayFollowUpsResult(null);
       setAddNoteResult(null);
       setUpdateProspectResult(null);
+      return;
+    }
+
+    if (
+      nextParseResult.success &&
+      nextParseResult.command.action === "createFollowUp"
+    ) {
+      if (!hasLoadedProspects) {
+        setCreateFollowUpResult({ status: "notReady" });
+        return;
+      }
+
+      const { label, matches } = resolveProspectTarget(
+        prospects,
+        nextParseResult.command.payload.target,
+      );
+
+      if (matches.length === 0) {
+        setCreateFollowUpResult({ status: "notFound", targetLabel: label });
+        return;
+      }
+
+      if (matches.length > 1) {
+        setCreateFollowUpResult({
+          status: "ambiguous",
+          targetLabel: label,
+          matches,
+        });
+        return;
+      }
+
+      const targetProspect = matches[0];
+      const nextActionDate = nextParseResult.command.payload.date;
+
+      if (targetProspect.nextActionDate === nextActionDate) {
+        setCreateFollowUpResult({
+          status: "unchanged",
+          prospectName: getProspectDisplayName(targetProspect),
+          date: nextActionDate,
+        });
+        return;
+      }
+
+      try {
+        const updatedProspect = updateProspectNextActionDate(
+          targetProspect,
+          nextActionDate,
+        );
+        const updatedProspects = prospects.map((prospect) =>
+          prospect.id === targetProspect.id ? updatedProspect : prospect,
+        );
+
+        saveProspects(updatedProspects);
+        setProspects(updatedProspects);
+        setCreateFollowUpResult({
+          status: "success",
+          prospectName: getProspectDisplayName(updatedProspect),
+          date: nextActionDate,
+        });
+      } catch {
+        setCreateFollowUpResult({ status: "error" });
+      }
+
       return;
     }
 
@@ -1170,6 +1375,7 @@ export default function AssistantPage() {
           hasLoadedProspects={hasLoadedProspects}
         />
         <CreateProspectResultPanel result={createProspectResult} />
+        <CreateFollowUpResultPanel result={createFollowUpResult} />
         <AddNoteResultPanel result={addNoteResult} />
         <UpdateProspectResultPanel result={updateProspectResult} />
       </section>
