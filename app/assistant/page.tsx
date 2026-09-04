@@ -37,6 +37,9 @@ const exampleCommands = [
   "Ajoute une note à Nicolas : intéressé par les voyages",
 ];
 
+const TODAY_OVERVIEW_CONTACT_DAYS = 7;
+const TODAY_OVERVIEW_PREVIEW_LIMIT = 5;
+
 function getTargetLabel(target: { prospectId?: string; query?: string }) {
   return target.query || target.prospectId || "Non précisé";
 }
@@ -53,6 +56,10 @@ function formatDisplayDate(date: string) {
 
 function formatDaysAgo(days: number) {
   return `Il y a ${days} jour${days > 1 ? "s" : ""}`;
+}
+
+function formatOverdueDays(days: number) {
+  return `En retard de ${days} jour${days > 1 ? "s" : ""}`;
 }
 
 function normalizeSearchText(value: string) {
@@ -467,6 +474,14 @@ function renderCommandSummary(command: AiCommand) {
     );
   }
 
+  if (command.action === "getTodayOverview") {
+    return (
+      <>
+        <ResultLine label="Action" value="Afficher les priorit\u00e9s du jour" />
+      </>
+    );
+  }
+
   if (command.action === "countNewProspectsThisWeek") {
     return (
       <>
@@ -586,6 +601,17 @@ type AssistantOverdueFollowUpsResult =
   | {
       status: "success";
       matches: Prospect[];
+    }
+  | {
+      status: "notReady";
+    };
+
+type AssistantTodayOverviewResult =
+  | {
+      status: "success";
+      todayFollowUps: Prospect[];
+      overdueFollowUps: Prospect[];
+      prospectsNotContacted: AssistantProspectsNotContactedSinceDaysMatch[];
     }
   | {
       status: "notReady";
@@ -1119,7 +1145,7 @@ function OverdueFollowUpProspectSummary({ prospect }: { prospect: Prospect }) {
         />
         <ResultLine
           label="Retard"
-          value={overdueDays ? `En retard de ${overdueDays} jour${overdueDays > 1 ? "s" : ""}` : undefined}
+          value={overdueDays ? formatOverdueDays(overdueDays) : undefined}
         />
       </div>
     </article>
@@ -1172,6 +1198,181 @@ function OverdueFollowUpsResultPanel({
             key={prospect.id}
           />
         ))}
+      </div>
+    </section>
+  );
+}
+
+function TodayOverviewProspectLine({
+  details,
+  prospect,
+}: {
+  details: string[];
+  prospect: Prospect;
+}) {
+  return (
+    <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
+      <h3 className="text-sm font-bold text-white">
+        {getProspectDisplayName(prospect)}
+      </h3>
+      <p className="mt-2 text-xs font-medium leading-5 text-slate-300">
+        {details.filter(Boolean).join(" \u00b7 ")}
+      </p>
+    </article>
+  );
+}
+
+function TodayOverviewResultPanel({
+  result,
+}: {
+  result: AssistantTodayOverviewResult | null;
+}) {
+  if (!result) {
+    return null;
+  }
+
+  if (result.status === "notReady") {
+    return (
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-slate-300">
+          Chargement des prospects...
+        </p>
+      </section>
+    );
+  }
+
+  const todayFollowUpsPreview = result.todayFollowUps.slice(
+    0,
+    TODAY_OVERVIEW_PREVIEW_LIMIT,
+  );
+  const overdueFollowUpsPreview = result.overdueFollowUps.slice(
+    0,
+    TODAY_OVERVIEW_PREVIEW_LIMIT,
+  );
+  const prospectsNotContactedPreview = result.prospectsNotContacted.slice(
+    0,
+    TODAY_OVERVIEW_PREVIEW_LIMIT,
+  );
+  const hasNoPriorities =
+    result.todayFollowUps.length === 0 &&
+    result.overdueFollowUps.length === 0 &&
+    result.prospectsNotContacted.length === 0;
+
+  return (
+    <section className="rounded-3xl border border-cyan-300/30 bg-cyan-300/10 p-4 shadow-xl sm:p-5">
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
+        Priorit{"\u00e9"}s du jour
+      </p>
+
+      {hasNoPriorities ? (
+        <p className="mt-4 text-sm font-semibold text-cyan-50">
+          Aucune priorit{"\u00e9"} urgente d{"\u00e9"}tect{"\u00e9"}e aujourd&apos;hui.
+        </p>
+      ) : null}
+
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+            Relances aujourd&apos;hui
+          </p>
+          <p className="mt-2 text-3xl font-bold text-white">
+            {result.todayFollowUps.length}
+          </p>
+          <p className="mt-1 text-xs font-medium text-slate-300">
+            {result.todayFollowUps.length === 1
+              ? "1 relance pr\u00e9vue"
+              : `${result.todayFollowUps.length} relances pr\u00e9vues`}
+          </p>
+          <div className="mt-3 grid gap-2">
+            {todayFollowUpsPreview.map((prospect) => (
+              <TodayOverviewProspectLine
+                details={[
+                  prospect.colorType,
+                  prospect.temperature,
+                  `Relance ${formatDisplayDate(prospect.nextActionDate)}`,
+                ]}
+                prospect={prospect}
+                key={prospect.id}
+              />
+            ))}
+          </div>
+          {result.todayFollowUps.length > TODAY_OVERVIEW_PREVIEW_LIMIT ? (
+            <p className="mt-3 text-xs font-semibold text-cyan-100">
+              + {result.todayFollowUps.length - TODAY_OVERVIEW_PREVIEW_LIMIT} autres
+            </p>
+          ) : null}
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+            Relances en retard
+          </p>
+          <p className="mt-2 text-3xl font-bold text-white">
+            {result.overdueFollowUps.length}
+          </p>
+          <p className="mt-1 text-xs font-medium text-slate-300">
+            {result.overdueFollowUps.length === 1
+              ? "1 relance en retard"
+              : `${result.overdueFollowUps.length} relances en retard`}
+          </p>
+          <div className="mt-3 grid gap-2">
+            {overdueFollowUpsPreview.map((prospect) => {
+              const overdueDays = getDaysBeforeToday(prospect.nextActionDate);
+
+              return (
+                <TodayOverviewProspectLine
+                  details={[
+                    `Pr\u00e9vue ${formatDisplayDate(prospect.nextActionDate)}`,
+                    overdueDays ? formatOverdueDays(overdueDays) : "",
+                  ]}
+                  prospect={prospect}
+                  key={prospect.id}
+                />
+              );
+            })}
+          </div>
+          {result.overdueFollowUps.length > TODAY_OVERVIEW_PREVIEW_LIMIT ? (
+            <p className="mt-3 text-xs font-semibold text-cyan-100">
+              + {result.overdueFollowUps.length - TODAY_OVERVIEW_PREVIEW_LIMIT} autres
+            </p>
+          ) : null}
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+            Sans contact depuis {TODAY_OVERVIEW_CONTACT_DAYS} jours
+          </p>
+          <p className="mt-2 text-3xl font-bold text-white">
+            {result.prospectsNotContacted.length}
+          </p>
+          <p className="mt-1 text-xs font-medium text-slate-300">
+            {result.prospectsNotContacted.length === 1
+              ? "1 prospect concern\u00e9"
+              : `${result.prospectsNotContacted.length} prospects concern\u00e9s`}
+          </p>
+          <div className="mt-3 grid gap-2">
+            {prospectsNotContactedPreview.map(
+              ({ prospect, daysSinceReference, usedCreatedAt }) => (
+                <TodayOverviewProspectLine
+                  details={[
+                    usedCreatedAt ? "Jamais contact\u00e9" : "Dernier contact",
+                    formatDaysAgo(daysSinceReference),
+                  ]}
+                  prospect={prospect}
+                  key={prospect.id}
+                />
+              ),
+            )}
+          </div>
+          {result.prospectsNotContacted.length > TODAY_OVERVIEW_PREVIEW_LIMIT ? (
+            <p className="mt-3 text-xs font-semibold text-cyan-100">
+              +{" "}
+              {result.prospectsNotContacted.length -
+                TODAY_OVERVIEW_PREVIEW_LIMIT}{" "}
+              autres
+            </p>
+          ) : null}
+        </div>
       </div>
     </section>
   );
@@ -1386,6 +1587,8 @@ export default function AssistantPage() {
     useState<AssistantTodayFollowUpsResult | null>(null);
   const [overdueFollowUpsResult, setOverdueFollowUpsResult] =
     useState<AssistantOverdueFollowUpsResult | null>(null);
+  const [todayOverviewResult, setTodayOverviewResult] =
+    useState<AssistantTodayOverviewResult | null>(null);
   const [
     countNewProspectsThisWeekResult,
     setCountNewProspectsThisWeekResult,
@@ -1437,6 +1640,7 @@ export default function AssistantPage() {
     setSearchResult(null);
     setTodayFollowUpsResult(null);
     setOverdueFollowUpsResult(null);
+    setTodayOverviewResult(null);
     setCountNewProspectsThisWeekResult(null);
     setProspectsNotContactedSinceDaysResult(null);
     setCreateProspectResult(null);
@@ -1488,6 +1692,27 @@ export default function AssistantPage() {
       setOverdueFollowUpsResult({
         status: "success",
         matches: getOverdueFollowUpProspects(prospects),
+      });
+      return;
+    }
+
+    if (
+      nextParseResult.success &&
+      nextParseResult.command.action === "getTodayOverview"
+    ) {
+      if (!hasLoadedProspects) {
+        setTodayOverviewResult({ status: "notReady" });
+        return;
+      }
+
+      setTodayOverviewResult({
+        status: "success",
+        todayFollowUps: getTodayFollowUpProspects(prospects),
+        overdueFollowUps: getOverdueFollowUpProspects(prospects),
+        prospectsNotContacted: getProspectsNotContactedSinceDays(
+          prospects,
+          TODAY_OVERVIEW_CONTACT_DAYS,
+        ),
       });
       return;
     }
@@ -1808,6 +2033,7 @@ export default function AssistantPage() {
     setSearchResult(null);
     setTodayFollowUpsResult(null);
     setOverdueFollowUpsResult(null);
+    setTodayOverviewResult(null);
     setCountNewProspectsThisWeekResult(null);
     setProspectsNotContactedSinceDaysResult(null);
     setCreateProspectResult(null);
@@ -1944,6 +2170,7 @@ export default function AssistantPage() {
           hasLoadedProspects={hasLoadedProspects}
         />
         <OverdueFollowUpsResultPanel result={overdueFollowUpsResult} />
+        <TodayOverviewResultPanel result={todayOverviewResult} />
         <CountNewProspectsThisWeekResultPanel
           result={countNewProspectsThisWeekResult}
         />
