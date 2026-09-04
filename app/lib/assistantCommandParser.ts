@@ -230,6 +230,33 @@ function parseCountNewProspectsThisWeekCommand(normalizedText: string) {
   });
 }
 
+function parseGetProspectsNotContactedSinceDaysCommand(normalizedText: string) {
+  const commandText = normalizeSpaces(
+    normalizedText.replace(/-/g, " ").replace(/[?!.]+$/g, ""),
+  );
+  const match = [
+    /^quels prospects je n['\u2018\u2019]ai pas contactes depuis ([0-9]+) jours?$/,
+    /^qui n['\u2018\u2019]ai je pas contacte depuis ([0-9]+) jours?$/,
+    /^montre moi les prospects sans contact depuis ([0-9]+) jours?$/,
+    /^affiche les prospects sans contact depuis ([0-9]+) jours?$/,
+    /^quels prospects sont sans contact depuis ([0-9]+) jours?$/,
+    /^qui dois je contacter apres ([0-9]+) jours? sans echange$/,
+  ]
+    .map((pattern) => commandText.match(pattern))
+    .find(Boolean);
+
+  if (!match) {
+    return null;
+  }
+
+  return successIfValid({
+    action: "getProspectsNotContactedSinceDays",
+    payload: {
+      days: Number(match[1]),
+    },
+  });
+}
+
 function parseSearchCommand(originalText: string, normalizedText: string) {
   const searchPrefixes = [
     "recherche le prospect ",
@@ -485,6 +512,7 @@ export function parseAssistantCommand(
     parseAddNoteCommand(originalText) ??
     parseGetTodayFollowUpsCommand(normalizedText) ??
     parseCountNewProspectsThisWeekCommand(normalizedText) ??
+    parseGetProspectsNotContactedSinceDaysCommand(normalizedText) ??
     parseSearchCommand(originalText, normalizedText) ??
     parseColorUpdateCommand(originalText, normalizedText) ??
     parseTemperatureUpdateCommand(originalText, normalizedText) ??
