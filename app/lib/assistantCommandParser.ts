@@ -232,6 +232,33 @@ function parseGetOverdueFollowUpsCommand(normalizedText: string) {
   });
 }
 
+function parseGetTodayOverviewCommand(normalizedText: string) {
+  const todayOverviewCommands = [
+    "qu'est ce que je dois faire aujourd'hui",
+    "qu'est ce que j'ai a faire aujourd'hui",
+    "que dois je faire aujourd'hui",
+    "qu'ai je a faire aujourd'hui",
+    "fais moi le point pour aujourd'hui",
+    "fais moi le point aujourd'hui",
+    "donne moi mes priorites du jour",
+    "quelles sont mes priorites aujourd'hui",
+    "mon programme du jour",
+    "resume de ma journee",
+  ];
+  const commandText = normalizeSpaces(
+    normalizedText.replace(/-/g, " ").replace(/[?!.]+$/g, ""),
+  );
+
+  if (!todayOverviewCommands.includes(commandText)) {
+    return null;
+  }
+
+  return successIfValid({
+    action: "getTodayOverview",
+    payload: {},
+  });
+}
+
 function parseCountNewProspectsThisWeekCommand(normalizedText: string) {
   const countNewProspectsThisWeekCommands = [
     "combien de nouveaux prospects ai je ajoutes cette semaine",
@@ -539,6 +566,7 @@ export function parseAssistantCommand(
     parseAddNoteCommand(originalText) ??
     parseGetTodayFollowUpsCommand(normalizedText) ??
     parseGetOverdueFollowUpsCommand(normalizedText) ??
+    parseGetTodayOverviewCommand(normalizedText) ??
     parseCountNewProspectsThisWeekCommand(normalizedText) ??
     parseGetProspectsNotContactedSinceDaysCommand(normalizedText) ??
     parseSearchCommand(originalText, normalizedText) ??
