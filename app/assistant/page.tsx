@@ -15,7 +15,11 @@ import {
   type UpdateProspectColorAndTemperatureChanges,
 } from "../lib/prospectActions";
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
-import { getProspectDisplayName, isDateToday } from "../lib/prospectUtils";
+import {
+  getProspectDisplayName,
+  isDateBeforeToday,
+  isDateToday,
+} from "../lib/prospectUtils";
 import { DEFAULT_APP_SETTINGS, loadSettings } from "../lib/settingsStorage";
 import {
   PROSPECT_CATEGORIES,
@@ -130,6 +134,18 @@ function getTodayFollowUpProspects(prospects: Prospect[]) {
   );
 }
 
+function getOverdueFollowUpProspects(prospects: Prospect[]) {
+  return prospects
+    .filter(
+      (prospect) =>
+        prospect.nextActionDate.trim() &&
+        isDateBeforeToday(prospect.nextActionDate),
+    )
+    .sort((firstProspect, secondProspect) =>
+      firstProspect.nextActionDate.localeCompare(secondProspect.nextActionDate),
+    );
+}
+
 function getLocalWeekBounds(referenceDate = new Date()) {
   const startOfWeek = new Date(referenceDate);
   const day = startOfWeek.getDay();
@@ -215,6 +231,22 @@ function getLocalTodayStart(referenceDate = new Date()) {
     0,
     0,
   );
+}
+
+function getDaysBeforeToday(date: string, referenceDate = new Date()) {
+  const plannedDate = parseLocalDayStart(date);
+
+  if (!plannedDate) {
+    return null;
+  }
+
+  const todayStart = getLocalTodayStart(referenceDate);
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const days = Math.round(
+    (todayStart.getTime() - plannedDate.getTime()) / oneDayMs,
+  );
+
+  return days > 0 ? days : null;
 }
 
 function getProspectsNotContactedSinceDays(
@@ -427,6 +459,14 @@ function renderCommandSummary(command: AiCommand) {
     );
   }
 
+  if (command.action === "getOverdueFollowUps") {
+    return (
+      <>
+        <ResultLine label="Action" value="Afficher les relances en retard" />
+      </>
+    );
+  }
+
   if (command.action === "countNewProspectsThisWeek") {
     return (
       <>
@@ -541,6 +581,15 @@ type AssistantSearchResult = {
 type AssistantTodayFollowUpsResult = {
   matches: Prospect[];
 };
+
+type AssistantOverdueFollowUpsResult =
+  | {
+      status: "success";
+      matches: Prospect[];
+    }
+  | {
+      status: "notReady";
+    };
 
 type AssistantCountNewProspectsThisWeekResult =
   | {
@@ -1050,6 +1099,84 @@ function TodayFollowUpsResultPanel({
   );
 }
 
+function OverdueFollowUpProspectSummary({ prospect }: { prospect: Prospect }) {
+  const overdueDays = getDaysBeforeToday(prospect.nextActionDate);
+
+  return (
+    <article className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+      <h3 className="text-base font-bold text-white">
+        {getProspectDisplayName(prospect)}
+      </h3>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <ResultLine label={"Pr\u00e9nom"} value={prospect.firstName} />
+        <ResultLine label="Nom" value={prospect.lastName} />
+        <ResultLine label="Couleur" value={prospect.colorType} />
+        <ResultLine label={"March\u00e9"} value={prospect.temperature} />
+        <ResultLine label="Statut" value={prospect.status} />
+        <ResultLine
+          label="Relance pr\u00e9vue"
+          value={formatDisplayDate(prospect.nextActionDate)}
+        />
+        <ResultLine
+          label="Retard"
+          value={overdueDays ? `En retard de ${overdueDays} jour${overdueDays > 1 ? "s" : ""}` : undefined}
+        />
+      </div>
+    </article>
+  );
+}
+
+function OverdueFollowUpsResultPanel({
+  result,
+}: {
+  result: AssistantOverdueFollowUpsResult | null;
+}) {
+  if (!result) {
+    return null;
+  }
+
+  if (result.status === "notReady") {
+    return (
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-slate-300">
+          Chargement des prospects...
+        </p>
+      </section>
+    );
+  }
+
+  if (result.matches.length === 0) {
+    return (
+      <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-amber-100">
+          Aucune relance en retard.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-3xl border border-cyan-300/30 bg-cyan-300/10 p-4 shadow-xl sm:p-5">
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
+        R{"\u00e9"}sultat
+      </p>
+      <p className="mt-3 text-sm font-semibold text-cyan-50">
+        {result.matches.length === 1
+          ? "1 relance en retard."
+          : `${result.matches.length} relances en retard.`}
+      </p>
+      <div className="mt-4 grid gap-3">
+        {result.matches.map((prospect) => (
+          <OverdueFollowUpProspectSummary
+            prospect={prospect}
+            key={prospect.id}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function CountNewProspectsThisWeekResultPanel({
   result,
 }: {
@@ -1257,6 +1384,8 @@ export default function AssistantPage() {
   );
   const [todayFollowUpsResult, setTodayFollowUpsResult] =
     useState<AssistantTodayFollowUpsResult | null>(null);
+  const [overdueFollowUpsResult, setOverdueFollowUpsResult] =
+    useState<AssistantOverdueFollowUpsResult | null>(null);
   const [
     countNewProspectsThisWeekResult,
     setCountNewProspectsThisWeekResult,
@@ -1307,6 +1436,7 @@ export default function AssistantPage() {
     setParseResult(nextParseResult);
     setSearchResult(null);
     setTodayFollowUpsResult(null);
+    setOverdueFollowUpsResult(null);
     setCountNewProspectsThisWeekResult(null);
     setProspectsNotContactedSinceDaysResult(null);
     setCreateProspectResult(null);
@@ -1343,6 +1473,22 @@ export default function AssistantPage() {
       setCreateProspectResult(null);
       setAddNoteResult(null);
       setUpdateProspectResult(null);
+      return;
+    }
+
+    if (
+      nextParseResult.success &&
+      nextParseResult.command.action === "getOverdueFollowUps"
+    ) {
+      if (!hasLoadedProspects) {
+        setOverdueFollowUpsResult({ status: "notReady" });
+        return;
+      }
+
+      setOverdueFollowUpsResult({
+        status: "success",
+        matches: getOverdueFollowUpProspects(prospects),
+      });
       return;
     }
 
@@ -1661,6 +1807,7 @@ export default function AssistantPage() {
 
     setSearchResult(null);
     setTodayFollowUpsResult(null);
+    setOverdueFollowUpsResult(null);
     setCountNewProspectsThisWeekResult(null);
     setProspectsNotContactedSinceDaysResult(null);
     setCreateProspectResult(null);
@@ -1796,6 +1943,7 @@ export default function AssistantPage() {
           result={todayFollowUpsResult}
           hasLoadedProspects={hasLoadedProspects}
         />
+        <OverdueFollowUpsResultPanel result={overdueFollowUpsResult} />
         <CountNewProspectsThisWeekResultPanel
           result={countNewProspectsThisWeekResult}
         />
