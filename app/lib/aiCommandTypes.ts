@@ -42,6 +42,11 @@ export type GetProspectsNotContactedSinceDaysCommand = {
   };
 };
 
+export type GetOverdueFollowUpsCommand = {
+  action: "getOverdueFollowUps";
+  payload: Record<string, never>;
+};
+
 // CRM-controlled fields such as id, score, dates and history are intentionally excluded.
 export type CreateProspectPayload = Pick<Prospect, "firstName"> &
   Partial<
@@ -109,6 +114,7 @@ export type AiCommand =
   | GetTodayFollowUpsCommand
   | CountNewProspectsThisWeekCommand
   | GetProspectsNotContactedSinceDaysCommand
+  | GetOverdueFollowUpsCommand
   | CreateProspectCommand
   | AddNoteCommand
   | CreateFollowUpCommand

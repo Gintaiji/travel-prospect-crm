@@ -12,6 +12,7 @@ const searchProspectPayloadKeys = ["query"] as const;
 const getTodayFollowUpsPayloadKeys = [] as const;
 const countNewProspectsThisWeekPayloadKeys = [] as const;
 const getProspectsNotContactedSinceDaysPayloadKeys = ["days"] as const;
+const getOverdueFollowUpsPayloadKeys = [] as const;
 const prospectTargetKeys = ["prospectId", "query"] as const;
 const createProspectPayloadKeys = [
   "firstName",
@@ -153,6 +154,14 @@ function isGetProspectsNotContactedSinceDaysPayload(value: unknown) {
   );
 }
 
+function isGetOverdueFollowUpsPayload(value: unknown) {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, getOverdueFollowUpsPayloadKeys) &&
+    Object.keys(value).length === 0
+  );
+}
+
 function isCreateProspectPayload(value: unknown) {
   if (!isRecord(value) || !hasOnlyKeys(value, createProspectPayloadKeys)) {
     return false;
@@ -286,6 +295,10 @@ export function isAiCommand(value: unknown): value is AiCommand {
 
   if (value.action === "getProspectsNotContactedSinceDays") {
     return isGetProspectsNotContactedSinceDaysPayload(value.payload);
+  }
+
+  if (value.action === "getOverdueFollowUps") {
+    return isGetOverdueFollowUpsPayload(value.payload);
   }
 
   if (value.action === "createProspect") {
