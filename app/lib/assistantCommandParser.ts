@@ -205,6 +205,31 @@ function parseGetTodayFollowUpsCommand(normalizedText: string) {
   });
 }
 
+function parseCountNewProspectsThisWeekCommand(normalizedText: string) {
+  const countNewProspectsThisWeekCommands = [
+    "combien de nouveaux prospects ai je ajoutes cette semaine",
+    "combien de prospects ai je ajoutes cette semaine",
+    "combien de nouveaux prospects cette semaine",
+    "combien de prospects cette semaine",
+    "combien de nouveaux contacts ai je ajoutes cette semaine",
+    "combien de contacts ai je ajoutes cette semaine",
+    "combien de nouveaux contacts cette semaine",
+    "quel est mon nombre de nouveaux prospects cette semaine",
+  ];
+  const commandText = normalizeSpaces(
+    normalizedText.replace(/-/g, " ").replace(/[?!.]+$/g, ""),
+  );
+
+  if (!countNewProspectsThisWeekCommands.includes(commandText)) {
+    return null;
+  }
+
+  return successIfValid({
+    action: "countNewProspectsThisWeek",
+    payload: {},
+  });
+}
+
 function parseSearchCommand(originalText: string, normalizedText: string) {
   const searchPrefixes = [
     "recherche le prospect ",
@@ -459,6 +484,7 @@ export function parseAssistantCommand(
   return (
     parseAddNoteCommand(originalText) ??
     parseGetTodayFollowUpsCommand(normalizedText) ??
+    parseCountNewProspectsThisWeekCommand(normalizedText) ??
     parseSearchCommand(originalText, normalizedText) ??
     parseColorUpdateCommand(originalText, normalizedText) ??
     parseTemperatureUpdateCommand(originalText, normalizedText) ??
