@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import {
   parseAssistantCommand,
   type AssistantCommandParseResult,
@@ -970,6 +971,15 @@ export default function AssistantPage() {
   const [updateProspectResult, setUpdateProspectResult] =
     useState<AssistantUpdateProspectResult | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const {
+    isSupported: isSpeechRecognitionSupported,
+    isListening,
+    transcript,
+    error: speechRecognitionError,
+    startListening,
+    stopListening,
+    resetError: resetSpeechRecognitionError,
+  } = useSpeechRecognition();
 
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
@@ -980,6 +990,12 @@ export default function AssistantPage() {
 
     return () => window.clearTimeout(loadStoredProspects);
   }, []);
+
+  useEffect(() => {
+    if (transcript) {
+      setCommandText(transcript);
+    }
+  }, [transcript]);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1339,10 +1355,73 @@ export default function AssistantPage() {
             <textarea
               className="min-h-32 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-base leading-7 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
               value={commandText}
-              onChange={(event) => setCommandText(event.target.value)}
+              onChange={(event) => {
+                resetSpeechRecognitionError();
+                setCommandText(event.target.value);
+              }}
               placeholder="Ajoute Paul comme prospect jaune"
             />
           </label>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <button
+              aria-label={
+                isListening
+                  ? "Arr\u00eater la dict\u00e9e vocale"
+                  : "Dicter une commande"
+              }
+              className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                isListening
+                  ? "border-cyan-300 bg-cyan-300/20 text-cyan-50 shadow-lg shadow-cyan-950/30"
+                  : "border-emerald-400/30 bg-emerald-400/10 text-emerald-100 hover:border-emerald-300 hover:bg-emerald-400/20"
+              } disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-slate-500`}
+              disabled={!isSpeechRecognitionSupported}
+              onClick={() => {
+                if (isListening) {
+                  stopListening();
+                  return;
+                }
+
+                startListening();
+              }}
+              title={
+                isSpeechRecognitionSupported
+                  ? "Dicter une commande"
+                  : "Reconnaissance vocale non disponible sur ce navigateur."
+              }
+              type="button"
+            >
+              <svg
+                aria-hidden="true"
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                />
+                <path
+                  d="M19 11a7 7 0 0 1-14 0M12 18v3M8 21h8"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                />
+              </svg>
+              <span>{isListening ? "\u00c9coute..." : "Micro"}</span>
+            </button>
+
+            {speechRecognitionError ? (
+              <p className="text-sm font-medium text-amber-100">
+                {speechRecognitionError}
+              </p>
+            ) : null}
+          </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-2">
