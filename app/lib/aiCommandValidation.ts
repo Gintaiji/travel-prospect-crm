@@ -27,6 +27,7 @@ const createProspectPayloadKeys = [
   "nextActionDate",
 ] as const;
 const addNotePayloadKeys = ["target", "note"] as const;
+const createFollowUpPayloadKeys = ["target", "date"] as const;
 const updateProspectPayloadKeys = ["target", "changes"] as const;
 const updateProspectChangeKeys = [
   "colorType",
@@ -65,6 +66,29 @@ function isProspectTags(value: unknown) {
 
 function isOptionalString(value: unknown) {
   return typeof value === "string";
+}
+
+function isValidDateString(value: unknown) {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const dateMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!dateMatch) {
+    return false;
+  }
+
+  const year = Number(dateMatch[1]);
+  const month = Number(dateMatch[2]);
+  const day = Number(dateMatch[3]);
+  const parsedDate = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    parsedDate.getUTCFullYear() === year &&
+    parsedDate.getUTCMonth() === month - 1 &&
+    parsedDate.getUTCDate() === day
+  );
 }
 
 function isProspectCommandTarget(value: unknown) {
@@ -157,6 +181,15 @@ function isAddNotePayload(value: unknown) {
   );
 }
 
+function isCreateFollowUpPayload(value: unknown) {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, createFollowUpPayloadKeys) &&
+    isProspectCommandTarget(value.target) &&
+    isValidDateString(value.date)
+  );
+}
+
 function isUpdateProspectChanges(value: unknown) {
   if (!isRecord(value) || !hasOnlyKeys(value, updateProspectChangeKeys)) {
     return false;
@@ -225,6 +258,10 @@ export function isAiCommand(value: unknown): value is AiCommand {
 
   if (value.action === "addNote") {
     return isAddNotePayload(value.payload);
+  }
+
+  if (value.action === "createFollowUp") {
+    return isCreateFollowUpPayload(value.payload);
   }
 
   if (value.action === "updateProspect") {

@@ -63,6 +63,14 @@ export type AddNoteCommand = {
   };
 };
 
+export type CreateFollowUpCommand = {
+  action: "createFollowUp";
+  payload: {
+    target: ProspectCommandTarget;
+    date: string;
+  };
+};
+
 // Explicit allowlist of fields the AI can request to update.
 export type UpdateProspectChanges = AtLeastOne<
   Pick<
@@ -89,4 +97,5 @@ export type AiCommand =
   | GetTodayFollowUpsCommand
   | CreateProspectCommand
   | AddNoteCommand
+  | CreateFollowUpCommand
   | UpdateProspectCommand;
