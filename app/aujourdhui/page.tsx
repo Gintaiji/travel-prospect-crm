@@ -368,14 +368,14 @@ export default function TodayPage() {
           conversationEntry,
         ],
         lastInteractionDate: today,
-        nextActionDate,
         updatedAt: now,
       };
 
-      return {
-        ...updatedProspect,
-        score: calculateProspectScore(updatedProspect),
-      };
+      return updateProspectNextActionDateFromAction(
+        updatedProspect,
+        nextActionDate,
+        now,
+      );
     });
 
     saveProspects(updatedProspects);

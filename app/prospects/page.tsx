@@ -1807,7 +1807,6 @@ export default function ProspectsPage () {
         category: qualificationFormState.category,
         temperature: qualificationFormState.temperature,
         colorType: qualificationFormState.colorType,
-        nextActionDate: qualificationFormState.nextActionDate,
         notes: qualificationFormState.notes.trim(),
         isFollower: qualificationFormState.isFollower,
         hasSentMessage: qualificationFormState.hasSentMessage,
@@ -1822,10 +1821,11 @@ export default function ProspectsPage () {
         updatedAt: new Date().toISOString(),
       };
 
-      return {
-        ...updatedProspect,
-        score: calculateProspectScore(updatedProspect),
-      };
+      return updateProspectNextActionDateFromAction(
+        updatedProspect,
+        qualificationFormState.nextActionDate,
+        updatedProspect.updatedAt,
+      );
     });
 
     saveProspects(updatedProspects);
@@ -1886,16 +1886,16 @@ export default function ProspectsPage () {
           likesCount: Number.isNaN(likesCount) ? 0 : likesCount,
           messagesCount: Number.isNaN(messagesCount) ? 0 : messagesCount,
         },
-        nextActionDate: fullProspectFormState.nextActionDate,
         tags: fullProspectFormState.tags,
         notes: fullProspectFormState.notes.trim(),
         updatedAt: new Date().toISOString(),
       };
 
-      return {
-        ...updatedProspect,
-        score: calculateProspectScore(updatedProspect),
-      };
+      return updateProspectNextActionDateFromAction(
+        updatedProspect,
+        fullProspectFormState.nextActionDate,
+        updatedProspect.updatedAt,
+      );
     });
 
     saveProspects(updatedProspects);
@@ -2143,15 +2143,27 @@ export default function ProspectsPage () {
       }
 
       if (action === "follow-up-tomorrow") {
-        nextProspect.nextActionDate = getFutureDateString(2);
+        return updateProspectNextActionDateFromAction(
+          nextProspect,
+          getFutureDateString(2),
+          nextProspect.updatedAt,
+        );
       }
 
       if (action === "follow-up-plus-three") {
-        nextProspect.nextActionDate = getFutureDateString(4);
+        return updateProspectNextActionDateFromAction(
+          nextProspect,
+          getFutureDateString(4),
+          nextProspect.updatedAt,
+        );
       }
 
       if (action === "follow-up-plus-six-months") {
-        nextProspect.nextActionDate = getFutureMonthDateString(6);
+        return updateProspectNextActionDateFromAction(
+          nextProspect,
+          getFutureMonthDateString(6),
+          nextProspect.updatedAt,
+        );
       }
 
       if (action === "avoid") {
@@ -2271,11 +2283,7 @@ export default function ProspectsPage () {
         return currentProspect;
       }
 
-      return {
-        ...currentProspect,
-        nextActionDate,
-        updatedAt: new Date().toISOString(),
-      };
+      return updateProspectNextActionDateFromAction(currentProspect, nextActionDate);
     });
 
     saveProspects(updatedProspects);
