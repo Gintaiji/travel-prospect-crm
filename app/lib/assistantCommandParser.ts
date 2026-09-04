@@ -293,7 +293,7 @@ function parseColorUpdateCommand(originalText: string, normalizedText: string) {
     return null;
   }
 
-  const normalizedTarget = directMatch?.[2] ?? colorChangeMatch?.[1] ?? "";
+  const normalizedTarget = colorChangeMatch?.[1] ?? directMatch?.[2] ?? "";
   const targetStart = normalizedText.indexOf(normalizedTarget);
   const target = cleanPersonName(originalText.slice(targetStart, targetStart + normalizedTarget.length));
 
@@ -326,15 +326,16 @@ function parseTemperatureUpdateCommand(
     return null;
   }
 
-  const match =
-    normalizedText.match(/^(mets|passe) (.+) en (marche )?(froid|tiede|chaud)$/) ??
-    normalizedText.match(/^(.+) marche (froid|tiede|chaud)$/);
+  const directMatch = normalizedText.match(
+    /^(mets|passe) (.+) en (marche )?(froid|tiede|chaud)$/,
+  );
+  const marketMatch = normalizedText.match(/^(.+) marche (froid|tiede|chaud)$/);
 
-  if (!match) {
+  if (!directMatch && !marketMatch) {
     return null;
   }
 
-  const normalizedTarget = match[2] ?? match[1] ?? "";
+  const normalizedTarget = directMatch?.[2] ?? marketMatch?.[1] ?? "";
   const targetStart = normalizedText.indexOf(normalizedTarget);
   const target = cleanPersonName(originalText.slice(targetStart, targetStart + normalizedTarget.length));
 
