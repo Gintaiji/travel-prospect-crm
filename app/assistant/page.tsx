@@ -126,6 +126,38 @@ function getTodayFollowUpProspects(prospects: Prospect[]) {
   );
 }
 
+function getLocalWeekBounds(referenceDate = new Date()) {
+  const startOfWeek = new Date(referenceDate);
+  const day = startOfWeek.getDay();
+  const daysSinceMonday = (day + 6) % 7;
+
+  startOfWeek.setHours(0, 0, 0, 0);
+  startOfWeek.setDate(startOfWeek.getDate() - daysSinceMonday);
+
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 6);
+  endOfWeek.setHours(23, 59, 59, 999);
+
+  return { startOfWeek, endOfWeek };
+}
+
+function countNewProspectsThisWeek(
+  prospects: Prospect[],
+  referenceDate = new Date(),
+) {
+  const { startOfWeek, endOfWeek } = getLocalWeekBounds(referenceDate);
+
+  return prospects.filter((prospect) => {
+    const createdAt = new Date(prospect.createdAt);
+
+    return (
+      !Number.isNaN(createdAt.getTime()) &&
+      createdAt >= startOfWeek &&
+      createdAt <= endOfWeek
+    );
+  }).length;
+}
+
 function resolveProspectTarget(
   prospects: Prospect[],
   target: { prospectId?: string; query?: string },
@@ -295,6 +327,17 @@ function renderCommandSummary(command: AiCommand) {
     );
   }
 
+  if (command.action === "countNewProspectsThisWeek") {
+    return (
+      <>
+        <ResultLine
+          label="Action"
+          value="Compter les nouveaux prospects cette semaine"
+        />
+      </>
+    );
+  }
+
   if (command.action === "createProspect") {
     return (
       <>
@@ -389,6 +432,15 @@ type AssistantSearchResult = {
 type AssistantTodayFollowUpsResult = {
   matches: Prospect[];
 };
+
+type AssistantCountNewProspectsThisWeekResult =
+  | {
+      status: "success";
+      count: number;
+    }
+  | {
+      status: "notReady";
+    };
 
 type AssistantCreateProspectResult =
   | {
@@ -872,6 +924,42 @@ function TodayFollowUpsResultPanel({
   );
 }
 
+function CountNewProspectsThisWeekResultPanel({
+  result,
+}: {
+  result: AssistantCountNewProspectsThisWeekResult | null;
+}) {
+  if (!result) {
+    return null;
+  }
+
+  if (result.status === "notReady") {
+    return (
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-slate-300">
+          Chargement des prospects...
+        </p>
+      </section>
+    );
+  }
+
+  const message =
+    result.count === 0
+      ? "Aucun nouveau prospect ajout\u00e9 cette semaine."
+      : result.count === 1
+        ? "Tu as ajout\u00e9 1 nouveau prospect cette semaine."
+        : `Tu as ajout\u00e9 ${result.count} nouveaux prospects cette semaine.`;
+
+  return (
+    <section className="rounded-3xl border border-cyan-300/30 bg-cyan-300/10 p-4 shadow-xl sm:p-5">
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
+        R{"\u00e9"}sultat
+      </p>
+      <h2 className="mt-3 text-xl font-bold text-white">{message}</h2>
+    </section>
+  );
+}
+
 function SearchResultPanel({
   result,
   hasLoadedProspects,
@@ -962,6 +1050,10 @@ export default function AssistantPage() {
   );
   const [todayFollowUpsResult, setTodayFollowUpsResult] =
     useState<AssistantTodayFollowUpsResult | null>(null);
+  const [
+    countNewProspectsThisWeekResult,
+    setCountNewProspectsThisWeekResult,
+  ] = useState<AssistantCountNewProspectsThisWeekResult | null>(null);
   const [createProspectResult, setCreateProspectResult] =
     useState<AssistantCreateProspectResult | null>(null);
   const [addNoteResult, setAddNoteResult] =
@@ -1004,6 +1096,7 @@ export default function AssistantPage() {
     setParseResult(nextParseResult);
     setSearchResult(null);
     setTodayFollowUpsResult(null);
+    setCountNewProspectsThisWeekResult(null);
     setCreateProspectResult(null);
     setAddNoteResult(null);
     setCreateFollowUpResult(null);
@@ -1038,6 +1131,22 @@ export default function AssistantPage() {
       setCreateProspectResult(null);
       setAddNoteResult(null);
       setUpdateProspectResult(null);
+      return;
+    }
+
+    if (
+      nextParseResult.success &&
+      nextParseResult.command.action === "countNewProspectsThisWeek"
+    ) {
+      if (!hasLoadedProspects) {
+        setCountNewProspectsThisWeekResult({ status: "notReady" });
+        return;
+      }
+
+      setCountNewProspectsThisWeekResult({
+        status: "success",
+        count: countNewProspectsThisWeek(prospects),
+      });
       return;
     }
 
@@ -1320,6 +1429,7 @@ export default function AssistantPage() {
 
     setSearchResult(null);
     setTodayFollowUpsResult(null);
+    setCountNewProspectsThisWeekResult(null);
     setCreateProspectResult(null);
     setAddNoteResult(null);
     setUpdateProspectResult(null);
@@ -1452,6 +1562,9 @@ export default function AssistantPage() {
         <TodayFollowUpsResultPanel
           result={todayFollowUpsResult}
           hasLoadedProspects={hasLoadedProspects}
+        />
+        <CountNewProspectsThisWeekResultPanel
+          result={countNewProspectsThisWeekResult}
         />
         <CreateProspectResultPanel result={createProspectResult} />
         <CreateFollowUpResultPanel result={createFollowUpResult} />
