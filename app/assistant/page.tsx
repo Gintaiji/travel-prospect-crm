@@ -47,6 +47,10 @@ function formatDisplayDate(date: string) {
   return `${day}/${month}/${year}`;
 }
 
+function formatDaysAgo(days: number) {
+  return `Il y a ${days} jour${days > 1 ? "s" : ""}`;
+}
+
 function normalizeSearchText(value: string) {
   return value
     .trim()
@@ -156,6 +160,102 @@ function countNewProspectsThisWeek(
       createdAt <= endOfWeek
     );
   }).length;
+}
+
+function parseLocalDayStart(value: string) {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return null;
+  }
+
+  const dateOnlyMatch = trimmedValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (dateOnlyMatch) {
+    const year = Number(dateOnlyMatch[1]);
+    const month = Number(dateOnlyMatch[2]);
+    const day = Number(dateOnlyMatch[3]);
+    const localDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+    if (
+      localDate.getFullYear() !== year ||
+      localDate.getMonth() !== month - 1 ||
+      localDate.getDate() !== day
+    ) {
+      return null;
+    }
+
+    return localDate;
+  }
+
+  const parsedDate = new Date(trimmedValue);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  return new Date(
+    parsedDate.getFullYear(),
+    parsedDate.getMonth(),
+    parsedDate.getDate(),
+    0,
+    0,
+    0,
+    0,
+  );
+}
+
+function getLocalTodayStart(referenceDate = new Date()) {
+  return new Date(
+    referenceDate.getFullYear(),
+    referenceDate.getMonth(),
+    referenceDate.getDate(),
+    0,
+    0,
+    0,
+    0,
+  );
+}
+
+function getProspectsNotContactedSinceDays(
+  prospects: Prospect[],
+  days: number,
+  referenceDate = new Date(),
+) {
+  const todayStart = getLocalTodayStart(referenceDate);
+  const thresholdDate = new Date(todayStart);
+  const oneDayMs = 24 * 60 * 60 * 1000;
+
+  thresholdDate.setDate(todayStart.getDate() - days);
+
+  return prospects
+    .map((prospect) => {
+      const lastInteractionDate = parseLocalDayStart(prospect.lastInteractionDate);
+      const createdAt = parseLocalDayStart(prospect.createdAt);
+      const referenceContactDate = lastInteractionDate ?? createdAt;
+
+      if (!referenceContactDate) {
+        return null;
+      }
+
+      const daysSinceReference = Math.round(
+        (todayStart.getTime() - referenceContactDate.getTime()) / oneDayMs,
+      );
+
+      return {
+        prospect,
+        daysSinceReference,
+        referenceDate: referenceContactDate,
+        usedCreatedAt: !lastInteractionDate,
+      };
+    })
+    .filter((result): result is AssistantProspectsNotContactedSinceDaysMatch =>
+      Boolean(result && result.referenceDate <= thresholdDate),
+    )
+    .sort(
+      (firstResult, secondResult) =>
+        firstResult.referenceDate.getTime() - secondResult.referenceDate.getTime(),
+    );
 }
 
 function resolveProspectTarget(
@@ -451,9 +551,22 @@ type AssistantCountNewProspectsThisWeekResult =
       status: "notReady";
     };
 
-type AssistantProspectsNotContactedSinceDaysResult = {
-  days: number;
+type AssistantProspectsNotContactedSinceDaysMatch = {
+  prospect: Prospect;
+  daysSinceReference: number;
+  referenceDate: Date;
+  usedCreatedAt: boolean;
 };
+
+type AssistantProspectsNotContactedSinceDaysResult =
+  | {
+      status: "success";
+      days: number;
+      matches: AssistantProspectsNotContactedSinceDaysMatch[];
+    }
+  | {
+      status: "notReady";
+    };
 
 type AssistantCreateProspectResult =
   | {
@@ -982,14 +1095,74 @@ function ProspectsNotContactedSinceDaysResultPanel({
     return null;
   }
 
+  if (result.status === "notReady") {
+    return (
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-slate-300">
+          Chargement des prospects...
+        </p>
+      </section>
+    );
+  }
+
+  const resultCount = result.matches.length;
+
+  if (resultCount === 0) {
+    return (
+      <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-100">
+          R{"\u00e9"}sultat
+        </p>
+        <p className="mt-3 text-sm font-semibold text-amber-100">
+          Aucun prospect sans contact depuis au moins {result.days} jours.
+        </p>
+      </section>
+    );
+  }
+
   return (
-    <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
-      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-100">
+    <section className="rounded-3xl border border-cyan-300/30 bg-cyan-300/10 p-4 shadow-xl sm:p-5">
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
         R{"\u00e9"}sultat
       </p>
-      <p className="mt-3 text-sm font-semibold text-amber-100">
-        Cette action n&apos;est pas encore activ{"\u00e9"}e.
+      <p className="mt-3 text-sm font-semibold text-cyan-50">
+        {resultCount === 1 ? "1 prospect" : `${resultCount} prospects`} sans
+        contact depuis au moins {result.days} jours.
       </p>
+      <div className="mt-4 grid gap-3">
+        {result.matches.map(({ prospect, daysSinceReference, usedCreatedAt }) => (
+          <article
+            className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
+            key={prospect.id}
+          >
+            <h3 className="text-base font-bold text-white">
+              {getProspectDisplayName(prospect)}
+            </h3>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <ResultLine label={"Pr\u00e9nom"} value={prospect.firstName} />
+              <ResultLine label="Nom" value={prospect.lastName} />
+              <ResultLine label="Couleur" value={prospect.colorType} />
+              <ResultLine label={"March\u00e9"} value={prospect.temperature} />
+              <ResultLine label="Statut" value={prospect.status} />
+              {usedCreatedAt ? (
+                <>
+                  <ResultLine label="Contact" value={"Jamais contact\u00e9"} />
+                  <ResultLine
+                    label="Ajout"
+                    value={formatDaysAgo(daysSinceReference)}
+                  />
+                </>
+              ) : (
+                <ResultLine
+                  label="Dernier contact"
+                  value={formatDaysAgo(daysSinceReference)}
+                />
+              )}
+              <ResultLine label="Relance" value={prospect.nextActionDate} />
+            </div>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
@@ -1193,8 +1366,18 @@ export default function AssistantPage() {
       nextParseResult.success &&
       nextParseResult.command.action === "getProspectsNotContactedSinceDays"
     ) {
+      if (!hasLoadedProspects) {
+        setProspectsNotContactedSinceDaysResult({ status: "notReady" });
+        return;
+      }
+
       setProspectsNotContactedSinceDaysResult({
+        status: "success",
         days: nextParseResult.command.payload.days,
+        matches: getProspectsNotContactedSinceDays(
+          prospects,
+          nextParseResult.command.payload.days,
+        ),
       });
       return;
     }
