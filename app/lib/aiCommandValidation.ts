@@ -10,6 +10,7 @@ import {
 const commandKeys = ["action", "payload"] as const;
 const searchProspectPayloadKeys = ["query"] as const;
 const getTodayFollowUpsPayloadKeys = [] as const;
+const countNewProspectsThisWeekPayloadKeys = [] as const;
 const prospectTargetKeys = ["prospectId", "query"] as const;
 const createProspectPayloadKeys = [
   "firstName",
@@ -121,6 +122,14 @@ function isGetTodayFollowUpsPayload(value: unknown) {
   return (
     isRecord(value) &&
     hasOnlyKeys(value, getTodayFollowUpsPayloadKeys) &&
+    Object.keys(value).length === 0
+  );
+}
+
+function isCountNewProspectsThisWeekPayload(value: unknown) {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, countNewProspectsThisWeekPayloadKeys) &&
     Object.keys(value).length === 0
   );
 }
@@ -250,6 +259,10 @@ export function isAiCommand(value: unknown): value is AiCommand {
 
   if (value.action === "getTodayFollowUps") {
     return isGetTodayFollowUpsPayload(value.payload);
+  }
+
+  if (value.action === "countNewProspectsThisWeek") {
+    return isCountNewProspectsThisWeekPayload(value.payload);
   }
 
   if (value.action === "createProspect") {

@@ -30,6 +30,11 @@ export type GetTodayFollowUpsCommand = {
   payload: Record<string, never>;
 };
 
+export type CountNewProspectsThisWeekCommand = {
+  action: "countNewProspectsThisWeek";
+  payload: Record<string, never>;
+};
+
 // CRM-controlled fields such as id, score, dates and history are intentionally excluded.
 export type CreateProspectPayload = Pick<Prospect, "firstName"> &
   Partial<
@@ -95,6 +100,7 @@ export type UpdateProspectCommand = {
 export type AiCommand =
   | SearchProspectCommand
   | GetTodayFollowUpsCommand
+  | CountNewProspectsThisWeekCommand
   | CreateProspectCommand
   | AddNoteCommand
   | CreateFollowUpCommand
