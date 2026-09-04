@@ -11,6 +11,7 @@ const commandKeys = ["action", "payload"] as const;
 const searchProspectPayloadKeys = ["query"] as const;
 const getTodayFollowUpsPayloadKeys = [] as const;
 const countNewProspectsThisWeekPayloadKeys = [] as const;
+const getProspectsNotContactedSinceDaysPayloadKeys = ["days"] as const;
 const prospectTargetKeys = ["prospectId", "query"] as const;
 const createProspectPayloadKeys = [
   "firstName",
@@ -131,6 +132,24 @@ function isCountNewProspectsThisWeekPayload(value: unknown) {
     isRecord(value) &&
     hasOnlyKeys(value, countNewProspectsThisWeekPayloadKeys) &&
     Object.keys(value).length === 0
+  );
+}
+
+function isValidDaysCount(value: unknown) {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= 365
+  );
+}
+
+function isGetProspectsNotContactedSinceDaysPayload(value: unknown) {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, getProspectsNotContactedSinceDaysPayloadKeys) &&
+    Object.keys(value).length === 1 &&
+    isValidDaysCount(value.days)
   );
 }
 
@@ -263,6 +282,10 @@ export function isAiCommand(value: unknown): value is AiCommand {
 
   if (value.action === "countNewProspectsThisWeek") {
     return isCountNewProspectsThisWeekPayload(value.payload);
+  }
+
+  if (value.action === "getProspectsNotContactedSinceDays") {
+    return isGetProspectsNotContactedSinceDaysPayload(value.payload);
   }
 
   if (value.action === "createProspect") {

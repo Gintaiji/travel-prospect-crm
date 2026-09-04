@@ -338,6 +338,15 @@ function renderCommandSummary(command: AiCommand) {
     );
   }
 
+  if (command.action === "getProspectsNotContactedSinceDays") {
+    return (
+      <>
+        <ResultLine label="Action" value="Prospects sans contact" />
+        <ResultLine label="Période" value={`${command.payload.days} jours`} />
+      </>
+    );
+  }
+
   if (command.action === "createProspect") {
     return (
       <>
@@ -441,6 +450,10 @@ type AssistantCountNewProspectsThisWeekResult =
   | {
       status: "notReady";
     };
+
+type AssistantProspectsNotContactedSinceDaysResult = {
+  days: number;
+};
 
 type AssistantCreateProspectResult =
   | {
@@ -960,6 +973,27 @@ function CountNewProspectsThisWeekResultPanel({
   );
 }
 
+function ProspectsNotContactedSinceDaysResultPanel({
+  result,
+}: {
+  result: AssistantProspectsNotContactedSinceDaysResult | null;
+}) {
+  if (!result) {
+    return null;
+  }
+
+  return (
+    <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-100">
+        R{"\u00e9"}sultat
+      </p>
+      <p className="mt-3 text-sm font-semibold text-amber-100">
+        Cette action n&apos;est pas encore activ{"\u00e9"}e.
+      </p>
+    </section>
+  );
+}
+
 function SearchResultPanel({
   result,
   hasLoadedProspects,
@@ -1054,6 +1088,10 @@ export default function AssistantPage() {
     countNewProspectsThisWeekResult,
     setCountNewProspectsThisWeekResult,
   ] = useState<AssistantCountNewProspectsThisWeekResult | null>(null);
+  const [
+    prospectsNotContactedSinceDaysResult,
+    setProspectsNotContactedSinceDaysResult,
+  ] = useState<AssistantProspectsNotContactedSinceDaysResult | null>(null);
   const [createProspectResult, setCreateProspectResult] =
     useState<AssistantCreateProspectResult | null>(null);
   const [addNoteResult, setAddNoteResult] =
@@ -1097,6 +1135,7 @@ export default function AssistantPage() {
     setSearchResult(null);
     setTodayFollowUpsResult(null);
     setCountNewProspectsThisWeekResult(null);
+    setProspectsNotContactedSinceDaysResult(null);
     setCreateProspectResult(null);
     setAddNoteResult(null);
     setCreateFollowUpResult(null);
@@ -1146,6 +1185,16 @@ export default function AssistantPage() {
       setCountNewProspectsThisWeekResult({
         status: "success",
         count: countNewProspectsThisWeek(prospects),
+      });
+      return;
+    }
+
+    if (
+      nextParseResult.success &&
+      nextParseResult.command.action === "getProspectsNotContactedSinceDays"
+    ) {
+      setProspectsNotContactedSinceDaysResult({
+        days: nextParseResult.command.payload.days,
       });
       return;
     }
@@ -1430,6 +1479,7 @@ export default function AssistantPage() {
     setSearchResult(null);
     setTodayFollowUpsResult(null);
     setCountNewProspectsThisWeekResult(null);
+    setProspectsNotContactedSinceDaysResult(null);
     setCreateProspectResult(null);
     setAddNoteResult(null);
     setUpdateProspectResult(null);
@@ -1565,6 +1615,9 @@ export default function AssistantPage() {
         />
         <CountNewProspectsThisWeekResultPanel
           result={countNewProspectsThisWeekResult}
+        />
+        <ProspectsNotContactedSinceDaysResultPanel
+          result={prospectsNotContactedSinceDaysResult}
         />
         <CreateProspectResultPanel result={createProspectResult} />
         <CreateFollowUpResultPanel result={createFollowUpResult} />
