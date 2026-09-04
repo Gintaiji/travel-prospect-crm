@@ -30,6 +30,11 @@ export type GetTodayFollowUpsCommand = {
   payload: Record<string, never>;
 };
 
+export type GetTodayOverviewCommand = {
+  action: "getTodayOverview";
+  payload: Record<string, never>;
+};
+
 export type CountNewProspectsThisWeekCommand = {
   action: "countNewProspectsThisWeek";
   payload: Record<string, never>;
@@ -112,6 +117,7 @@ export type UpdateProspectCommand = {
 export type AiCommand =
   | SearchProspectCommand
   | GetTodayFollowUpsCommand
+  | GetTodayOverviewCommand
   | CountNewProspectsThisWeekCommand
   | GetProspectsNotContactedSinceDaysCommand
   | GetOverdueFollowUpsCommand
