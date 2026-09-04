@@ -8,12 +8,21 @@ import {
 import type { AiCommand } from "../lib/aiCommandTypes";
 import {
   appendProspectNote,
+  createProspectFromInput,
   updateProspectColorAndTemperature,
   type UpdateProspectColorAndTemperatureChanges,
 } from "../lib/prospectActions";
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
 import { getProspectDisplayName, isDateToday } from "../lib/prospectUtils";
-import type { Prospect } from "../lib/types";
+import { DEFAULT_APP_SETTINGS, loadSettings } from "../lib/settingsStorage";
+import {
+  PROSPECT_CATEGORIES,
+  PROSPECT_COLOR_TYPES,
+  PROSPECT_TEMPERATURES,
+  SOCIAL_PLATFORMS,
+  type AppSettings,
+  type Prospect,
+} from "../lib/types";
 
 const exampleCommands = [
   "Ajoute Paul comme prospect jaune",
@@ -201,6 +210,48 @@ function getUpdateUnchangedMessage(
   return `${prospectName} a d\u00e9j\u00e0 ces valeurs : ${updateText}.`;
 }
 
+function buildCreateProspectInput(
+  payload: Extract<AiCommand, { action: "createProspect" }>["payload"],
+  appSettings: AppSettings,
+) {
+  return {
+    firstName: payload.firstName,
+    lastName: payload.lastName ?? "",
+    displayName: "",
+    meetingPlace: payload.meetingPlace ?? "",
+    jobTitle: "",
+    businessArea: "",
+    city: appSettings.defaultCity,
+    region: appSettings.defaultRegion,
+    country: appSettings.defaultCountry,
+    phone: payload.phone ?? "",
+    whatsapp: payload.whatsapp ?? "",
+    email: payload.email ?? "",
+    mainPlatform: SOCIAL_PLATFORMS[0],
+    profileUrl: "",
+    socialLinks: {
+      facebook: "",
+      instagram: "",
+      linkedin: "",
+      tiktok: "",
+      youtube: "",
+      other: "",
+    },
+    category: payload.category ?? PROSPECT_CATEGORIES[0],
+    temperature: payload.temperature ?? PROSPECT_TEMPERATURES[0],
+    colorType: payload.colorType ?? PROSPECT_COLOR_TYPES[0],
+    tags: payload.tags ?? [],
+    isFollower: false,
+    hasSentMessage: false,
+    followerSinceDate: "",
+    commentsCount: 0,
+    interactionsCount: 0,
+    likesCount: 0,
+    messagesCount: 0,
+    notes: payload.notes ?? "",
+  };
+}
+
 function ResultLine({ label, value }: { label: string; value?: string }) {
   if (!value) {
     return null;
@@ -304,11 +355,6 @@ function ResultPanel({ result }: { result: AssistantCommandParseResult | null })
         Commande reconnue
       </p>
       <div className="mt-4 grid gap-3">{renderCommandSummary(result.command)}</div>
-      {result.command.action === "createProspect" ? (
-        <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/50 p-3 text-sm font-medium text-emerald-100">
-          Cette action n&apos;est pas encore activ{"\u00e9"}e.
-        </p>
-      ) : null}
     </section>
   );
 }
@@ -321,6 +367,21 @@ type AssistantSearchResult = {
 type AssistantTodayFollowUpsResult = {
   matches: Prospect[];
 };
+
+type AssistantCreateProspectResult =
+  | {
+      status: "success";
+      prospectName: string;
+    }
+  | {
+      status: "emptyFirstName";
+    }
+  | {
+      status: "notReady";
+    }
+  | {
+      status: "error";
+    };
 
 type AssistantAddNoteResult =
   | {
@@ -386,6 +447,47 @@ function ProspectSummary({ prospect }: { prospect: Prospect }) {
         <ResultLine label="Relance" value={prospect.nextActionDate} />
       </div>
     </article>
+  );
+}
+
+function CreateProspectResultPanel({
+  result,
+}: {
+  result: AssistantCreateProspectResult | null;
+}) {
+  if (!result) {
+    return null;
+  }
+
+  if (result.status === "success") {
+    return (
+      <section className="rounded-3xl border border-cyan-300/30 bg-cyan-300/10 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-100">
+          R{"\u00e9"}sultat
+        </p>
+        <h2 className="mt-3 text-xl font-bold text-white">
+          {"\u2713"} Prospect cr{"\u00e9"}{"\u00e9"} : {result.prospectName}
+        </h2>
+      </section>
+    );
+  }
+
+  if (result.status === "notReady") {
+    return (
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-5">
+        <p className="text-sm font-semibold text-slate-300">
+          Chargement des prospects...
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-3xl border border-amber-300/30 bg-amber-300/10 p-4 shadow-xl sm:p-5">
+      <p className="text-sm font-semibold text-amber-100">
+        Impossible de cr{"\u00e9"}er ce prospect. Aucune donn{"\u00e9"}e n&apos;a {"\u00e9"}t{"\u00e9"} modifi{"\u00e9"}e.
+      </p>
+    </section>
   );
 }
 
@@ -715,13 +817,17 @@ export default function AssistantPage() {
   );
   const [todayFollowUpsResult, setTodayFollowUpsResult] =
     useState<AssistantTodayFollowUpsResult | null>(null);
+  const [createProspectResult, setCreateProspectResult] =
+    useState<AssistantCreateProspectResult | null>(null);
   const [addNoteResult, setAddNoteResult] =
     useState<AssistantAddNoteResult | null>(null);
   const [updateProspectResult, setUpdateProspectResult] =
     useState<AssistantUpdateProspectResult | null>(null);
+  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
 
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
+      setAppSettings(loadSettings());
       setProspects(loadProspects());
       setHasLoadedProspects(true);
     }, 0);
@@ -747,6 +853,7 @@ export default function AssistantPage() {
         ),
       });
       setTodayFollowUpsResult(null);
+      setCreateProspectResult(null);
       setAddNoteResult(null);
       setUpdateProspectResult(null);
       return;
@@ -760,6 +867,52 @@ export default function AssistantPage() {
         matches: getTodayFollowUpProspects(prospects),
       });
       setSearchResult(null);
+      setCreateProspectResult(null);
+      setAddNoteResult(null);
+      setUpdateProspectResult(null);
+      return;
+    }
+
+    if (
+      nextParseResult.success &&
+      nextParseResult.command.action === "createProspect"
+    ) {
+      if (!hasLoadedProspects) {
+        setCreateProspectResult({ status: "notReady" });
+        setSearchResult(null);
+        setTodayFollowUpsResult(null);
+        setAddNoteResult(null);
+        setUpdateProspectResult(null);
+        return;
+      }
+
+      if (!nextParseResult.command.payload.firstName.trim()) {
+        setCreateProspectResult({ status: "emptyFirstName" });
+        setSearchResult(null);
+        setTodayFollowUpsResult(null);
+        setAddNoteResult(null);
+        setUpdateProspectResult(null);
+        return;
+      }
+
+      try {
+        const newProspect = createProspectFromInput(
+          buildCreateProspectInput(nextParseResult.command.payload, appSettings),
+        );
+        const updatedProspects = [newProspect, ...prospects];
+
+        saveProspects(updatedProspects);
+        setProspects(updatedProspects);
+        setCreateProspectResult({
+          status: "success",
+          prospectName: getProspectDisplayName(newProspect),
+        });
+      } catch {
+        setCreateProspectResult({ status: "error" });
+      }
+
+      setSearchResult(null);
+      setTodayFollowUpsResult(null);
       setAddNoteResult(null);
       setUpdateProspectResult(null);
       return;
@@ -772,6 +925,7 @@ export default function AssistantPage() {
         setAddNoteResult({ status: "notReady" });
         setSearchResult(null);
         setTodayFollowUpsResult(null);
+        setCreateProspectResult(null);
         setUpdateProspectResult(null);
         return;
       }
@@ -780,6 +934,7 @@ export default function AssistantPage() {
         setAddNoteResult({ status: "emptyNote" });
         setSearchResult(null);
         setTodayFollowUpsResult(null);
+        setCreateProspectResult(null);
         setUpdateProspectResult(null);
         return;
       }
@@ -793,6 +948,7 @@ export default function AssistantPage() {
         setAddNoteResult({ status: "notFound", targetLabel: label });
         setSearchResult(null);
         setTodayFollowUpsResult(null);
+        setCreateProspectResult(null);
         setUpdateProspectResult(null);
         return;
       }
@@ -805,6 +961,7 @@ export default function AssistantPage() {
         });
         setSearchResult(null);
         setTodayFollowUpsResult(null);
+        setCreateProspectResult(null);
         setUpdateProspectResult(null);
         return;
       }
@@ -816,6 +973,7 @@ export default function AssistantPage() {
         setAddNoteResult({ status: "emptyNote" });
         setSearchResult(null);
         setTodayFollowUpsResult(null);
+        setCreateProspectResult(null);
         setUpdateProspectResult(null);
         return;
       }
@@ -833,6 +991,7 @@ export default function AssistantPage() {
       });
       setSearchResult(null);
       setTodayFollowUpsResult(null);
+      setCreateProspectResult(null);
       setUpdateProspectResult(null);
       return;
     }
@@ -849,6 +1008,7 @@ export default function AssistantPage() {
         setUpdateProspectResult({ status: "unsupported" });
         setSearchResult(null);
         setTodayFollowUpsResult(null);
+        setCreateProspectResult(null);
         setAddNoteResult(null);
         return;
       }
@@ -857,6 +1017,7 @@ export default function AssistantPage() {
         setUpdateProspectResult({ status: "notReady" });
         setSearchResult(null);
         setTodayFollowUpsResult(null);
+        setCreateProspectResult(null);
         setAddNoteResult(null);
         return;
       }
@@ -870,6 +1031,7 @@ export default function AssistantPage() {
         setUpdateProspectResult({ status: "notFound", targetLabel: label });
         setSearchResult(null);
         setTodayFollowUpsResult(null);
+        setCreateProspectResult(null);
         setAddNoteResult(null);
         return;
       }
@@ -882,6 +1044,7 @@ export default function AssistantPage() {
         });
         setSearchResult(null);
         setTodayFollowUpsResult(null);
+        setCreateProspectResult(null);
         setAddNoteResult(null);
         return;
       }
@@ -901,6 +1064,7 @@ export default function AssistantPage() {
         });
         setSearchResult(null);
         setTodayFollowUpsResult(null);
+        setCreateProspectResult(null);
         setAddNoteResult(null);
         return;
       }
@@ -918,12 +1082,14 @@ export default function AssistantPage() {
       });
       setSearchResult(null);
       setTodayFollowUpsResult(null);
+      setCreateProspectResult(null);
       setAddNoteResult(null);
       return;
     }
 
     setSearchResult(null);
     setTodayFollowUpsResult(null);
+    setCreateProspectResult(null);
     setAddNoteResult(null);
     setUpdateProspectResult(null);
   }
@@ -945,7 +1111,7 @@ export default function AssistantPage() {
 
         <section className="rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-4 sm:p-5">
           <p className="text-sm font-semibold text-emerald-100">
-            Mode test : aucune donnée du CRM n&apos;est modifiée.
+            Mode local : les créations validées sont enregistrées dans le CRM.
           </p>
         </section>
 
@@ -993,6 +1159,7 @@ export default function AssistantPage() {
           result={todayFollowUpsResult}
           hasLoadedProspects={hasLoadedProspects}
         />
+        <CreateProspectResultPanel result={createProspectResult} />
         <AddNoteResultPanel result={addNoteResult} />
         <UpdateProspectResultPanel result={updateProspectResult} />
       </section>
