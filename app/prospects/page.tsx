@@ -6,7 +6,10 @@ import {
   loadProspects,
   saveProspects,
 } from "../lib/prospectStorage";
-import { createProspectFromInput } from "../lib/prospectActions";
+import {
+  createProspectFromInput,
+  updateProspectNextActionDate as updateProspectNextActionDateFromAction,
+} from "../lib/prospectActions";
 import { loadResources } from "../lib/resourceStorage";
 import {
   buildGoogleCalendarFollowUpUrl,
@@ -2052,11 +2055,7 @@ export default function ProspectsPage () {
         return prospect;
       }
 
-      return {
-        ...prospect,
-        nextActionDate: "",
-        updatedAt: new Date().toISOString(),
-      };
+      return updateProspectNextActionDateFromAction(prospect, "");
     });
 
     saveProspects(updatedProspects);
@@ -2069,11 +2068,7 @@ export default function ProspectsPage () {
         return prospect;
       }
 
-      return {
-        ...prospect,
-        nextActionDate,
-        updatedAt: new Date().toISOString(),
-      };
+      return updateProspectNextActionDateFromAction(prospect, nextActionDate);
     });
 
     saveProspects(updatedProspects);
@@ -3209,11 +3204,11 @@ export default function ProspectsPage () {
             6 mois
           </button>
           <button
-            className="min-h-10 rounded-full border border-white/10 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
+            className="min-h-10 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
             type="button"
             onClick={() => updateQuickFollowUpDate(prospect.id, "")}
           >
-            Effacer
+            Marquer comme traité
           </button>
           {googleCalendarUrl ? (
             <a
@@ -5135,7 +5130,7 @@ export default function ProspectsPage () {
                           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
                             Relance rapide
                           </p>
-                          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
                             <button
                               className="min-h-12 rounded-2xl border border-emerald-400/30 px-2 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
                               type="button"
@@ -5163,6 +5158,13 @@ export default function ProspectsPage () {
                               onClick={() => updateQuickFollowUpDate(prospect.id, getFutureMonthDateString(6))}
                             >
                               6 mois
+                            </button>
+                            <button
+                              className="min-h-12 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-2 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/20"
+                              type="button"
+                              onClick={() => updateQuickFollowUpDate(prospect.id, "")}
+                            >
+                              Marquer comme traité
                             </button>
                           </div>
                         </div>

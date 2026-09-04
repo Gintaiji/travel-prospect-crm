@@ -18,6 +18,7 @@ import {
 } from "../lib/cloudSync";
 import { loadProspects, saveProspects } from "../lib/prospectStorage";
 import { loadNotificationSettings } from "../lib/notificationSettingsStorage";
+import { updateProspectNextActionDate as updateProspectNextActionDateFromAction } from "../lib/prospectActions";
 import {
   calculateProspectScore,
   getProspectDisplayName,
@@ -287,16 +288,7 @@ export default function TodayPage() {
         return prospect;
       }
 
-      const updatedProspect: Prospect = {
-        ...prospect,
-        nextActionDate,
-        updatedAt: new Date().toISOString(),
-      };
-
-      return {
-        ...updatedProspect,
-        score: calculateProspectScore(updatedProspect),
-      };
+      return updateProspectNextActionDateFromAction(prospect, nextActionDate);
     });
 
     saveProspects(updatedProspects);

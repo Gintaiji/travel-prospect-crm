@@ -86,6 +86,23 @@ export function updateProspectColorAndTemperature(
   };
 }
 
+export function updateProspectNextActionDate(
+  prospect: Prospect,
+  nextActionDate: Prospect["nextActionDate"],
+  updatedAt = new Date().toISOString(),
+): Prospect {
+  const updatedProspect: Prospect = {
+    ...prospect,
+    nextActionDate,
+    updatedAt,
+  };
+
+  return {
+    ...updatedProspect,
+    score: calculateProspectScore(updatedProspect),
+  };
+}
+
 export function createProspectFromInput(
   input: CreateProspectInput,
   now = new Date().toISOString(),
