@@ -205,6 +205,33 @@ function parseGetTodayFollowUpsCommand(normalizedText: string) {
   });
 }
 
+function parseGetOverdueFollowUpsCommand(normalizedText: string) {
+  const overdueFollowUpCommands = [
+    "quelles relances sont en retard",
+    "montre moi les relances en retard",
+    "montre les relances en retard",
+    "affiche les relances en retard",
+    "mes relances en retard",
+    "qui dois je relancer en retard",
+    "qui aurais je deja du relancer",
+    "qui aurais je du relancer",
+    "quels prospects sont en retard de relance",
+    "montre les prospects en retard de relance",
+  ];
+  const commandText = normalizeSpaces(
+    normalizedText.replace(/-/g, " ").replace(/[?!.]+$/g, ""),
+  );
+
+  if (!overdueFollowUpCommands.includes(commandText)) {
+    return null;
+  }
+
+  return successIfValid({
+    action: "getOverdueFollowUps",
+    payload: {},
+  });
+}
+
 function parseCountNewProspectsThisWeekCommand(normalizedText: string) {
   const countNewProspectsThisWeekCommands = [
     "combien de nouveaux prospects ai je ajoutes cette semaine",
@@ -511,6 +538,7 @@ export function parseAssistantCommand(
   return (
     parseAddNoteCommand(originalText) ??
     parseGetTodayFollowUpsCommand(normalizedText) ??
+    parseGetOverdueFollowUpsCommand(normalizedText) ??
     parseCountNewProspectsThisWeekCommand(normalizedText) ??
     parseGetProspectsNotContactedSinceDaysCommand(normalizedText) ??
     parseSearchCommand(originalText, normalizedText) ??
