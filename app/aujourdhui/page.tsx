@@ -21,6 +21,8 @@ import { loadNotificationSettings } from "../lib/notificationSettingsStorage";
 import { updateProspectNextActionDate as updateProspectNextActionDateFromAction } from "../lib/prospectActions";
 import {
   calculateProspectScore,
+  formatProspectNextAction,
+  compareProspectNextActions,
   getProspectDisplayName,
   getTodayDateString,
   isDateBeforeToday,
@@ -258,7 +260,7 @@ export default function TodayPage() {
     const followUpProspects = prospects
       .filter((prospect) => prospect.nextActionDate.trim())
       .sort((firstProspect, secondProspect) =>
-        compareDateStrings(firstProspect.nextActionDate, secondProspect.nextActionDate),
+        compareProspectNextActions(firstProspect, secondProspect),
       );
 
     return {
@@ -422,7 +424,7 @@ export default function TodayPage() {
             <p className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
               <span className="block text-xs text-slate-500">Date de relance</span>
               <span className="font-semibold text-white">
-                {prospect.nextActionDate || "Non planifiée"}
+                {formatProspectNextAction(prospect) || "Non planifiée"}
               </span>
             </p>
           </div>
@@ -743,7 +745,7 @@ export default function TodayPage() {
                             Prochaine relance
                           </span>
                           <span className="font-semibold text-white">
-                            {prospect.nextActionDate || "Non planifiée"}
+                            {formatProspectNextAction(prospect) || "Non planifiée"}
                           </span>
                         </p>
                       </div>

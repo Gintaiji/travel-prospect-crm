@@ -150,6 +150,8 @@ export type Prospect = {
 
   lastInteractionDate: string;
   nextActionDate: string;
+  nextActionAt?: string;
+  nextAction?: string;
 
   conversationHistory: ConversationEntry[];
   notes: string;

@@ -1,11 +1,27 @@
 import type { Prospect } from "./types";
 
-function formatLocalDate(date: Date) {
+export function formatLocalDate(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
+}
+
+export function getProspectNextActionAt(prospect: Prospect) {
+  if (!prospect.nextActionAt) return null;
+  const date = new Date(prospect.nextActionAt);
+  return Number.isFinite(date.getTime()) && formatLocalDate(date) === prospect.nextActionDate ? date : null;
+}
+
+export function formatProspectNextAction(prospect: Prospect) {
+  const date = getProspectNextActionAt(prospect);
+  return date ? prospect.nextActionDate + " \u00e0 " + date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : prospect.nextActionDate;
+}
+
+export function compareProspectNextActions(first: Prospect, second: Prospect) {
+  return (first.nextActionDate || "9999-12-31").localeCompare(second.nextActionDate || "9999-12-31")
+    || (getProspectNextActionAt(first)?.getTime() ?? 0) - (getProspectNextActionAt(second)?.getTime() ?? 0);
 }
 
 export function calculateProspectScore(prospect: Prospect) {
@@ -365,6 +381,7 @@ function getFollowUpTitleFromDate(nextActionDate: string) {
 
 function getGoogleCalendarFollowUpTitle(prospect: Prospect) {
   return (
+    prospect.nextAction?.trim() ||
     getLastExplicitFollowUpTitle(prospect) ||
     getFollowUpTitleFromDate(prospect.nextActionDate) ||
     "Relance"
@@ -378,11 +395,13 @@ export function buildGoogleCalendarFollowUpUrl(prospect: Prospect) {
 
   const prospectName = getProspectDisplayName(prospect);
   const followUpTitle = getGoogleCalendarFollowUpTitle(prospect);
-  const startDateTime = formatGoogleCalendarDateTime(
+  const scheduledAt = getProspectNextActionAt(prospect);
+  const calendarTimestamp = (date: Date) => date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  const startDateTime = scheduledAt ? calendarTimestamp(scheduledAt) : formatGoogleCalendarDateTime(
     prospect.nextActionDate,
     "180000",
   );
-  const endDateTime = formatGoogleCalendarDateTime(
+  const endDateTime = scheduledAt ? calendarTimestamp(new Date(scheduledAt.getTime() + 30 * 60 * 1000)) : formatGoogleCalendarDateTime(
     prospect.nextActionDate,
     "183000",
   );

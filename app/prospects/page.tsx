@@ -8,11 +8,14 @@ import {
 } from "../lib/prospectStorage";
 import {
   createProspectFromInput,
+  scheduleProspectFirstContact,
   updateProspectNextActionDate as updateProspectNextActionDateFromAction,
 } from "../lib/prospectActions";
 import { loadResources } from "../lib/resourceStorage";
 import {
   buildGoogleCalendarFollowUpUrl,
+  formatProspectNextAction,
+  compareProspectNextActions,
   calculateProspectScore,
   downloadProspectVCard,
   getFutureDateString,
@@ -591,6 +594,11 @@ function mergeProspectData(keptProspect: Prospect, mergedProspect: Prospect) {
     },
     lastInteractionDate: pickNewestDate(keptProspect.lastInteractionDate, mergedProspect.lastInteractionDate),
     nextActionDate: pickMergedNextActionDate(keptProspect.nextActionDate, mergedProspect.nextActionDate),
+    ...(() => {
+      const date = pickMergedNextActionDate(keptProspect.nextActionDate, mergedProspect.nextActionDate);
+      const source = date === keptProspect.nextActionDate ? keptProspect : mergedProspect;
+      return { nextActionAt: source.nextActionAt, nextAction: source.nextAction };
+    })(),
     conversationHistory: mergedConversationHistory,
     notes: pickFilledText(keptProspect.notes, mergedProspect.notes),
     createdAt: pickOldestDate(keptProspect.createdAt, mergedProspect.createdAt),
@@ -1825,6 +1833,7 @@ export default function ProspectsPage () {
         updatedProspect,
         qualificationFormState.nextActionDate,
         updatedProspect.updatedAt,
+        true,
       );
     });
 
@@ -1895,6 +1904,7 @@ export default function ProspectsPage () {
         updatedProspect,
         fullProspectFormState.nextActionDate,
         updatedProspect.updatedAt,
+        true,
       );
     });
 
@@ -2062,13 +2072,18 @@ export default function ProspectsPage () {
     setProspects(updatedProspects);
   }
 
-  function updateQuickFollowUpDate(prospectId: string, nextActionDate: string) {
+  function updateQuickFollowUpDate(prospectId: string, nextActionDate: string, firstContact = false, nextAction?: string) {
+    const clickedAt = new Date();
     const updatedProspects = prospects.map((prospect) => {
       if (prospect.id !== prospectId) {
         return prospect;
       }
 
-      return updateProspectNextActionDateFromAction(prospect, nextActionDate);
+      const updated = firstContact
+        ? scheduleProspectFirstContact(prospect, clickedAt)
+        : { ...updateProspectNextActionDateFromAction(prospect, nextActionDate), nextAction };
+      nextActionDate = updated.nextActionDate;
+      return updated;
     });
 
     saveProspects(updatedProspects);
@@ -3177,7 +3192,7 @@ export default function ProspectsPage () {
           </p>
           {prospect.nextActionDate ? (
             <p className="text-xs font-semibold text-sky-200">
-              Relance prévue : {prospect.nextActionDate}
+              Relance prévue : {formatProspectNextAction(prospect)}
             </p>
           ) : null}
         </div>
@@ -3186,28 +3201,28 @@ export default function ProspectsPage () {
           <button
             className="min-h-10 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
             type="button"
-            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(2))}
+            onClick={() => updateQuickFollowUpDate(prospect.id, "", true)}
           >
-            2 jours
+            Premier contact
           </button>
           <button
             className="min-h-10 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
             type="button"
-            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(4))}
+            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(4), false, "Relance 4 jours")}
           >
             4 jours
           </button>
           <button
             className="min-h-10 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
             type="button"
-            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(30))}
+            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(30), false, "Relance 30 jours")}
           >
             30 jours
           </button>
           <button
             className="min-h-10 rounded-full border border-emerald-400/30 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
             type="button"
-            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureMonthDateString(6))}
+            onClick={() => updateQuickFollowUpDate(prospect.id, getFutureMonthDateString(6), false, "Relance 6 mois")}
           >
             6 mois
           </button>
@@ -3238,7 +3253,7 @@ export default function ProspectsPage () {
   const followUpProspects = prospects
     .filter((prospect) => prospect.nextActionDate.trim())
     .sort((firstProspect, secondProspect) =>
-      compareDateStrings(firstProspect.nextActionDate, secondProspect.nextActionDate),
+      compareProspectNextActions(firstProspect, secondProspect),
     );
   const filteredProspects = prospects.filter((prospect) => {
     const searchableText = [
@@ -3290,10 +3305,7 @@ export default function ProspectsPage () {
     }
 
     if (prospectSortOption === "nextActionDate") {
-      return compareDateStrings(
-        firstProspect.nextActionDate || "9999-12-31",
-        secondProspect.nextActionDate || "9999-12-31",
-      );
+      return compareProspectNextActions(firstProspect, secondProspect);
     }
 
     if (prospectSortOption === "nameAsc") {
@@ -3398,10 +3410,7 @@ export default function ProspectsPage () {
             return secondProspect.score - firstProspect.score;
           }
 
-          return compareDateStrings(
-            firstProspect.nextActionDate || "9999-12-31",
-            secondProspect.nextActionDate || "9999-12-31",
-          );
+          return compareProspectNextActions(firstProspect, secondProspect);
         });
 
       return groupedProspects;
@@ -4560,7 +4569,7 @@ export default function ProspectsPage () {
 
                         <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
                           <p><span className="text-slate-500">Score :</span> <span className="font-medium text-white">{prospect.score}</span></p>
-                          <p><span className="text-slate-500">Relance :</span> <span className="font-medium text-white">{prospect.nextActionDate}</span></p>
+                          <p><span className="text-slate-500">Relance :</span> <span className="font-medium text-white">{formatProspectNextAction(prospect)}</span></p>
                         </div>
 
                         {lastConversationEntry ? (
@@ -5041,7 +5050,7 @@ export default function ProspectsPage () {
                           </span>
                           {prospect.nextActionDate ? (
                             <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-sky-200">
-                              Relance : {prospect.nextActionDate}
+                              Relance : {formatProspectNextAction(prospect)}
                             </span>
                           ) : null}
                         </div>
@@ -5142,28 +5151,28 @@ export default function ProspectsPage () {
                             <button
                               className="min-h-12 rounded-2xl border border-emerald-400/30 px-2 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
                               type="button"
-                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(2))}
+                              onClick={() => updateQuickFollowUpDate(prospect.id, "", true)}
                             >
-                              2 jours
+                              Premier contact
                             </button>
                             <button
                               className="min-h-12 rounded-2xl border border-emerald-400/30 px-2 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
                               type="button"
-                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(4))}
+                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(4), false, "Relance 4 jours")}
                             >
                               4 jours
                             </button>
                             <button
                               className="min-h-12 rounded-2xl border border-emerald-400/30 px-2 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
                               type="button"
-                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(30))}
+                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureDateString(30), false, "Relance 30 jours")}
                             >
                               30 jours
                             </button>
                             <button
                               className="min-h-12 rounded-2xl border border-emerald-400/30 px-2 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/10"
                               type="button"
-                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureMonthDateString(6))}
+                              onClick={() => updateQuickFollowUpDate(prospect.id, getFutureMonthDateString(6), false, "Relance 6 mois")}
                             >
                               6 mois
                             </button>
@@ -5245,7 +5254,7 @@ export default function ProspectsPage () {
                                   </span>
                                   {prospect.nextActionDate ? (
                                     <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-sky-200">
-                                      Relance prévue : {prospect.nextActionDate}
+                                      Relance prévue : {formatProspectNextAction(prospect)}
                                     </span>
                                   ) : null}
                                 </div>
@@ -6223,7 +6232,7 @@ export default function ProspectsPage () {
                           <p><span className="text-slate-500">Type couleur :</span> <span className="font-medium text-white">{prospect.colorType}</span></p>
                           {prospect.nextActionDate ? (
                             <div className="grid gap-2">
-                              <p><span className="text-slate-500">Prochaine relance :</span> <span className="font-medium text-white">{prospect.nextActionDate}</span></p>
+                              <p><span className="text-slate-500">Prochaine relance :</span> <span className="font-medium text-white">{formatProspectNextAction(prospect)}</span></p>
                               <a
                                 className="inline-flex min-h-10 w-fit items-center justify-center rounded-full border border-white/10 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/5"
                                 href={buildGoogleCalendarFollowUpUrl(prospect)}

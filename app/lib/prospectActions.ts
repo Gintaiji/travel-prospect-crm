@@ -1,4 +1,4 @@
-import { calculateProspectScore } from "./prospectUtils";
+import { calculateProspectScore, formatLocalDate } from "./prospectUtils";
 import { createProspectId } from "./prospectStorage";
 import type { Prospect } from "./types";
 
@@ -90,9 +90,13 @@ export function updateProspectNextActionDate(
   prospect: Prospect,
   nextActionDate: Prospect["nextActionDate"],
   updatedAt = new Date().toISOString(),
+  preserveTime = false,
 ): Prospect {
+  const keepSchedule = preserveTime && nextActionDate === prospect.nextActionDate;
   const updatedProspect: Prospect = {
     ...prospect,
+    nextActionAt: keepSchedule ? prospect.nextActionAt : undefined,
+    nextAction: keepSchedule ? prospect.nextAction : undefined,
     nextActionDate,
     updatedAt,
   };
@@ -159,5 +163,14 @@ export function createProspectFromInput(
   return {
     ...prospectBase,
     score: calculateProspectScore(prospectBase),
+  };
+}
+
+export function scheduleProspectFirstContact(prospect: Prospect, now = new Date()): Prospect {
+  const scheduledAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  return {
+    ...updateProspectNextActionDate(prospect, formatLocalDate(scheduledAt), now.toISOString()),
+    nextAction: "Premier contact",
+    nextActionAt: scheduledAt.toISOString(),
   };
 }
