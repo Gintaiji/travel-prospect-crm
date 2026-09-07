@@ -7,9 +7,9 @@ import {
   loadProspects,
   saveProspects,
 } from "../lib/prospectStorage";
+import { scheduleProspectFirstContact } from "../lib/prospectActions";
 import {
-  calculateProspectScore,
-  getFutureDateString,
+  formatProspectNextAction,
   getTodayDateString,
 } from "../lib/prospectUtils";
 import {
@@ -287,7 +287,7 @@ export default function StreetMarketingPage() {
       `Lieu de rencontre : ${contact.meetingPlace || "Non renseigné"}`,
       ...surveyAnswerLines,
       `Note terrain : ${contact.fieldNote || "Non renseignée"}`,
-      "Relance automatique prévue dans 3 jours.",
+      "Prochaine action : Premier contact",
       "Ajouté depuis Street Marketing",
     ].join("\n");
   }
@@ -314,9 +314,9 @@ export default function StreetMarketingPage() {
 
     const firstName = contact.firstName || "Contact terrain";
     const displayName = `${firstName} ${contact.lastName}`.trim();
-    const now = new Date().toISOString();
+    const registeredAt = new Date();
+    const now = registeredAt.toISOString();
     const today = getTodayDateString();
-    const followUpDate = getFutureDateString(3);
     const phonePlatform = (SOCIAL_PLATFORMS as readonly string[]).includes("Téléphone")
       ? ("Téléphone" as Prospect["mainPlatform"])
       : "Autre";
@@ -366,24 +366,21 @@ export default function StreetMarketingPage() {
         messagesCount: 0,
       },
       lastInteractionDate: "",
-      nextActionDate: followUpDate,
+      nextActionDate: "",
       conversationHistory: [
         {
           id: createProspectId(),
           date: today,
           channel: phonePlatform,
           content: "Contact ajouté depuis Street Marketing.",
-          nextAction: "Relancer le contact Street Marketing",
+          nextAction: "Premier contact",
         },
       ],
       notes: buildStreetMarketingNotes(contact),
       createdAt: now,
       updatedAt: now,
     };
-    const newProspect: Prospect = {
-      ...newProspectBase,
-      score: calculateProspectScore(newProspectBase),
-    };
+    const newProspect = scheduleProspectFirstContact(newProspectBase, registeredAt);
     const currentProspects = loadProspects();
 
     saveProspects([newProspect, ...currentProspects]);
@@ -793,7 +790,7 @@ export default function StreetMarketingPage() {
                     <p className="text-sm text-slate-300">{prospect.status}</p>
                     <p className="text-sm text-slate-300">
                       {prospect.nextActionDate
-                        ? `Relance : ${prospect.nextActionDate}`
+                        ? `Relance : ${formatProspectNextAction(prospect)}`
                         : "Relance non planifiée"}
                     </p>
                     <Link
