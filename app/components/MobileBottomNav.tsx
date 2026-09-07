@@ -8,7 +8,7 @@ const bottomNavigationLinks = [
   { href: "/prospects", label: "Prospects" },
   { href: "/assistant", label: "Assistant" },
   { href: "/activite", label: "Activité" },
-  { href: "/ressources", label: "Ressources" },
+  { href: "/street-marketing", label: "Street Marketing" },
   { href: "/sauvegarde", label: "Sauvegarde" },
 ];
 
@@ -29,13 +29,13 @@ export default function MobileBottomNav() {
             <Link
               key={navigationLink.href}
               href={navigationLink.href}
-              className={`flex min-h-12 items-center justify-center rounded-2xl px-1 text-center text-[10px] font-semibold leading-tight transition ${
+              className={`flex min-h-12 min-w-0 items-center justify-center rounded-2xl px-0.5 text-center text-[10px] font-semibold leading-tight transition ${
                 isActive
                   ? "bg-emerald-400/10 text-emerald-200 ring-1 ring-emerald-400/30"
                   : "text-slate-300 hover:bg-white/5 hover:text-emerald-100"
               }`}
             >
-              {navigationLink.label}
+              <span className="min-w-0 wrap-break-word">{navigationLink.label}</span>
             </Link>
           );
         })}
