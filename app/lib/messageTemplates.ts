@@ -109,7 +109,7 @@ export const FOLLOW_UP_MESSAGE_TEMPLATES: FollowUpMessageTemplate[] = [
   },
   {
     id: "first-follow-up",
-    title: "Première relance",
+    title: "Premier message voyage",
     followUpDays: null,
     message:
       "Bonjour {{prenom}},\n\nC’est {{nom_affiche}}, nous avons échangé aujourd’hui à {{lieu de rencontre}}, notamment autour du voyage.\n\nJ’ai beaucoup apprécié notre échange. Comme je vous l’expliquais, j’utilise personnellement un service qui me permet de faire des économies sur mes déplacements et mes vacances, et que je partage autour de moi lorsque je pense qu’il peut être utile.\n\nVous sembliez intéressé(e) par le sujet, alors je souhaitais simplement revenir vers vous comme convenu et savoir si vous seriez toujours ouvert(e) à découvrir plus concrètement son fonctionnement.\n\nSi c’est le cas, nous pourrons prendre quelques minutes pour en discuter tranquillement et voir si cela pourrait correspondre à votre façon de voyager.\n\nSentez-vous libre de me transmettre vos disponibilités afin que nous puissions convenir d’un créneau qui vous convient.\n\nBien cordialement,\n{{nom_affiche}}",
