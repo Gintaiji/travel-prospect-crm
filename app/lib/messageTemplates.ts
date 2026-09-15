@@ -1,6 +1,7 @@
 import type { Prospect } from "./types";
 
 export type FollowUpMessageTemplateId =
+  | "first-follow-up"
   | "follow-up-2-days"
   | "follow-up-4-days"
   | "follow-up-30-days";
@@ -8,7 +9,7 @@ export type FollowUpMessageTemplateId =
 export type FollowUpMessageTemplate = {
   id: FollowUpMessageTemplateId;
   title: string;
-  followUpDays: number;
+  followUpDays: number | null;
   message: string;
   nextAction: string;
   suggestedStatus: Prospect["status"] | null;
@@ -105,5 +106,14 @@ export const FOLLOW_UP_MESSAGE_TEMPLATES: FollowUpMessageTemplate[] = [
       "Bonjour {{prenom}}, c’est {{nom_affiche}}.\n\nJe me permets de vous envoyer ce petit message car je suis actuellement en plein développement de mon activité et je souhaitais vous poser une petite question.\n\nEst-ce que vous connaissez quelqu’un qui adore voyager, mais qui trouve que les voyages coûtent de plus en plus cher, et qui aimerait pouvoir partir plus souvent sans augmenter son budget ?\n\nSi quelqu’un vous vient en tête, sentez-vous libre de me le dire. Sinon, aucun problème.",
     nextAction: "Relance 30 jours",
     suggestedStatus: "À relancer",
+  },
+  {
+    id: "first-follow-up",
+    title: "Première relance",
+    followUpDays: null,
+    message:
+      "Bonjour {{prenom}},\n\nC’est {{nom_affiche}}, nous avons échangé aujourd’hui à {{lieu de rencontre}}, notamment autour du voyage.\n\nJ’ai beaucoup apprécié notre échange. Comme je vous l’expliquais, j’utilise personnellement un service qui me permet de faire des économies sur mes déplacements et mes vacances, et que je partage autour de moi lorsque je pense qu’il peut être utile.\n\nVous sembliez intéressé(e) par le sujet, alors je souhaitais simplement revenir vers vous comme convenu et savoir si vous seriez toujours ouvert(e) à découvrir plus concrètement son fonctionnement.\n\nSi c’est le cas, nous pourrons prendre quelques minutes pour en discuter tranquillement et voir si cela pourrait correspondre à votre façon de voyager.\n\nSentez-vous libre de me transmettre vos disponibilités afin que nous puissions convenir d’un créneau qui vous convient.\n\nBien cordialement,\n{{nom_affiche}}",
+    nextAction: "",
+    suggestedStatus: null,
   },
 ];

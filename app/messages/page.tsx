@@ -109,7 +109,7 @@ export default function MessagesPage() {
 
   function resetAllMessages() {
     const shouldReset = window.confirm(
-      "Réinitialiser les trois messages avec les textes par défaut ?",
+      "Réinitialiser tous les messages avec les textes par défaut ?",
     );
 
     if (!shouldReset) {
@@ -133,7 +133,7 @@ export default function MessagesPage() {
             Messages de relance
           </h1>
           <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
-            Configure les trois textes utilisés pour les relances rapides du CRM.
+            Configure les modèles de messages utilisés dans l’assistant prospect.
           </p>
         </header>
 
@@ -144,8 +144,8 @@ export default function MessagesPage() {
                 Modèles actifs
               </p>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-200">
-                Un seul message est prévu par délai de relance. Les textes
-                personnalisés sont utilisés dans l’assistant prospect.
+                Chaque modèle peut être personnalisé puis utilisé dans
+                l’assistant prospect.
               </p>
               <div className="mt-4 max-w-3xl rounded-2xl border border-white/10 bg-slate-950/70 p-4">
                 <p className="text-sm leading-6 text-slate-200">
