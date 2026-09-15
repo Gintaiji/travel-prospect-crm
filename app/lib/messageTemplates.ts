@@ -2,6 +2,7 @@ import type { Prospect } from "./types";
 
 export type FollowUpMessageTemplateId =
   | "first-follow-up"
+  | "first-business-message"
   | "follow-up-2-days"
   | "follow-up-4-days"
   | "follow-up-30-days";
@@ -113,6 +114,15 @@ export const FOLLOW_UP_MESSAGE_TEMPLATES: FollowUpMessageTemplate[] = [
     followUpDays: null,
     message:
       "Bonjour {{prenom}},\n\nC’est {{nom_affiche}}, nous avons échangé aujourd’hui à {{lieu de rencontre}}, notamment autour du voyage.\n\nJ’ai beaucoup apprécié notre échange. Comme je vous l’expliquais, j’utilise personnellement un service qui me permet de faire des économies sur mes déplacements et mes vacances, et que je partage autour de moi lorsque je pense qu’il peut être utile.\n\nVous sembliez intéressé(e) par le sujet, alors je souhaitais simplement revenir vers vous comme convenu et savoir si vous seriez toujours ouvert(e) à découvrir plus concrètement son fonctionnement.\n\nSi c’est le cas, nous pourrons prendre quelques minutes pour en discuter tranquillement et voir si cela pourrait correspondre à votre façon de voyager.\n\nSentez-vous libre de me transmettre vos disponibilités afin que nous puissions convenir d’un créneau qui vous convient.\n\nBien cordialement,\n{{nom_affiche}}",
+    nextAction: "",
+    suggestedStatus: null,
+  },
+  {
+    id: "first-business-message",
+    title: "Premier message business",
+    followUpDays: null,
+    message:
+      "Bonjour {{prenom}},\n\nC’est {{nom_affiche}}, nous avons échangé aujourd’hui à {{lieu de rencontre}}, notamment autour de vos projets et de votre situation professionnelle.\n\nJ’ai beaucoup apprécié notre échange. Comme je vous l’expliquais, je développe actuellement un projet autour du voyage, avec une dimension entrepreneuriale, que je partage lorsque je rencontre des personnes ouvertes à découvrir de nouvelles possibilités professionnelles.\n\nVous sembliez intéressé(e) par le sujet, alors je souhaitais simplement revenir vers vous comme convenu et savoir si vous seriez toujours ouvert(e) à découvrir plus concrètement le fonctionnement du projet.\n\nSi c’est le cas, nous pourrons prendre quelques minutes pour en discuter tranquillement, mieux comprendre ce que vous recherchez aujourd’hui et voir si cette opportunité pourrait avoir du sens pour vous.\n\nSentez-vous libre de me transmettre vos disponibilités afin que nous puissions convenir d’un créneau qui vous convient.\n\nBien cordialement,\n\n{{nom_affiche}}",
     nextAction: "",
     suggestedStatus: null,
   },
