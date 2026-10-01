@@ -356,6 +356,13 @@ function parseCreateCommand(
   // NFC keeps accented letters aligned with their detection form when slicing.
   let body = originalText.normalize("NFC").slice(matchedPrefix.length);
   let normalizedBody = normalizeForDetection(body);
+  const crmBoundary = /\b(?:rencontre(?:e|r)?|vue?|couleur|en\s+(?:jaune|rouge|bleue?|verte?)|comme prospect|marche|notes?(?=\s*:)|relance(?:-la|-le)?|a relancer|a rappeler|numero de telephone|numero|telephone|tel|whatsapp|e-mail|email|mail)\b/;
+  const initialCrmClause = crmBoundary.exec(normalizedBody);
+  // The bounded spoken fallback uses the first two space-separated tokens
+  // as identity only when extra words precede an explicit CRM clause.
+  const spokenIdentity = !body.includes(",") && initialCrmClause
+    ? /^(\S+\s+\S+)\s+\S/.exec(body.slice(0, initialCrmClause.index))
+    : null;
   const originalNote = /\b(?:(?:avec|ajoute) la )?notes?\s*:/.exec(normalizedBody);
   const followUpClause = /(?:,\s*|\s+et\s+|\s+)(?:relance(?:-la|-le)?|a relancer|a rappeler)\s+([^,;]+?)[.!?]*$/.exec(normalizedBody);
   let nextActionDate: string | null = null;
@@ -431,15 +438,14 @@ function parseCreateCommand(
   normalizedDetails = normalizeForDetection(details);
   let jobTitle = "";
   let businessArea = "";
-  // Without a comma, require an explicit known job followed by a sector
-  // marker, rather than guessing where an arbitrary name ends.
+  // Preserve explicit job/sector extraction first; otherwise use the bounded
+  // spoken identity captured before contacts, notes and reminders were removed.
   // Notes and the initial follow-up have already been isolated above.
   const spokenProfession = /\s+(?:responsable commercial|commerciale?|vendeur|vendeuse|technicien|technicienne|infirmier|infirmiere|plombier)\s+(?:dans|secteur)\s+/.exec(normalizedDetails);
   const commaStart = normalizedDetails.indexOf(",");
   const professionalStart = spokenProfession && (commaStart < 0 || spokenProfession.index < commaStart)
     ? spokenProfession.index
-    : commaStart;
-  const crmBoundary = /\b(?:rencontre(?:e|r)?|vue?|couleur|en\s+(?:jaune|rouge|bleue?|verte?)|comme prospect|marche|notes?|relance(?:-la|-le)?|a relancer|a rappeler)\b/;
+    : commaStart >= 0 ? commaStart : spokenIdentity?.[1].length ?? -1;
   const firstCrmClause = crmBoundary.exec(normalizedDetails);
   if (
     professionalStart >= 0 &&
