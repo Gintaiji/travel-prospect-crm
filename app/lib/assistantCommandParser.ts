@@ -360,9 +360,12 @@ function parseCreateCommand(
   const initialCrmClause = crmBoundary.exec(normalizedBody);
   // The bounded spoken fallback uses the first two space-separated tokens
   // as identity only when extra words precede an explicit CRM clause.
-  const spokenIdentity = !body.includes(",") && initialCrmClause
-    ? /^(\S+\s+\S+)\s+\S/.exec(body.slice(0, initialCrmClause.index))
-    : null;
+  const spokenPrefixTokens = !body.includes(",") && initialCrmClause
+    ? body.slice(0, initialCrmClause.index).trim().split(/\s+/)
+    : [];
+  const spokenProfessionalStart = spokenPrefixTokens.length >= 3
+    ? spokenPrefixTokens.slice(0, 2).join(" ").length
+    : -1;
   const originalNote = /\b(?:(?:avec|ajoute) la )?notes?\s*:/.exec(normalizedBody);
   const followUpClause = /(?:,\s*|\s+et\s+|\s+)(?:relance(?:-la|-le)?|a relancer|a rappeler)\s+([^,;]+?)[.!?]*$/.exec(normalizedBody);
   let nextActionDate: string | null = null;
@@ -443,9 +446,11 @@ function parseCreateCommand(
   // Notes and the initial follow-up have already been isolated above.
   const spokenProfession = /\s+(?:responsable commercial|commerciale?|vendeur|vendeuse|technicien|technicienne|infirmier|infirmiere|plombier)\s+(?:dans|secteur)\s+/.exec(normalizedDetails);
   const commaStart = normalizedDetails.indexOf(",");
-  const professionalStart = spokenProfession && (commaStart < 0 || spokenProfession.index < commaStart)
-    ? spokenProfession.index
-    : commaStart >= 0 ? commaStart : spokenIdentity?.[1].length ?? -1;
+  const professionalStart = spokenProfessionalStart >= 0
+    ? spokenProfessionalStart
+    : spokenProfession && (commaStart < 0 || spokenProfession.index < commaStart)
+      ? spokenProfession.index
+      : commaStart;
   const firstCrmClause = crmBoundary.exec(normalizedDetails);
   if (
     professionalStart >= 0 &&
