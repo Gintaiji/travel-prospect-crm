@@ -360,12 +360,13 @@ function parseCreateCommand(
   const followUpClause = /(?:,\s*|\s+et\s+|\s+)(?:relance(?:-la|-le)?|a relancer|a rappeler)\s+([^,;]+?)[.!?]*$/.exec(normalizedBody);
   let nextActionDate: string | null = null;
 
-  // Within a note, only a comma-separated final clause with a known date
-  // is structural. Other mentions of reminders remain opaque note text.
+  // A final explicit reminder with a known date is structural, even when
+  // dictation omits the comma. Other reminder mentions remain note text.
   if (followUpClause && (
     !originalNote ||
     followUpClause.index < originalNote.index ||
-    followUpClause[0].startsWith(",")
+    followUpClause[0].startsWith(",") ||
+    /^\s+(?:relance(?:-la|-le)?|a relancer|a rappeler)\s/.test(followUpClause[0])
   )) {
     nextActionDate = parseFollowUpDateExpression(
       followUpClause[1].trim(),
@@ -395,7 +396,7 @@ function parseCreateCommand(
   const notes = noteMatch
     ? body.slice(noteMatch.index + noteMatch[0].length).trim()
     : "";
-  const clausePattern = /\b(?:rencontree?\s+(?:a|chez)|vue?\s+a|(?:en|couleur|comme prospect)\s+(?:jaune|rouge|bleue?|verte?)|marche\s+(?:froid|tiede|chaud))\b/g;
+  const clausePattern = /\b(?:rencontre(?:e|r)?\s+(?:a|chez)|vue?\s+a|(?:en|couleur|comme prospect)\s+(?:jaune|rouge|bleue?|verte?)|marche\s+(?:froid|tiede|chaud))\b/g;
   const cleanClauseValue = (value: string) =>
     normalizeSpaces(value.replace(/^[\s,;:.!?]+|[\s,;:.!?]+$/g, ""));
   const contactValues: Partial<Pick<Prospect, "phone" | "whatsapp" | "email">> = {};
@@ -430,10 +431,15 @@ function parseCreateCommand(
   normalizedDetails = normalizeForDetection(details);
   let jobTitle = "";
   let businessArea = "";
-  // Only a clearly separated segment before CRM details can describe a job.
+  // Without a comma, require an explicit known job followed by a sector
+  // marker, rather than guessing where an arbitrary name ends.
   // Notes and the initial follow-up have already been isolated above.
-  const professionalStart = normalizedDetails.indexOf(",");
-  const crmBoundary = /\b(?:rencontree?|vue?|couleur|en\s+(?:jaune|rouge|bleue?|verte?)|comme prospect|marche|notes?|relance(?:-la|-le)?|a relancer|a rappeler)\b/;
+  const spokenProfession = /\s+(?:responsable commercial|commerciale?|vendeur|vendeuse|technicien|technicienne|infirmier|infirmiere|plombier)\s+(?:dans|secteur)\s+/.exec(normalizedDetails);
+  const commaStart = normalizedDetails.indexOf(",");
+  const professionalStart = spokenProfession && (commaStart < 0 || spokenProfession.index < commaStart)
+    ? spokenProfession.index
+    : commaStart;
+  const crmBoundary = /\b(?:rencontre(?:e|r)?|vue?|couleur|en\s+(?:jaune|rouge|bleue?|verte?)|comme prospect|marche|notes?|relance(?:-la|-le)?|a relancer|a rappeler)\b/;
   const firstCrmClause = crmBoundary.exec(normalizedDetails);
   if (
     professionalStart >= 0 &&
@@ -489,7 +495,7 @@ function parseCreateCommand(
 
   for (const [index, clause] of detailClauses.entries()) {
     const marker = clause[0];
-    if (/^(?:rencontree?|vue?)\s/.test(marker)) {
+    if (/^(?:rencontre(?:e|r)?|vue?)\s/.test(marker)) {
       const meetingPlace = cleanClauseValue(details.slice(
         clause.index + marker.length,
         detailClauses[index + 1]?.index,
