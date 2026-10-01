@@ -144,7 +144,9 @@ function splitFirstNameAndLastName(value: string) {
 
 function getColorTypeFromWord(value: string): Prospect["colorType"] | null {
   const normalizedValue = normalizeForDetection(value);
-  const colorTypeValue = normalizedValue === "verte" ? "vert" : normalizedValue;
+  const colorTypeValue = normalizedValue === "verte"
+    ? "vert"
+    : normalizedValue === "bleue" ? "bleu" : normalizedValue;
 
   return (
     PROSPECT_COLOR_TYPES.find(
@@ -172,12 +174,6 @@ function getColorMatch(normalizedText: string) {
 function getTemperatureMatch(normalizedText: string) {
   return temperatureWords.find((temperatureWord) =>
     new RegExp(`(?:^| )${temperatureWord}(?:$| )`).test(normalizedText),
-  );
-}
-
-function removeTrailingColorExpression(value: string) {
-  return normalizeSpaces(
-    value.replace(/\s+(comme prospect|couleur|en)?\s*(jaune|rouge|bleu|vert|verte)$/i, ""),
   );
 }
 
@@ -353,21 +349,63 @@ function parseCreateCommand(originalText: string, normalizedText: string) {
     return null;
   }
 
-  const colorWord = getColorMatch(normalizedText);
-  const rawName = removeTrailingColorExpression(
-    originalText.slice(matchedPrefix.length).replace(/\s+comme prospect$/i, ""),
-  );
-  const name = splitFirstNameAndLastName(rawName);
+  // NFC keeps accented letters aligned with their detection form when slicing.
+  const body = originalText.normalize("NFC").slice(matchedPrefix.length);
+  const normalizedBody = normalizeForDetection(body);
+  const noteMatch = /\b(?:(?:avec|ajoute) la )?notes?\s*:/i.exec(normalizedBody);
+  const details = noteMatch ? body.slice(0, noteMatch.index) : body;
+  const normalizedDetails = normalizeForDetection(details);
+  const notes = noteMatch
+    ? body.slice(noteMatch.index + noteMatch[0].length).trim()
+    : "";
+  const clausePattern = /\b(?:rencontree?\s+(?:a|chez)|vue?\s+a|(?:en|couleur|comme prospect)\s+(?:jaune|rouge|bleue?|verte?)|marche\s+(?:froid|tiede|chaud))\b/g;
+  const clauses = Array.from(normalizedDetails.matchAll(clausePattern));
+  const cleanClauseValue = (value: string) =>
+    normalizeSpaces(value.replace(/^[\s,;:.!?]+|[\s,;:.!?]+$/g, ""));
+  const rawName = cleanClauseValue(details.slice(0, clauses[0]?.index));
+  const name = splitFirstNameAndLastName(rawName.replace(/\s+comme prospect$/i, ""));
 
   if (!name) {
     return null;
   }
 
-  const payload: AiCommand["payload"] = {
+  const payload: Extract<AiCommand, { action: "createProspect" }>["payload"] = {
     firstName: name.firstName,
     ...(name.lastName ? { lastName: name.lastName } : {}),
-    ...(colorWord ? { colorType: getColorTypeFromWord(colorWord) ?? undefined } : {}),
+    ...(notes ? { notes } : {}),
   };
+
+  for (const [index, clause] of clauses.entries()) {
+    const marker = clause[0];
+    if (/^(?:rencontree?|vue?)\s/.test(marker)) {
+      const meetingPlace = cleanClauseValue(details.slice(
+        clause.index + marker.length,
+        clauses[index + 1]?.index,
+      ));
+      if (meetingPlace) payload.meetingPlace = meetingPlace;
+    } else if (marker.startsWith("marche ")) {
+      const temperature = getTemperatureFromWord(marker.split(" ").at(-1) ?? "");
+      if (temperature) payload.temperature = temperature;
+    } else {
+      const colorType = getColorTypeFromWord(marker.split(" ").at(-1) ?? "");
+      if (colorType) payload.colorType = colorType;
+    }
+  }
+
+  // Preserve the existing simple trailing-color formulation ("Ajoute Paul jaune").
+  if (clauses.length === 0) {
+    const colorWord = getColorMatch(normalizedDetails);
+    const trailingColor = details.match(/\s+(jaune|rouge|bleu|vert|verte)[\s.!?]*$/i);
+    if (colorWord && trailingColor) {
+      const simpleName = splitFirstNameAndLastName(details.slice(0, trailingColor.index));
+      const colorType = getColorTypeFromWord(colorWord);
+      if (!simpleName || !colorType) return fail();
+      payload.firstName = simpleName.firstName;
+      delete payload.lastName;
+      if (simpleName.lastName) payload.lastName = simpleName.lastName;
+      payload.colorType = colorType;
+    }
+  }
 
   return successIfValid({
     action: "createProspect",
@@ -558,7 +596,15 @@ export function parseAssistantCommand(
     return fail("Commande vide");
   }
 
-  if (unsupportedMultiActionMarkers.some((marker) => normalizedText.includes(marker))) {
+  // A creation note is opaque text, including any words resembling actions.
+  const creationPrefix = /^(?:cree le prospect|nouveau prospect|ajoute|cree) /;
+  const creationNote = creationPrefix.test(normalizedText)
+    ? /\b(?:(?:avec|ajoute) la )?notes?\s*:/.exec(normalizedText)
+    : null;
+  const actionText = creationNote
+    ? normalizedText.slice(0, creationNote.index)
+    : normalizedText;
+  if (unsupportedMultiActionMarkers.some((marker) => actionText.includes(marker))) {
     return fail("Commande multiple non supportee");
   }
 
@@ -570,10 +616,10 @@ export function parseAssistantCommand(
     parseCountNewProspectsThisWeekCommand(normalizedText) ??
     parseGetProspectsNotContactedSinceDaysCommand(normalizedText) ??
     parseSearchCommand(originalText, normalizedText) ??
+    parseCreateCommand(originalText, normalizedText) ??
     parseColorUpdateCommand(originalText, normalizedText) ??
     parseTemperatureUpdateCommand(originalText, normalizedText) ??
     parseCreateFollowUpCommand(originalText, normalizedText, referenceDate) ??
-    parseCreateCommand(originalText, normalizedText) ??
     fail()
   );
 }
