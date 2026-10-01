@@ -29,6 +29,7 @@ export type CreateProspectInput = Pick<
   | "hasSentMessage"
   | "notes"
 > & {
+  nextActionDate?: Prospect["nextActionDate"];
   meetingPlace: string;
   socialLinks: Prospect["socialLinks"];
   followerSinceDate: string;
@@ -153,7 +154,7 @@ export function createProspectFromInput(
       messagesCount: Number.isNaN(input.messagesCount) ? 0 : input.messagesCount,
     },
     lastInteractionDate: "",
-    nextActionDate: "",
+    nextActionDate: input.nextActionDate ?? "",
     conversationHistory: [],
     notes: input.notes.trim(),
     createdAt: now,

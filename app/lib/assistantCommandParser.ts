@@ -334,7 +334,11 @@ function parseSearchCommand(originalText: string, normalizedText: string) {
   });
 }
 
-function parseCreateCommand(originalText: string, normalizedText: string) {
+function parseCreateCommand(
+  originalText: string,
+  normalizedText: string,
+  referenceDate: Date,
+) {
   const createPrefixes = [
     "cree le prospect ",
     "nouveau prospect ",
@@ -350,11 +354,44 @@ function parseCreateCommand(originalText: string, normalizedText: string) {
   }
 
   // NFC keeps accented letters aligned with their detection form when slicing.
-  const body = originalText.normalize("NFC").slice(matchedPrefix.length);
-  const normalizedBody = normalizeForDetection(body);
+  let body = originalText.normalize("NFC").slice(matchedPrefix.length);
+  let normalizedBody = normalizeForDetection(body);
+  const originalNote = /\b(?:(?:avec|ajoute) la )?notes?\s*:/.exec(normalizedBody);
+  const followUpClause = /(?:,\s*|\s+et\s+|\s+)(?:relance(?:-la|-le)?|a relancer|a rappeler)\s+([^,;]+?)[.!?]*$/.exec(normalizedBody);
+  let nextActionDate: string | null = null;
+
+  // Within a note, only a comma-separated final clause with a known date
+  // is structural. Other mentions of reminders remain opaque note text.
+  if (followUpClause && (
+    !originalNote ||
+    followUpClause.index < originalNote.index ||
+    followUpClause[0].startsWith(",")
+  )) {
+    nextActionDate = parseFollowUpDateExpression(
+      followUpClause[1].trim(),
+      referenceDate,
+    );
+    if (nextActionDate) {
+      body = body.slice(0, followUpClause.index).trim();
+      normalizedBody = normalizeForDetection(body);
+    } else if (!originalNote || followUpClause.index < originalNote.index) {
+      return fail("Date de relance non reconnue");
+    }
+  }
+
   const noteMatch = /\b(?:(?:avec|ajoute) la )?notes?\s*:/i.exec(normalizedBody);
   const details = noteMatch ? body.slice(0, noteMatch.index) : body;
   const normalizedDetails = normalizeForDetection(details);
+  const originalDetails = originalNote
+    ? normalizeForDetection(originalText).slice(0, matchedPrefix.length + originalNote.index)
+    : normalizeForDetection(originalText);
+  if (
+    originalDetails.includes(" puis relance") ||
+    unsupportedMultiActionMarkers.some((marker) => normalizedDetails.includes(marker)) ||
+    /\b(?:relance(?:-la|-le)?|a relancer|a rappeler)\b/.test(normalizedDetails)
+  ) {
+    return fail("Commande multiple ou relance non supportee");
+  }
   const notes = noteMatch
     ? body.slice(noteMatch.index + noteMatch[0].length).trim()
     : "";
@@ -373,6 +410,7 @@ function parseCreateCommand(originalText: string, normalizedText: string) {
     firstName: name.firstName,
     ...(name.lastName ? { lastName: name.lastName } : {}),
     ...(notes ? { notes } : {}),
+    ...(nextActionDate ? { nextActionDate } : {}),
   };
 
   for (const [index, clause] of clauses.entries()) {
@@ -596,6 +634,14 @@ export function parseAssistantCommand(
     return fail("Commande vide");
   }
 
+  // Handle initial follow-ups only for a creation intent. Existing note
+  // commands retain priority and all other actions keep the multi-action guard.
+  const addNoteCommand = parseAddNoteCommand(originalText);
+  const createCommand = addNoteCommand
+    ? null
+    : parseCreateCommand(originalText, normalizedText, referenceDate);
+  if (createCommand) return createCommand;
+
   // A creation note is opaque text, including any words resembling actions.
   const creationPrefix = /^(?:cree le prospect|nouveau prospect|ajoute|cree) /;
   const creationNote = creationPrefix.test(normalizedText)
@@ -609,14 +655,13 @@ export function parseAssistantCommand(
   }
 
   return (
-    parseAddNoteCommand(originalText) ??
+    addNoteCommand ??
     parseGetTodayFollowUpsCommand(normalizedText) ??
     parseGetOverdueFollowUpsCommand(normalizedText) ??
     parseGetTodayOverviewCommand(normalizedText) ??
     parseCountNewProspectsThisWeekCommand(normalizedText) ??
     parseGetProspectsNotContactedSinceDaysCommand(normalizedText) ??
     parseSearchCommand(originalText, normalizedText) ??
-    parseCreateCommand(originalText, normalizedText) ??
     parseColorUpdateCommand(originalText, normalizedText) ??
     parseTemperatureUpdateCommand(originalText, normalizedText) ??
     parseCreateFollowUpCommand(originalText, normalizedText, referenceDate) ??

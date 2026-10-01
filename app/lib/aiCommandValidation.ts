@@ -188,10 +188,13 @@ function isCreateProspectPayload(value: unknown) {
       key === "phone" ||
       key === "whatsapp" ||
       key === "email" ||
-      key === "notes" ||
-      key === "nextActionDate"
+      key === "notes"
     ) {
       return isOptionalString(fieldValue);
+    }
+
+    if (key === "nextActionDate") {
+      return isValidDateString(fieldValue);
     }
 
     if (key === "category") {

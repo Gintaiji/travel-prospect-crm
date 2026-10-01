@@ -432,6 +432,9 @@ function buildCreateProspectInput(
     likesCount: 0,
     messagesCount: 0,
     notes: payload.notes ?? "",
+    ...(payload.nextActionDate !== undefined
+      ? { nextActionDate: payload.nextActionDate }
+      : {}),
   };
 }
 
