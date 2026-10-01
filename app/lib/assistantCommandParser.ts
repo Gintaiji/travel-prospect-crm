@@ -398,6 +398,36 @@ function parseCreateCommand(
   const clausePattern = /\b(?:rencontree?\s+(?:a|chez)|vue?\s+a|(?:en|couleur|comme prospect)\s+(?:jaune|rouge|bleue?|verte?)|marche\s+(?:froid|tiede|chaud))\b/g;
   const cleanClauseValue = (value: string) =>
     normalizeSpaces(value.replace(/^[\s,;:.!?]+|[\s,;:.!?]+$/g, ""));
+  const contactValues: Partial<Pick<Prospect, "phone" | "whatsapp" | "email">> = {};
+  // Work only outside the opaque note. Explicit markers are required;
+  // numbers and addresses elsewhere never imply contact information.
+  const contactPattern = /(?:^|[\s,;])((?:numero de telephone|numero|telephone|tel|whatsapp|e-mail|email|mail))\s+/g;
+  const contactClauses = Array.from(normalizedDetails.matchAll(contactPattern));
+  const contactRanges: Array<{ start: number; end: number }> = [];
+  for (const clause of contactClauses) {
+    const valueStart = clause.index + clause[0].length;
+    const remaining = details.slice(valueStart);
+    const isEmail = /^(?:e-mail|email|mail)$/.test(clause[1]);
+    const valueMatch = isEmail
+      ? /^[^\s,;@]+@[^\s,;@]+/.exec(remaining)
+      : /^[+\d(][\d\s+.()-]*/.exec(remaining);
+    const value = valueMatch?.[0].replace(/[\s.!?]+$/g, "") ?? "";
+    if (!value || (!isEmail && !/\d/.test(value))) {
+      return fail("Coordonnee non reconnue");
+    }
+    const key = isEmail ? "email" : clause[1] === "whatsapp" ? "whatsapp" : "phone";
+    contactValues[key] = value;
+    let start = clause.index;
+    // Remove the clause's leading separator too, keeping any next separator
+    // available for the existing professional-segment extraction.
+    while (start > 0 && /[\s,;]/.test(details[start - 1])) start -= 1;
+    contactRanges.push({ start, end: valueStart + valueMatch![0].length });
+  }
+  for (const range of contactRanges.reverse()) {
+    details = details.slice(0, range.start) + " " + details.slice(range.end);
+  }
+  details = normalizeSpaces(details);
+  normalizedDetails = normalizeForDetection(details);
   let jobTitle = "";
   let businessArea = "";
   // Only a clearly separated segment before CRM details can describe a job.
@@ -449,6 +479,7 @@ function parseCreateCommand(
 
   const payload: Extract<AiCommand, { action: "createProspect" }>["payload"] = {
     firstName: name.firstName,
+    ...contactValues,
     ...(name.lastName ? { lastName: name.lastName } : {}),
     ...(jobTitle ? { jobTitle } : {}),
     ...(businessArea ? { businessArea } : {}),
