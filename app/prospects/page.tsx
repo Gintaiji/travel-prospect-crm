@@ -2270,6 +2270,7 @@ export default function ProspectsPage () {
     await navigator.clipboard.writeText(
       buildMessageWithResource(getGeneratedMessageForProspect(prospectId), resource),
     );
+    scheduleFirstMessageFollowUp(prospectId);
     setMessageAssistantState((currentState) => ({
       ...currentState,
       copiedMessageWithResourceProspectId: prospectId,
@@ -2286,6 +2287,11 @@ export default function ProspectsPage () {
   }
 
   function handleApplySuggestedFollowUp(prospect: Prospect) {
+    if (messageAssistantState.situation === "follow-up-2-days") {
+      scheduleFirstMessageFollowUp(prospect.id);
+      return;
+    }
+
     const suggestedFollowUpDays = getMessageAssistantSuggestedFollowUpDays(messageAssistantState.situation);
 
     if (suggestedFollowUpDays === null) {
@@ -2389,12 +2395,25 @@ export default function ProspectsPage () {
     }, 1800);
   }
 
+  function scheduleFirstMessageFollowUp(prospectId: string) {
+    if (messageAssistantState.situation !== "follow-up-2-days") {
+      return;
+    }
+
+    updateQuickFollowUpDate(prospectId, getFutureDateString(4), false, "Relance 4 jours");
+    setMessageAssistantState((currentState) => ({
+      ...currentState,
+      suggestedFollowUpAppliedProspectId: prospectId,
+    }));
+  }
+
   async function handleCopyProspectMessage(prospectId: string) {
     if (!messageAssistantState.generatedMessage || !navigator.clipboard?.writeText) {
       return;
     }
 
     await navigator.clipboard.writeText(getGeneratedMessageForProspect(prospectId));
+    scheduleFirstMessageFollowUp(prospectId);
     setMessageAssistantState((currentState) => ({
       ...currentState,
       copiedProspectId: prospectId,

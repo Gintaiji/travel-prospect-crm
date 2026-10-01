@@ -83,11 +83,11 @@ export function replaceMessageVariables(template: string, prospect: Prospect) {
 export const FOLLOW_UP_MESSAGE_TEMPLATES: FollowUpMessageTemplate[] = [
   {
     id: "follow-up-2-days",
-    title: "Relance 2 jours",
-    followUpDays: 2,
+    title: "Premier message",
+    followUpDays: 4,
     message:
       "Bonjour {{prenom}}, c’est {{nom_affiche}}.\n\nJe reviens vers vous comme convenu, suite à notre échange à {{lieu de rencontre}}.\n\nVous aviez évoqué le fait que vous étiez ouvert à des possibilités de projet professionnel. Est-ce que c’est toujours d’actualité pour vous ?",
-    nextAction: "Relance 2 jours",
+    nextAction: "Relance 4 jours",
     suggestedStatus: "À relancer",
   },
   {
@@ -107,23 +107,5 @@ export const FOLLOW_UP_MESSAGE_TEMPLATES: FollowUpMessageTemplate[] = [
       "Bonjour {{prenom}}, c’est {{nom_affiche}}.\n\nJe me permets de vous envoyer ce petit message car je suis actuellement en plein développement de mon activité et je souhaitais vous poser une petite question.\n\nEst-ce que vous connaissez quelqu’un qui adore voyager, mais qui trouve que les voyages coûtent de plus en plus cher, et qui aimerait pouvoir partir plus souvent sans augmenter son budget ?\n\nSi quelqu’un vous vient en tête, sentez-vous libre de me le dire. Sinon, aucun problème.",
     nextAction: "Relance 30 jours",
     suggestedStatus: "À relancer",
-  },
-  {
-    id: "first-follow-up",
-    title: "Premier message voyage",
-    followUpDays: null,
-    message:
-      "Bonjour {{prenom}},\n\nC’est {{nom_affiche}}, nous avons échangé aujourd’hui à {{lieu de rencontre}}, notamment autour du voyage.\n\nJ’ai beaucoup apprécié notre échange. Comme je vous l’expliquais, j’utilise personnellement un service qui me permet de faire des économies sur mes déplacements et mes vacances, et que je partage autour de moi lorsque je pense qu’il peut être utile.\n\nVous sembliez intéressé(e) par le sujet, alors je souhaitais simplement revenir vers vous comme convenu et savoir si vous seriez toujours ouvert(e) à découvrir plus concrètement son fonctionnement.\n\nSi c’est le cas, nous pourrons prendre quelques minutes pour en discuter tranquillement et voir si cela pourrait correspondre à votre façon de voyager.\n\nSentez-vous libre de me transmettre vos disponibilités afin que nous puissions convenir d’un créneau qui vous convient.\n\nBien cordialement,\n{{nom_affiche}}",
-    nextAction: "",
-    suggestedStatus: null,
-  },
-  {
-    id: "first-business-message",
-    title: "Premier message business",
-    followUpDays: null,
-    message:
-      "Bonjour {{prenom}},\n\nC’est {{nom_affiche}}, nous avons échangé aujourd’hui à {{lieu de rencontre}}, notamment autour de vos projets et de votre situation professionnelle.\n\nJ’ai beaucoup apprécié notre échange. Comme je vous l’expliquais, je développe actuellement un projet autour du voyage, avec une dimension entrepreneuriale, que je partage lorsque je rencontre des personnes ouvertes à découvrir de nouvelles possibilités professionnelles.\n\nVous sembliez intéressé(e) par le sujet, alors je souhaitais simplement revenir vers vous comme convenu et savoir si vous seriez toujours ouvert(e) à découvrir plus concrètement le fonctionnement du projet.\n\nSi c’est le cas, nous pourrons prendre quelques minutes pour en discuter tranquillement, mieux comprendre ce que vous recherchez aujourd’hui et voir si cette opportunité pourrait avoir du sens pour vous.\n\nSentez-vous libre de me transmettre vos disponibilités afin que nous puissions convenir d’un créneau qui vous convient.\n\nBien cordialement,\n\n{{nom_affiche}}",
-    nextAction: "",
-    suggestedStatus: null,
   },
 ];

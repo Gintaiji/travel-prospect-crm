@@ -10,7 +10,12 @@ const CUSTOM_MESSAGE_TEMPLATES_STORAGE_KEY =
 export type CustomMessageTemplates = Partial<Record<FollowUpMessageTemplateId, string>>;
 
 const allowedTemplateIds = new Set<FollowUpMessageTemplateId>(
-  FOLLOW_UP_MESSAGE_TEMPLATES.map((template) => template.id),
+  [
+    ...FOLLOW_UP_MESSAGE_TEMPLATES.map((template) => template.id),
+    // Preserve legacy customizations without exposing them as active templates.
+    "first-follow-up",
+    "first-business-message",
+  ],
 );
 
 function normalizeFollowUp4DaysMessage(message: string) {
