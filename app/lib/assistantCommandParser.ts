@@ -380,8 +380,8 @@ function parseCreateCommand(
   }
 
   const noteMatch = /\b(?:(?:avec|ajoute) la )?notes?\s*:/i.exec(normalizedBody);
-  const details = noteMatch ? body.slice(0, noteMatch.index) : body;
-  const normalizedDetails = normalizeForDetection(details);
+  let details = noteMatch ? body.slice(0, noteMatch.index) : body;
+  let normalizedDetails = normalizeForDetection(details);
   const originalDetails = originalNote
     ? normalizeForDetection(originalText).slice(0, matchedPrefix.length + originalNote.index)
     : normalizeForDetection(originalText);
@@ -396,10 +396,51 @@ function parseCreateCommand(
     ? body.slice(noteMatch.index + noteMatch[0].length).trim()
     : "";
   const clausePattern = /\b(?:rencontree?\s+(?:a|chez)|vue?\s+a|(?:en|couleur|comme prospect)\s+(?:jaune|rouge|bleue?|verte?)|marche\s+(?:froid|tiede|chaud))\b/g;
-  const clauses = Array.from(normalizedDetails.matchAll(clausePattern));
   const cleanClauseValue = (value: string) =>
     normalizeSpaces(value.replace(/^[\s,;:.!?]+|[\s,;:.!?]+$/g, ""));
-  const rawName = cleanClauseValue(details.slice(0, clauses[0]?.index));
+  let jobTitle = "";
+  let businessArea = "";
+  // Only a clearly separated segment before CRM details can describe a job.
+  // Notes and the initial follow-up have already been isolated above.
+  const professionalStart = normalizedDetails.indexOf(",");
+  const crmBoundary = /\b(?:rencontree?|vue?|couleur|en\s+(?:jaune|rouge|bleue?|verte?)|comme prospect|marche|notes?|relance(?:-la|-le)?|a relancer|a rappeler)\b/;
+  const firstCrmClause = crmBoundary.exec(normalizedDetails);
+  if (
+    professionalStart >= 0 &&
+    (!firstCrmClause || professionalStart < firstCrmClause.index)
+  ) {
+    const segmentStart = professionalStart + 1;
+    const remaining = normalizedDetails.slice(segmentStart);
+    const segmentBoundary = /[,;]/.exec(remaining);
+    const nextCrmClause = crmBoundary.exec(remaining);
+    const segmentLength = Math.min(
+      segmentBoundary?.index ?? remaining.length,
+      nextCrmClause?.index ?? remaining.length,
+    );
+    const professionalText = cleanClauseValue(
+      details.slice(segmentStart, segmentStart + segmentLength),
+    );
+    const normalizedProfessional = normalizeForDetection(professionalText);
+    const sectorMarker = /\s+(?:dans\s+(?:(?:le|la|les)\s+|l')?|secteur\s+)/.exec(normalizedProfessional);
+    const rawJobTitle = cleanClauseValue(
+      professionalText.slice(0, sectorMarker?.index),
+    );
+    const rawBusinessArea = sectorMarker
+      ? cleanClauseValue(professionalText.slice(sectorMarker.index + sectorMarker[0].length))
+      : "";
+    const capitalizeFirstLetter = (value: string) =>
+      value.charAt(0).toUpperCase() + value.slice(1);
+    if (rawJobTitle) {
+      jobTitle = capitalizeFirstLetter(rawJobTitle);
+      if (rawBusinessArea) businessArea = capitalizeFirstLetter(rawBusinessArea);
+      details = normalizeSpaces(
+        details.slice(0, professionalStart) + " " + details.slice(segmentStart + segmentLength),
+      );
+      normalizedDetails = normalizeForDetection(details);
+    }
+  }
+  const detailClauses = Array.from(normalizedDetails.matchAll(clausePattern));
+  const rawName = cleanClauseValue(details.slice(0, detailClauses[0]?.index));
   const name = splitFirstNameAndLastName(rawName.replace(/\s+comme prospect$/i, ""));
 
   if (!name) {
@@ -409,16 +450,18 @@ function parseCreateCommand(
   const payload: Extract<AiCommand, { action: "createProspect" }>["payload"] = {
     firstName: name.firstName,
     ...(name.lastName ? { lastName: name.lastName } : {}),
+    ...(jobTitle ? { jobTitle } : {}),
+    ...(businessArea ? { businessArea } : {}),
     ...(notes ? { notes } : {}),
     ...(nextActionDate ? { nextActionDate } : {}),
   };
 
-  for (const [index, clause] of clauses.entries()) {
+  for (const [index, clause] of detailClauses.entries()) {
     const marker = clause[0];
     if (/^(?:rencontree?|vue?)\s/.test(marker)) {
       const meetingPlace = cleanClauseValue(details.slice(
         clause.index + marker.length,
-        clauses[index + 1]?.index,
+        detailClauses[index + 1]?.index,
       ));
       if (meetingPlace) payload.meetingPlace = meetingPlace;
     } else if (marker.startsWith("marche ")) {
@@ -431,7 +474,7 @@ function parseCreateCommand(
   }
 
   // Preserve the existing simple trailing-color formulation ("Ajoute Paul jaune").
-  if (clauses.length === 0) {
+  if (detailClauses.length === 0 && !jobTitle) {
     const colorWord = getColorMatch(normalizedDetails);
     const trailingColor = details.match(/\s+(jaune|rouge|bleu|vert|verte)[\s.!?]*$/i);
     if (colorWord && trailingColor) {
