@@ -19,6 +19,8 @@ const createProspectPayloadKeys = [
   "firstName",
   "lastName",
   "meetingPlace",
+  "jobTitle",
+  "businessArea",
   "phone",
   "whatsapp",
   "email",
@@ -181,6 +183,10 @@ function isCreateProspectPayload(value: unknown) {
   }
 
   return Object.entries(value).every(([key, fieldValue]) => {
+    if (key === "jobTitle" || key === "businessArea") {
+      return isNonEmptyString(fieldValue);
+    }
+
     if (
       key === "firstName" ||
       key === "lastName" ||

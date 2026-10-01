@@ -59,6 +59,8 @@ export type CreateProspectPayload = Pick<Prospect, "firstName"> &
       Prospect,
       | "lastName"
       | "meetingPlace"
+      | "jobTitle"
+      | "businessArea"
       | "phone"
       | "whatsapp"
       | "email"
