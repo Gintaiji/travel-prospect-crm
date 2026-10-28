@@ -1,4 +1,4 @@
-import { calculateProspectScore, formatLocalDate } from "./prospectUtils";
+import { calculateProspectScore, getFutureDateString } from "./prospectUtils";
 import { createProspectId } from "./prospectStorage";
 import type { Prospect } from "./types";
 
@@ -168,10 +168,8 @@ export function createProspectFromInput(
 }
 
 export function scheduleProspectFirstContact(prospect: Prospect, now = new Date()): Prospect {
-  const scheduledAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
   return {
-    ...updateProspectNextActionDate(prospect, formatLocalDate(scheduledAt), now.toISOString()),
-    nextAction: "Premier contact",
-    nextActionAt: scheduledAt.toISOString(),
+    ...updateProspectNextActionDate(prospect, getFutureDateString(4), now.toISOString()),
+    nextAction: "Relance après premier contact",
   };
 }
