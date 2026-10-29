@@ -45,6 +45,7 @@ export type ResourceImportPreview = Readonly<{
   categories: readonly string[];
   resources: readonly Resource[];
   safetyJson: string;
+  replacementAllowed: boolean;
 }>;
 
 /** Explicit, resource-only backup/import. No legacy storage reads, auth calls, or migration. */
@@ -52,6 +53,8 @@ export function createResourceBackupJson(dependencies: {
   enabled: boolean;
   store: UserSessionStore;
   withExclusiveLock: <T>(operation: () => Promise<T>) => Promise<T>;
+  /** Stay blocked until EVERY isolated resource writer participates in the same lock. */
+  replacementPolicy?: "blocked" | "coordinated";
 }) {
   type Operation = Awaited<ReturnType<UserSessionStore["beginOperation"]>>;
   const previews = new WeakMap<ResourceImportPreview, { operation: Operation; before: string | null; candidate: string }>();
@@ -73,9 +76,14 @@ export function createResourceBackupJson(dependencies: {
     const parsed = parseResourceBackup(json);
     const op = await dependencies.store.beginOperation(capture);
     if (parsed.ownerUserId !== null && parsed.ownerUserId !== op.userId) throw new Error("Cette sauvegarde appartient à un autre compte. Chargement refusé.");
+    const before = dependencies.store.scopedStorage.read(op.owner, "resources");
     const result = op.business.loadResources();
     if (result.status === "migration-required") throw new Error("Migration nécessaire");
-    const before = dependencies.store.scopedStorage.read(op.owner, "resources");
+    if (dependencies.store.scopedStorage.read(op.owner, "resources") !== before ||
+      (before === null ? result.status !== "absent" : result.status !== "available" ||
+        JSON.stringify(result.data) !== JSON.stringify(JSON.parse(before)))) {
+      throw new Error("Destination instable pendant l’aperçu. Recommencez.");
+    }
     const candidate = JSON.stringify(parsed.resources);
     const safetyJson = JSON.stringify({
       ...resourceEnvelope(op.userId, result.status === "available" ? result.data : []),
@@ -88,6 +96,7 @@ export function createResourceBackupJson(dependencies: {
       userId: op.userId, sourceOwnerUserId: parsed.ownerUserId, sourceCount: parsed.resources.length,
       destinationCount: result.status === "available" ? result.data.length : null,
       categories: Object.freeze(parsed.categories), resources: Object.freeze(JSON.parse(candidate)) as Resource[], safetyJson,
+      replacementAllowed: dependencies.replacementPolicy === "coordinated",
     });
     previews.set(output, { operation: op, before, candidate });
     return output;
@@ -106,6 +115,9 @@ export function createResourceBackupJson(dependencies: {
     if (!captured || confirmation.ownerUserId !== preview.userId || !confirmation.ownershipCertain ||
       (preview.sourceOwnerUserId === null && !confirmation.legacyOwnershipVerified)) throw new Error("Propriétaire incertain : chargement refusé.");
     if (!confirmation.previewReviewed || !confirmation.safetyBackupSaved) throw new Error("Aperçu et sauvegarde préalable obligatoires.");
+    if (captured.before !== null && dependencies.replacementPolicy !== "coordinated") {
+      throw new Error("Destination existante : remplacement bloqué tant que tous les écrivains Ressources ne partagent pas le verrou sécurisé.");
+    }
     if (captured.before !== null && !confirmation.replaceExisting) throw new Error("Destination existante : remplacement non autorisé.");
     return dependencies.withExclusiveLock(async () => {
       const { operation: op, before, candidate } = captured;

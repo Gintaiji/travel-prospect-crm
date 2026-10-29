@@ -107,9 +107,10 @@ function ResourceJsonBackupContent() {
         download(preview.safetyJson, `travel-prospect-crm-avant-chargement-${preview.userId}.json`); setDownloaded(true);
       }}>Télécharger la sauvegarde préalable de la destination</button>
       <label><input type="checkbox" disabled={!downloaded} checked={saved} onChange={event => setSaved(event.target.checked)} /> J’ai enregistré et vérifié cette sauvegarde préalable.</label>
-      {preview.destinationCount !== null && <label><input type="checkbox" checked={replace} onChange={event => setReplace(event.target.checked)} /> J’autorise explicitement le remplacement de la destination sauvegardée.</label>}
+      {preview.destinationCount !== null && <label><input type="checkbox" disabled={!preview.replacementAllowed} checked={replace} onChange={event => setReplace(event.target.checked)} /> J’autorise explicitement le remplacement de la destination sauvegardée.</label>}
+      {preview.destinationCount !== null && !preview.replacementAllowed && <p className="text-amber-100">Destination déjà présente : remplacement bloqué à cette étape. La coordination de toutes les écritures Ressources doit être préparée avant de le permettre.</p>}
       <button type="button" className={buttonClass} disabled={busy || !reviewed || !certain || ownerId !== preview.userId || !downloaded || !saved ||
-        (preview.sourceOwnerUserId === null && !legacyVerified) || (preview.destinationCount !== null && !replace)} onClick={() => void apply()}>Charger uniquement les ressources après vérification</button>
+        (preview.sourceOwnerUserId === null && !legacyVerified) || (preview.destinationCount !== null && (!replace || !preview.replacementAllowed))} onClick={() => void apply()}>Charger uniquement les ressources après vérification</button>
     </>}
     {message && <p role="status" className="text-amber-100">{message}</p>}
   </div>;

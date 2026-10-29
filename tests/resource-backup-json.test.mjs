@@ -32,7 +32,7 @@ const historical = { appName: "Travel Prospect CRM", version: 4, exportedAt: "20
 const confirmation = id => ({ ownerUserId: id, ownershipCertain: true, legacyOwnershipVerified: true,
   previewReviewed: true, safetyBackupSaved: true, replaceExisting: true });
 const plain = value => JSON.parse(JSON.stringify(value));
-function fixture(enabled = true) {
+function fixture(enabled = true, replacementPolicy = "coordinated") {
   const data = new Map([["travel-prospect-crm-resources", "legacy untouched"]]);
   let session = { userId: A, generation: 1 }, ownerPromise;
   let failWrite = () => false;
@@ -55,7 +55,9 @@ function fixture(enabled = true) {
     const owner = await ownerPromise; assertCurrent(captured);
     return { ...captured, owner, business: business.forOwner(owner), assertCurrent: () => assertCurrent(captured) };
   } };
-  const api = createResourceBackupJson({ enabled, store, withExclusiveLock: operation => lock(operation) });
+  // Positive replacement tests simulate the future coordinated writer environment.
+  // The production panel deliberately does NOT opt in to this policy.
+  const api = createResourceBackupJson({ enabled, store, replacementPolicy, withExclusiveLock: operation => lock(operation) });
   return { api, store, data, capture: () => ({ ...session }), counts: () => ({ reads, writes }),
     switchUser(userId) { session = { userId, generation: session.generation + 1 }; ownerPromise = null; },
     setLock(fn) { lock = fn; }, fail(fn) { failWrite = fn; },
@@ -125,6 +127,14 @@ for (const version of [1, 2, 3, 4]) {
   assert.equal(JSON.parse(s.data.get(key(A, "resource-import-journal"))).length, 2);
 }
 // Destination changes after preview cannot be overwritten, even with old consent.
+{
+  const s = fixture(true, "blocked"); s.seed(A);
+  const p = await s.api.preview(JSON.stringify(historical), s.capture());
+  const before = [...s.data];
+  assert.equal(p.replacementAllowed, false);
+  await assert.rejects(s.api.apply(p, confirmation(A)), /remplacement bloqué/);
+  assert.deepEqual([...s.data], before);
+}
 {
   const s = fixture(); s.seed(A); const p = await s.api.preview(JSON.stringify(historical), s.capture());
   s.data.set(key(A, "resources"), JSON.stringify([resource("concurrent", "Newer")]));
