@@ -4,6 +4,7 @@ import { CLOUD_SYNC_SUSPENDED, CLOUD_SYNC_SUSPENSION_MESSAGE } from "../lib/clou
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import AppVersionChecker from "../components/AppVersionChecker";
+import LocalDataMigration from "../components/LocalDataMigration";
 import {
   loadLastBackupDate,
   saveLastBackupDate,
@@ -720,6 +721,7 @@ export default function BackupPage() {
         </header>
 
         <div className="grid gap-5">
+          <LocalDataMigration />
           <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
             <h2 className="text-xl font-bold text-white">Résumé des données</h2>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
