@@ -95,6 +95,7 @@ for (const isolated of [false, true]) {
   const access = { status: "available", resources: [fixtureResource("Private resource")],
     assertCurrent() { if (!valid) throw new Error("stale"); }, isCurrent: () => valid };
   const views = compile("app/components/PreparedResourceViews.tsx", {
+    "./ResourceAccountInitialization": { default: "initialization" },
     react: h.react, "react/jsx-runtime": jsx,
     "./UserSessionProvider": { AccountSessionBoundary: "boundary" },
     "../hooks/usePreparedResources": { usePreparedResources: () => ({ state: access }) },

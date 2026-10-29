@@ -13,6 +13,9 @@ export type AvailableResources = {
   isCurrent: () => boolean;
 };
 export type ResourceAccessResult = AvailableResources | {
+  status: "fresh-account";
+  label: "Compte neuf sans données";
+} | {
   status: "recovery-required";
   label: string;
 } | {
@@ -48,6 +51,7 @@ export function createResourceAccess(dependencies: {
     }
     operation.assertCurrent();
     const result = snapshot.result;
+    if (result.status === "fresh-account") return result;
     if (result.status === "migration-required") return { status: "migration-required", label: "Migration nécessaire" };
     if (result.status === "absent") return {
       status: "absent", label: "Données Ressources absentes du stockage isolé. Vérification manuelle nécessaire.",

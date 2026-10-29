@@ -13,6 +13,8 @@ export type AccountBusinessData = {
   "street-marketing-survey": StreetMarketingSurveyStorage;
 };
 export type BusinessDataName = keyof AccountBusinessData;
+export type FreshResourceAccount = { status: "fresh-account"; label: "Compte neuf sans données" };
+type ResourceReadResult = BusinessReadResult<Resource[]> | FreshResourceAccount;
 type ScopedStorage = ReturnType<typeof createAccountScopedStorage>;
 
 export type MigrationRequired = {
@@ -91,12 +93,25 @@ export function createAccountBusinessStorage(scoped: ScopedStorage, options: { r
       return { status: "available", label: "Données disponibles", userId: owner.userId, verifiedAt: state.verifiedAt };
     }
 
+    // Resource-only readiness. Never marks the other business categories migrated.
+    function getResourceStatus(): BusinessStorageStatus | FreshResourceAccount {
+      if (scoped.read(owner, "migration-state") !== null) return getStatus();
+      const journalRaw = scoped.read(owner, "resource-import-journal");
+      if (journalRaw === null) return scoped.isAccountEmpty(owner)
+        ? { status: "fresh-account", label: "Compte neuf sans données" } : migrationRequired("missing");
+      // Callers publishing data hold the lock and have already audited the whole journal.
+      const first = (JSON.parse(journalRaw) as Record<string, unknown>[])[0];
+      if (first?.kind !== "initialization" || first.userId !== owner.userId || first.beforeRaw !== null || first.candidateRaw !== "[]") return migrationRequired("missing");
+      const state = JSON.parse(scoped.read(owner, "resource-import-state")!) as { verifiedAt: string };
+      return { status: "available", label: "Données disponibles", userId: owner.userId, verifiedAt: state.verifiedAt };
+    }
+
     /** Capture parsed data and its exact write baseline together, never by later unlocked reads. */
-    function loadResourceSnapshot(): Promise<{ result: BusinessReadResult<Resource[]>; raw: string | null }> {
+    function loadResourceSnapshot(): Promise<{ result: ResourceReadResult; raw: string | null }> {
       return coordinateResourceRead({ scoped, owner, locks: options.resourceLocks, read: () => {
-        const status = getStatus();
-        if (status.status !== "available") return { result: status, raw: null };
         assertResourceRecoveryClear(scoped, owner);
+        const status = getResourceStatus();
+        if (status.status !== "available") return { result: status, raw: null };
         const raw = scoped.read(owner, "resources");
         if (raw === null) {
           resourceReadSnapshot = null;
@@ -109,8 +124,8 @@ export function createAccountBusinessStorage(scoped: ScopedStorage, options: { r
       } });
     }
 
-    function read<K extends BusinessDataName>(name: K): K extends "resources" ? Promise<BusinessReadResult<AccountBusinessData[K]>> : BusinessReadResult<AccountBusinessData[K]>;
-    function read(name: BusinessDataName): BusinessReadResult<AccountBusinessData[BusinessDataName]> | Promise<BusinessReadResult<Resource[]>> {
+    function read<K extends BusinessDataName>(name: K): K extends "resources" ? Promise<ResourceReadResult> : BusinessReadResult<AccountBusinessData[K]>;
+    function read(name: BusinessDataName): BusinessReadResult<AccountBusinessData[BusinessDataName]> | Promise<ResourceReadResult> {
       if (!names.has(name)) throw new Error("Nom de données métier inconnu.");
       if (name === "resources") return loadResourceSnapshot().then(snapshot => snapshot.result);
       const status = getStatus();
@@ -126,14 +141,14 @@ export function createAccountBusinessStorage(scoped: ScopedStorage, options: { r
     function write<K extends BusinessDataName>(name: K, value: AccountBusinessData[K], expectedRaw?: string | null): K extends "resources" ? Promise<void> : void;
     function write(name: BusinessDataName, value: AccountBusinessData[BusinessDataName], expectedRaw?: string | null): void | Promise<void> {
       if (!names.has(name)) throw new Error("Nom de données métier inconnu.");
-      const status = getStatus();
-      if (status.status !== "available") throw new Error(`${status.label} : écriture refusée (${status.reason}).`);
+      const status = name === "resources" ? getResourceStatus() : getStatus();
+      if (status.status !== "available") throw new Error(`${status.label} : écriture refusée (${status.status === "migration-required" ? status.reason : "initialisation nécessaire"}).`);
       assertBusinessShape(name, value);
       const raw = JSON.stringify(value);
       // Serialization may invoke application getters/toJSON. Recheck both the marker
       // and owner afterwards, and validate the actual value that will be stored.
       assertBusinessShape(name, JSON.parse(raw));
-      const current = getStatus();
+      const current = name === "resources" ? getResourceStatus() : getStatus();
       if (current.status !== "available") throw new Error("Migration nécessaire : écriture refusée.");
       if (name === "resources") {
         // Recovery is checked by the coordinator AFTER acquiring the lock, not here:
@@ -143,7 +158,7 @@ export function createAccountBusinessStorage(scoped: ScopedStorage, options: { r
         return coordinateResourceWrite({
         scoped, owner, expectedRaw: baseline,
         candidateRaw: raw, kind: "edit", locks: options.resourceLocks,
-        preflight: () => { if (getStatus().status !== "available") throw new Error("Migration nécessaire."); },
+        preflight: () => { if (getResourceStatus().status !== "available") throw new Error("Migration nécessaire."); },
         }).then(() => { resourceReadSnapshot = raw; });
       }
       // Other categories keep their original synchronous write path.
@@ -152,7 +167,7 @@ export function createAccountBusinessStorage(scoped: ScopedStorage, options: { r
 
     getStatus(); // Fail immediately for a forged, missing, or stale owner token.
     return Object.freeze({
-      getStatus, read, write, loadResourceSnapshot,
+      getStatus, getResourceStatus, read, write, loadResourceSnapshot,
       loadProspects: () => read("prospects"),
       saveProspects: (value: Prospect[]) => write("prospects", value),
       loadResources: () => read("resources"),

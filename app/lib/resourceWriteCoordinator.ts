@@ -6,6 +6,7 @@ export type ResourceLockManager = {
 };
 export type ResourceWritePermit = Readonly<{ userId: string }>;
 type Scoped = {
+  isAccountEmpty?(owner: ValidatedStorageOwner): boolean;
   read(owner: ValidatedStorageOwner, name: AccountStorageName): string | null;
   write(owner: ValidatedStorageOwner, name: AccountStorageName, raw: string, permit?: ResourceWritePermit): void;
 };
@@ -41,6 +42,7 @@ export function assertResourceRecoveryClear(scoped: Scoped, owner: ValidatedStor
       (entry.beforeRaw !== null && typeof entry.beforeRaw !== "string") ||
       (entry.candidateRaw !== null && typeof entry.candidateRaw !== "string")) fail("journal incohérent ou propriétaire incorrect");
     if (typeof entry.createdAt !== "string" || !Number.isFinite(Date.parse(entry.createdAt))) fail("date du journal invalide");
+    if (entry.kind === "initialization" && (ids.size !== 0 || entry.beforeRaw !== null || entry.candidateRaw !== "[]")) fail("journal d’initialisation invalide");
     if (!validRecoveryStage(entry, owner.userId)) fail("préparation de récupération invalide");
     for (const raw of [entry.beforeRaw, entry.candidateRaw]) {
       if (raw !== null) {
@@ -112,7 +114,8 @@ export async function coordinateResourceWrite(options: {
   owner: ValidatedStorageOwner;
   expectedRaw: string | null;
   candidateRaw: string | null;
-  kind: "edit" | "import" | "migration" | "recovery";
+  kind: "edit" | "import" | "migration" | "recovery" | "initialization";
+  initialization?: { enabled: boolean; confirmed: boolean; ownerUserId: string };
   /** Explicit fixture/activation injection; recovery is refused by default here too. */
   manualRecoveryEnabled?: boolean;
   recovery?: { diagnosticJson: string; verifiedBackupJson: string; operationId: string; side: "beforeRaw" | "candidateRaw"; confirmedOwnerUserId: string; previewReviewed: boolean };
@@ -123,6 +126,8 @@ export async function coordinateResourceWrite(options: {
   work?: () => Promise<void> | void;
 }) {
   const { scoped, owner, expectedRaw, candidateRaw } = options;
+  if (options.kind === "initialization" && (!options.initialization?.enabled || !options.initialization.confirmed ||
+    options.initialization.ownerUserId !== owner.userId || expectedRaw !== null || candidateRaw !== "[]")) throw new Error("Initialisation refusée : activation et confirmation du propriétaire obligatoires.");
   if (options.kind === "recovery" && options.manualRecoveryEnabled !== true) throw new Error("Récupération manuelle désactivée dans le coordinateur.");
   // Capture before waiting. No lock is ever implemented through a localStorage key.
   scoped.read(owner, "resources");
@@ -146,6 +151,7 @@ export async function coordinateResourceWrite(options: {
     }
     if (scoped.read(owner, "resources") !== expectedRaw) throw new Error("Conflit Ressources : destination modifiée depuis la lecture. Rechargez avant de recommencer.");
     options.preflight?.();
+    if (options.kind === "initialization" && scoped.isAccountEmpty?.(owner) !== true) throw new Error("Initialisation refusée : destination isolée existante. Aucune donnée remplacée.");
     const permit = Object.freeze({ userId: owner.userId });
     permits.set(permit, { scoped, owner });
     try {

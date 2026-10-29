@@ -9,6 +9,7 @@ const resolve = createRequire(import.meta.url).resolve;
 const allowed = new Set([
   "app/ressources/page", "app/components/UserSessionProvider", "app/components/PreparedResourceViews",
   "app/components/ResourceJsonBackupPanel", "app/components/ResourceManualRecoveryPanel", "app/components/LocalDataMigration",
+  "app/components/ResourceAccountInitialization", "app/lib/resourceAccountInitialization",
   "app/hooks/usePreparedResources", "app/lib/accountScopedStorage", "app/lib/accountBusinessStorage",
   "app/lib/resourceAccess", "app/lib/resourceStorage", "app/lib/resourceValidation", "app/lib/resourceWriteCoordinator",
   "app/lib/resourceRecoveryAssessment", "app/lib/resourceBackupJson", "app/lib/legacyDataMigration", "app/lib/types",

@@ -4,6 +4,7 @@ const React = require("react"), { createRoot } = require("react-dom/client");
 const { createUserSessionStore } = require("app/lib/userSessionStore");
 const { createResourceBackupJson } = require("app/lib/resourceBackupJson");
 const { createResourceAccess } = require("app/lib/resourceAccess");
+const { createResourceAccountInitialization } = require("app/lib/resourceAccountInitialization");
 const A = "11111111-1111-4111-8111-111111111111", B = "22222222-2222-4222-8222-222222222222";
 const namespace = new URL(location.href).searchParams.get("namespace");
 if (!/^e2e-[a-z0-9-]+$/.test(namespace ?? "")) throw Error("Dedicated namespace required");
@@ -66,6 +67,7 @@ globalThis.chainRecipe = {
   physicalKeys: () => Object.keys(nativeStorage),
   session: () => store.getSnapshot(),
   async exportJson() { return backup.exportResources(capture()); },
+  async initialize() { return createResourceAccountInitialization({ enabled: true, store }).initialize(capture(), { ownerUserId: capture().userId, emptySpaceConfirmed: true }); },
   async importJson(json) {
     const p = await backup.preview(json, capture());
     // API policy activation is explicit in this fixture. UI replacement remains blocked by default.

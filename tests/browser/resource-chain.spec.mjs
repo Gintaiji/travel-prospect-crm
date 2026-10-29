@@ -65,7 +65,7 @@ async function add(page, title) {
 }
 test("chaîne React réelle : migration, CRUD, A/logout/B/A, JSON, interruption et récupération", async ({ chain }, info) => {
   const { page, initial } = chain;
-  await expect(page.locator("#resource-page")).toContainText("Migration nécessaire");
+  await expect(page.locator("#resource-page")).toContainText("Compte neuf sans données");
   const pre = await call(page, "snapshot");
   expect(pre[key(A, "resources")]).toBeUndefined(); // No implicit migration after sign-in.
   await migrate(page, info);
@@ -158,18 +158,71 @@ test("échec de lecture : erreur visible distincte de récupération, aucun effa
 });
 test.describe("compte B sans préparation préalable", () => {
   test.use({ freshB: true });
-  test("limite d’activation : B reste sans parcours d’initialisation après réservation de A", async ({ chain }, info) => {
+  test("B initialise volontairement un espace vide sans reprendre les données réservées à A", async ({ chain }, info) => {
     const { page } = chain; await migrate(page, info); const before = await call(page, "snapshot");
     await call(page, "signIn", B); await expect.poll(async () => (await call(page, "session")).userId).toBe(B);
-    await expect(page.locator("#resource-page")).toContainText("Migration nécessaire");
+    await expect(page.locator("#resource-page")).toContainText("Compte neuf sans données");
     await expect(page.locator("#resource-page article")).toHaveCount(0);
     await page.locator("#migration").getByRole("button", { name: "Afficher l’aperçu sans modification" }).click();
     await expect(page.locator("#migration").getByRole("status")).toContainText("migration réservée");
-    const after = await call(page, "snapshot");
-    expect(after[key(B, "migration-state")]).toBeUndefined(); expect(after[key(B, "resources")]).toBeUndefined();
-    expect(after[key(A, "resources")]).toBe(before[key(A, "resources")]);
-    await page.screenshot({ path: info.outputPath("fresh-B-blocked.png"), fullPage: true });
-    await info.attach("activation-limitation.txt", { contentType: "text/plain", body: Buffer.from("B neuf ne peut pas créer de ressources : migration-state absent et jeu historique déjà réservé à A. Aucun correctif applicatif effectué.") });
+    const initialization = page.getByRole("region", { name: "Initialisation Ressources" });
+    await expect(initialization.getByRole("button", { name: "Initialiser mes ressources" })).toBeDisabled();
+    await initialization.getByLabel("Confirmez votre user.id pour initialiser").fill(B);
+    await initialization.getByLabel("Je demande un espace Ressources vide pour ce compte.").check();
+    await initialization.getByRole("button", { name: "Initialiser mes ressources" }).click();
+    await expect(page.locator("#resource-page").getByRole("button", { name: "Ajouter la ressource", exact: true })).toBeVisible();
+    let after = await call(page, "snapshot");
+    expect(after[key(B, "migration-state")]).toBeUndefined(); expect(after[key(B, "resources")]).toBe("[]");
+    expect(after["travel-prospect-crm:legacy-migration:v1"]).toBe(before["travel-prospect-crm:legacy-migration:v1"]);
+    expect(after["travel-prospect-crm-resources"]).toBe(before["travel-prospect-crm-resources"]);
+    expect(JSON.parse(after[key(B, "resource-import-journal")])[0].kind).toBe("initialization");
+    await add(page, "B-initialized"); after = await call(page, "snapshot");
+    await expect(call(page, "initialize")).rejects.toThrow(); expect(await call(page, "snapshot")).toEqual(after);
+    await call(page, "signIn", A); await expect(page.locator("#resource-page article")).toHaveCount(1);
+    expect((await call(page, "snapshot"))[key(A, "resources")]).toBe(before[key(A, "resources")]);
+    await page.screenshot({ path: info.outputPath("fresh-B-initialized-A-preserved.png"), fullPage: true });
+  });
+  test("initialisation interrompue : récupération nécessaire et diagnostic existant", async ({ chain }, info) => {
+    const { page } = chain;
+    await call(page, "signIn", B); await expect.poll(async () => (await call(page, "session")).userId).toBe(B);
+    await call(page, "fault", "verified"); await expect(call(page, "initialize")).rejects.toThrow(/Récupération nécessaire/);
+    await page.reload(); await expect(page.locator("#resource-page")).toContainText("Récupération nécessaire");
+    await expect(page.getByRole("button", { name: "Initialiser mes ressources" })).toHaveCount(0);
+    const file = await download(page, page.getByRole("button", { name: "Exporter un diagnostic local sans modifier les données" }), info, "interrupted-initialization.json");
+    const d = JSON.parse(fs.readFileSync(file, "utf8")); expect(d.status).toBe("recovery-required");
+    expect(JSON.parse(d.rawJournal)[0].kind).toBe("initialization"); expect(d.rawResources).toBe("[]"); expect(d.rawMigrationState).toBeNull();
+    const before = await call(page, "snapshot"); await expect(call(page, "initialize")).rejects.toThrow(); expect(await call(page, "snapshot")).toEqual(before);
+  });
+  test("deux onglets initialisent B : un succès, un refus sans écrasement", async ({ chain }) => {
+    const { page, context, url } = chain;
+    await call(page, "signIn", B); await expect.poll(async () => (await call(page, "session")).userId).toBe(B);
+    const two = await context.newPage(); await two.goto(url); await expect(two.locator("html")).toHaveAttribute("data-chain-ready", "true");
+    await expect.poll(async () => (await call(two, "session")).userId).toBe(B);
+    const results = await Promise.allSettled([call(page, "initialize"), call(two, "initialize")]);
+    expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1); expect(results.filter(r => r.status === "rejected")).toHaveLength(1);
+    const after = await call(page, "snapshot"); expect(after[key(B, "resources")]).toBe("[]");
+    expect(JSON.parse(after[key(B, "resource-import-journal")])).toHaveLength(1);
+  });
+  test("initialisation en attente puis changement B vers A : aucune écriture isolée", async ({ chain }) => {
+    const { page, context, url } = chain;
+    await call(page, "signIn", B); await expect.poll(async () => (await call(page, "session")).userId).toBe(B);
+    const two = await context.newPage(); await two.goto(url); await expect(two.locator("html")).toHaveAttribute("data-chain-ready", "true");
+    await two.evaluate(userId => new Promise(entered => {
+      void navigator.locks.request(`travel-prospect-crm:resource-write:v1:${userId}`, { mode: "exclusive" }, async () => {
+        entered(); await new Promise(resolve => { window.releaseInitializationLock = resolve; });
+      });
+    }), B);
+    const before = await call(page, "snapshot");
+    await page.evaluate(() => {
+      window.chainRecipe.initializationJob = { status: "pending" };
+      void window.chainRecipe.initialize().then(() => { window.chainRecipe.initializationJob = { status: "fulfilled" }; })
+        .catch(error => { window.chainRecipe.initializationJob = { status: "rejected", error: error.message }; });
+    });
+    await expect.poll(async () => page.evaluate(async () => (await navigator.locks.query()).pending.length)).toBeGreaterThan(0);
+    await call(page, "signIn", A); await expect.poll(async () => (await call(page, "session")).userId).toBe(A);
+    await two.evaluate(() => window.releaseInitializationLock());
+    await expect.poll(() => page.evaluate(() => window.chainRecipe.initializationJob.status)).toBe("rejected");
+    const after = await call(page, "snapshot"); delete before["fake-auth"]; delete after["fake-auth"]; expect(after).toEqual(before);
   });
 });
 test.describe("import JSON autorisé vers une destination absente vérifiée", () => {

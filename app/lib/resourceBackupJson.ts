@@ -81,7 +81,7 @@ export function createResourceBackupJson(dependencies: {
     enabled();
     const op = await dependencies.store.beginOperation(capture);
     const result = await op.business.loadResources();
-    if (result.status !== "available") throw new Error(result.status === "migration-required" ? "Migration nécessaire" : "Ressources absentes : aucune liste vide inventée.");
+    if (result.status !== "available") throw new Error(result.status === "fresh-account" ? "Compte neuf sans données : initialisation explicite nécessaire." : result.status === "migration-required" ? "Migration nécessaire" : "Ressources absentes : aucune liste vide inventée.");
     assertResources(result.data); op.assertCurrent();
     return JSON.stringify(resourceEnvelope(op.userId, result.data), null, 2);
   }
@@ -93,6 +93,7 @@ export function createResourceBackupJson(dependencies: {
     const { raw: before, result } = await op.business.loadResourceSnapshot();
     op.assertCurrent();
     if (result.status === "migration-required") throw new Error("Migration nécessaire");
+    if (result.status === "fresh-account") throw new Error("Compte neuf sans données : initialisation explicite nécessaire.");
     const candidate = JSON.stringify(parsed.resources);
     const safetyJson = JSON.stringify({
       ...resourceEnvelope(op.userId, result.status === "available" ? result.data : []),
@@ -134,7 +135,7 @@ export function createResourceBackupJson(dependencies: {
       kind: "import", locks: dependencies.resourceLocks, sourceOwnerUserId: preview.sourceOwnerUserId,
       preflight: () => {
         op.assertCurrent();
-        if (op.business.getStatus().status !== "available") throw new Error("Migration nécessaire");
+        if (op.business.getResourceStatus().status !== "available") throw new Error("Migration nécessaire");
       },
     });
     op.assertCurrent(); previews.delete(preview);

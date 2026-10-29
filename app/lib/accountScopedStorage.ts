@@ -111,6 +111,10 @@ export function createAccountScopedStorage(dependencies: Dependencies) {
     validateOwner,
     /** Explicit invalidation affects capabilities only; never removes stored data. */
     invalidateSession() { epoch += 1; },
+    /** Explicit allowlist only; never enumerates storage or reads shared/foreign keys. */
+    isAccountEmpty(owner: ValidatedStorageOwner): boolean {
+      return ACCOUNT_STORAGE_NAMES.map(name => api.read(owner, name)).every(raw => raw === null);
+    },
     read(owner: ValidatedStorageOwner, name: AccountStorageName): string | null {
       const key = keyFor(owner, name);
       return storage().getItem(key);

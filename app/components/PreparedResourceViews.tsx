@@ -4,12 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { AccountSessionBoundary } from "./UserSessionProvider";
 import { usePreparedResources, type PreparedResourceState } from "../hooks/usePreparedResources";
 import type { AvailableResources } from "../lib/resourceAccess";
+import ResourceAccountInitialization from "./ResourceAccountInitialization";
 
 export function ResourceAccessNotice({ state, reload }: { state: PreparedResourceState; reload?: () => void }) {
   if (state.status === "available" || state.status === "disabled") return null;
   return <div role="status" className="my-3 rounded-xl border border-amber-300/30 p-3 text-sm text-amber-100">
     <p>{state.label}</p>
-    {state.status === "migration-required" && <a className="mt-2 block underline" href="/sauvegarde#local-migration-title">Ouvrir la migration manuelle</a>}
+    {(state.status === "migration-required" || state.status === "fresh-account") && <a className="mt-2 block underline" href="/sauvegarde#local-migration-title">Ouvrir la migration manuelle</a>}
+    {state.status === "fresh-account" && reload && <ResourceAccountInitialization reload={reload} />}
     {reload && <button className="mt-2 min-h-10 underline" type="button" onClick={reload}>Recharger les ressources</button>}
   </div>;
 }

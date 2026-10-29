@@ -36,15 +36,16 @@ export function assessResourceRecovery(userId: string, rawResources: string | nu
   const entries = Array.isArray(journal) ? journal : [];
   if (rawJournal !== null && (!Array.isArray(journal) || !entries.length)) journalIntegrity = "corrupt";
   const ids = new Set<string>();
-  const copies = entries.map((entry: unknown) => {
+  const copies = entries.map((entry: unknown, index: number) => {
     if (!record(entry) || entry.userId !== userId) {
       journalIntegrity = "corrupt";
       return { operationId: null, before: "untrusted", candidate: "untrusted" };
     }
     const before = integrity(entry.beforeRaw), candidate = integrity(entry.candidateRaw);
+    if (entry.kind === "initialization" && (index !== 0 || entry.beforeRaw !== null || entry.candidateRaw !== "[]")) journalIntegrity = "corrupt";
     if (typeof entry.importId !== "string" || !entry.importId || ids.has(entry.importId) ||
       typeof entry.createdAt !== "string" || !Number.isFinite(Date.parse(entry.createdAt)) ||
-      !["edit", "import", "migration", "recovery"].includes(String(entry.kind)) || before === "corrupt" || candidate === "corrupt" || !validRecoveryStage(entry, userId)) journalIntegrity = "corrupt";
+      !["edit", "import", "migration", "recovery", "initialization"].includes(String(entry.kind)) || before === "corrupt" || candidate === "corrupt" || !validRecoveryStage(entry, userId)) journalIntegrity = "corrupt";
     ids.add(String(entry.importId));
     return { operationId: typeof entry.importId === "string" ? entry.importId : null, before, candidate };
   });
