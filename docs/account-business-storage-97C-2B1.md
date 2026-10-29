@@ -1,5 +1,10 @@
 # 97C-2B1 — Adaptateur métier isolé, non activé
 
+Évolution 97C-2B3C : les écritures **Ressources** sont maintenant asynchrones et
+coordonnées ; elles exigent une lecture préalable ou un snapshot explicite.
+Les quatre autres catégories gardent leurs écritures synchrones. Voir la
+[coordination et la récupération](resource-writes-97C-2B3C.md).
+
 `app/lib/accountBusinessStorage.ts` réutilise une instance de
 `createAccountScopedStorage`. Il n'importe que des types et n'appelle ni les
 anciens magasins, ni Supabase, ni la migration, ni le suivi de synchronisation.

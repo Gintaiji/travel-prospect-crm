@@ -1,3 +1,5 @@
+import { assertResourceWritePermit, type ResourceWritePermit } from "./resourceWriteCoordinator";
+
 /**
  * 97C-1 infrastructure only: intentionally not connected to existing pages/stores.
  * No legacy fallback, migration, storage enumeration, or logout cleanup.
@@ -105,7 +107,7 @@ export function createAccountScopedStorage(dependencies: Dependencies) {
     return window.localStorage;
   }
 
-  return Object.freeze({
+  const api = Object.freeze({
     validateOwner,
     /** Explicit invalidation affects capabilities only; never removes stored data. */
     invalidateSession() { epoch += 1; },
@@ -113,14 +115,17 @@ export function createAccountScopedStorage(dependencies: Dependencies) {
       const key = keyFor(owner, name);
       return storage().getItem(key);
     },
-    write(owner: ValidatedStorageOwner, name: AccountStorageName, value: string): void {
+    write(owner: ValidatedStorageOwner, name: AccountStorageName, value: string, permit?: ResourceWritePermit): void {
       const key = keyFor(owner, name);
+      if (["resources", "resource-import-state", "resource-import-journal"].includes(name)) assertResourceWritePermit(permit, api, owner);
       if (typeof value !== "string") throw new Error("Storage values must be strings.");
       storage().setItem(key, value);
     },
     remove(owner: ValidatedStorageOwner, name: AccountStorageName): void {
       const key = keyFor(owner, name);
+      if (["resources", "resource-import-state", "resource-import-journal"].includes(name)) throw new Error("Suppression des ressources et sécurités isolées interdite.");
       storage().removeItem(key);
     },
   });
+  return api;
 }

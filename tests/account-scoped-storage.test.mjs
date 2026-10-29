@@ -1,15 +1,7 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import vm from "node:vm";
-import ts from "typescript";
-
-// Real module, in-memory compilation/storage. No Supabase, browser, or credentials.
-const exports = {};
-vm.runInNewContext(ts.transpileModule(
-  fs.readFileSync("app/lib/accountScopedStorage.ts", "utf8"),
-  { compilerOptions: { module: ts.ModuleKind.CommonJS } },
-).outputText, { exports });
-const { createAccountScopedStorage, ACCOUNT_STORAGE_NAMES } = exports;
+import { createTsLoader } from "./helpers/loadTs.mjs";
+const load = createTsLoader();
+const { createAccountScopedStorage, ACCOUNT_STORAGE_NAMES } = load("app/lib/accountScopedStorage.ts");
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
 const legacyKey = "travel-prospect-crm-prospects";
@@ -42,7 +34,7 @@ await assert.rejects(store.validateOwner(A));
 validateUser = async () => ({ id: session.userId });
 const ownerA = await store.validateOwner(A);
 assert.equal(store.read(ownerA, "prospects"), null, "no legacy fallback");
-for (const name of ACCOUNT_STORAGE_NAMES) store.write(ownerA, name, `A:${name}`);
+for (const name of ACCOUNT_STORAGE_NAMES.filter(name => !["resources", "resource-import-journal", "resource-import-state"].includes(name))) store.write(ownerA, name, `A:${name}`);
 assert.throws(() => store.write(ownerA, "../prospects", "invalid"));
 assert.throws(() => store.read({ ...ownerA }, "prospects"), "copies are not capabilities");
 const otherStore = createAccountScopedStorage(dependencies);
@@ -58,11 +50,14 @@ for (const operation of [
 ]) assert.throws(operation);
 assert.equal(accesses, beforeStaleAccess);
 const ownerB = await store.validateOwner(B);
-for (const name of ACCOUNT_STORAGE_NAMES) {
+for (const name of ACCOUNT_STORAGE_NAMES.filter(name => !["resources", "resource-import-journal", "resource-import-state"].includes(name))) {
   assert.equal(store.read(ownerB, name), null);
   store.write(ownerB, name, `B:${name}`);
 }
-store.remove(ownerB, "resources");
+assert.throws(() => store.remove(ownerB, "resources"));
+assert.throws(() => store.write(ownerB, "resources", "[]"));
+store.remove(ownerB, "notification-settings");
+store.write(ownerB, "notification-settings", "B:notification-settings");
 assert.equal(store.read(ownerB, "resources"), null);
 const beforeLogout = [...data];
 session = { userId: null, revision: 3 };
@@ -72,7 +67,7 @@ assert.deepEqual([...data], beforeLogout, "logout must preserve all stored value
 session = { userId: A, revision: 4 };
 assert.throws(() => store.write(ownerA, "prospects", "old login"));
 const newOwnerA = await store.validateOwner(A);
-for (const name of ACCOUNT_STORAGE_NAMES) assert.equal(store.read(newOwnerA, name), `A:${name}`);
+for (const name of ACCOUNT_STORAGE_NAMES.filter(name => !["resources", "resource-import-journal", "resource-import-state"].includes(name))) assert.equal(store.read(newOwnerA, name), `A:${name}`);
 assert.equal(data.get(legacyKey), "legacy prospects");
 
 // Validation itself can be in flight when accounts change.

@@ -1,23 +1,10 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import vm from "node:vm";
-import ts from "typescript";
-
-function load(file, dependencies = {}, globals = {}) {
-  const exports = {};
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText, { exports, require(name) {
-    assert.ok(name in dependencies, `Unexpected runtime dependency: ${name}`);
-    return dependencies[name];
-  }, ...globals });
-  return exports;
-}
+import { createTsLoader } from "./helpers/loadTs.mjs";
+const load = createTsLoader();
 const { createAccountScopedStorage } = load("app/lib/accountScopedStorage.ts");
 const { createAccountBusinessStorage } = load("app/lib/accountBusinessStorage.ts");
 const { createResourceAccess } = load("app/lib/resourceAccess.ts");
-const flag = load("app/lib/resourceIsolationSettings.ts");
-assert.equal(flag.ACCOUNT_SCOPED_RESOURCES_ENABLED, false, "production must remain disabled");
+assert.equal(load("app/lib/resourceIsolationSettings.ts").ACCOUNT_SCOPED_RESOURCES_ENABLED, false);
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
 const key = (id, name) => `travel-prospect-crm:account:v1:${id}:${name}`;
@@ -44,6 +31,7 @@ function fixture() {
     if (!session.userId || capture.userId !== session.userId || capture.generation !== session.generation) throw new Error("stale session");
   }
   const sessionStore = {
+    scopedStorage: scoped,
     assertCurrent,
     async beginOperation(input) {
       const capture = { ...input }; assertCurrent(capture);
@@ -79,14 +67,14 @@ function fixture() {
   assert.equal(a.resources[0].title, "Private A");
   s.switchUser(B);
   assert.equal(a.isCurrent(), false);
-  assert.throws(() => a.save([]));
+  await assert.rejects(a.save([]));
   const b = await s.isolated.load(s.capture());
   assert.equal(b.resources[0].title, "Private B");
   assert.deepEqual([...s.data], before);
-  b.save([resource("b-new", "B new")]);
+  await b.save([resource("b-new", "B new")]);
   assert.equal(JSON.parse(s.data.get(key(A, "resources")))[0].title, "Private A");
   assert.equal(JSON.parse(s.data.get(key(B, "resources")))[0].id, "b-new");
-  s.switchUser(null); assert.throws(() => b.save([]));
+  s.switchUser(null); await assert.rejects(b.save([]));
   await assert.rejects(s.isolated.load(s.capture()));
   assert.deepEqual(s.legacyCounts(), [0, 0]);
 }
@@ -97,7 +85,7 @@ function fixture() {
   const a = await s.isolated.load(s.capture());
   let resume;
   const wait = new Promise(resolve => { resume = resolve; });
-  const pending = (async () => { await wait; a.save([resource("late", "Late A")]); })();
+  const pending = (async () => { await wait; await a.save([resource("late", "Late A")]); })();
   const rejected = assert.rejects(pending);
   const before = [...s.data]; s.switchUser(B); resume(); await rejected;
   assert.deepEqual([...s.data], before);
@@ -126,7 +114,7 @@ function fixture() {
   await assert.rejects(s.isolated.load());
   const a = await s.isolated.load(s.capture());
   const before = [...s.data]; s.failWrites(true);
-  assert.throws(() => a.save([]), /quota/); assert.deepEqual([...s.data], before);
+  await assert.rejects(a.save([]), /quota/); assert.deepEqual([...s.data], before);
   s.data.set(key(A, "resources"), "bad JSON");
   await assert.rejects(s.isolated.load(s.capture()));
   s.data.set(key(A, "resources"), '[{"id":"missing-fields"}]');

@@ -1,4 +1,5 @@
 import type { createAccountScopedStorage, ValidatedStorageOwner } from "./accountScopedStorage";
+import { coordinateResourceWrite, type ResourceLockManager } from "./resourceWriteCoordinator";
 
 export const BUSINESS_STORAGE_NAMES = [
   "prospects", "resources", "settings", "street-marketing-survey", "custom-message-templates",
@@ -24,6 +25,7 @@ export function createLegacyDataMigration(dependencies: {
   getLegacyStorage: () => RawStorage;
   // Mandatory cross-tab exclusion; callers must fail closed if Web Locks is unavailable.
   withExclusiveLock: <T>(operation: () => Promise<T>) => Promise<T>;
+  resourceLocks?: ResourceLockManager;
 }) {
   const previews = new WeakMap<MigrationPreview, { owner: ValidatedStorageOwner; raw: RawData }>();
   const storage = () => dependencies.getLegacyStorage();
@@ -97,27 +99,39 @@ export function createLegacyDataMigration(dependencies: {
       if (!same(raw, readRaw())) throw new Error("Les données historiques ont changé. Refaire l'aperçu.");
       const createdAt = new Date().toISOString();
       const claim = JSON.stringify({ userId: owner.userId, sourceFingerprint: preview.fingerprint, createdAt });
-      // Reserve globally before copying so the same unowned legacy set cannot be assigned
-      // to another account. A failed attempt stays reserved for manual recovery.
-      storage().setItem(LEGACY_MIGRATION_CLAIM_KEY, claim);
-      if (storage().getItem(LEGACY_MIGRATION_CLAIM_KEY) !== claim) throw new Error("Réservation non vérifiée.");
       const state = { userId: owner.userId, createdAt, sourceFingerprint: preview.fingerprint, active: false };
-      const pending = JSON.stringify({ ...state, status: "copying" });
-      dependencies.scoped.write(owner, "migration-state", pending);
-      if (dependencies.scoped.read(owner, "migration-state") !== pending) throw new Error("État non vérifié.");
-      for (const name of preview.available) {
-        if (!same(raw, readRaw())) throw new Error("Source modifiée pendant la copie.");
-        if (dependencies.scoped.read(owner, name) !== null) throw new Error("Conflit de destination.");
-        dependencies.scoped.write(owner, name, raw[name]!);
-        if (dependencies.scoped.read(owner, name) !== raw[name]) throw new Error(`Copie non vérifiée : ${name}.`);
-      }
-      for (const name of BUSINESS_STORAGE_NAMES) {
-        if (dependencies.scoped.read(owner, name) !== raw[name]) throw new Error("Vérification finale échouée.");
-      }
-      if (!same(raw, readRaw())) throw new Error("Source modifiée pendant la copie.");
-      const completed = JSON.stringify({ ...state, status: "verified", verifiedAt: new Date().toISOString() });
-      dependencies.scoped.write(owner, "migration-state", completed);
-      if (dependencies.scoped.read(owner, "migration-state") !== completed) throw new Error("État final non vérifié.");
+      await coordinateResourceWrite({
+        scoped: dependencies.scoped, owner, expectedRaw: null, candidateRaw: raw.resources,
+        kind: "migration", locks: dependencies.resourceLocks,
+        preflight: () => {
+          assertDestinationEmpty(owner);
+          if (!same(raw, readRaw())) throw new Error("Source modifiée avant la copie.");
+          // Reserve globally before copying so the same unowned legacy set cannot be assigned
+          // to another account. A failed attempt stays reserved for manual recovery.
+          storage().setItem(LEGACY_MIGRATION_CLAIM_KEY, claim);
+          if (storage().getItem(LEGACY_MIGRATION_CLAIM_KEY) !== claim) throw new Error("Réservation non vérifiée.");
+        },
+        work: async () => {
+          const pending = JSON.stringify({ ...state, status: "copying" });
+          dependencies.scoped.write(owner, "migration-state", pending);
+          if (dependencies.scoped.read(owner, "migration-state") !== pending) throw new Error("État non vérifié.");
+          for (const name of preview.available) {
+            if (!same(raw, readRaw())) throw new Error("Source modifiée pendant la copie.");
+            if (name !== "resources") {
+              if (dependencies.scoped.read(owner, name) !== null) throw new Error("Conflit de destination.");
+              dependencies.scoped.write(owner, name, raw[name]!);
+            }
+            if (dependencies.scoped.read(owner, name) !== raw[name]) throw new Error(`Copie non vérifiée : ${name}.`);
+          }
+          for (const name of BUSINESS_STORAGE_NAMES) {
+            if (dependencies.scoped.read(owner, name) !== raw[name]) throw new Error("Vérification finale échouée.");
+          }
+          if (!same(raw, readRaw())) throw new Error("Source modifiée pendant la copie.");
+          const completed = JSON.stringify({ ...state, status: "verified", verifiedAt: new Date().toISOString() });
+          dependencies.scoped.write(owner, "migration-state", completed);
+          if (dependencies.scoped.read(owner, "migration-state") !== completed) throw new Error("État final non vérifié.");
+        },
+      });
       return { ...state, status: "verified" as const };
     });
   }

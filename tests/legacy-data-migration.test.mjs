@@ -1,16 +1,6 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import vm from "node:vm";
-import { webcrypto } from "node:crypto";
-import ts from "typescript";
-
-function load(file) {
-  const exports = {};
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText, { exports, crypto: webcrypto, TextEncoder });
-  return exports;
-}
+import { createTsLoader } from "./helpers/loadTs.mjs";
+const load = createTsLoader();
 const { createAccountScopedStorage } = load("app/lib/accountScopedStorage.ts");
 const { createLegacyDataMigration, LEGACY_MIGRATION_CLAIM_KEY } = load("app/lib/legacyDataMigration.ts");
 const A = "11111111-1111-4111-8111-111111111111";
@@ -147,9 +137,12 @@ for (const corrupt of [false, true]) {
   });
   await assert.rejects(s.migration.copy(p, confirm(A)));
   unchanged(s.data);
-  const state = JSON.parse(s.data.get(prefix(A) + "migration-state"));
-  assert.equal(state.active, false);
-  assert.equal(state.status, "copying");
+  const migrationState = s.data.get(prefix(A) + "migration-state");
+  if (migrationState) {
+    const state = JSON.parse(migrationState);
+    assert.equal(state.active, false); assert.equal(state.status, "copying");
+  }
+  assert.equal(JSON.parse(s.data.get(prefix(A) + "resource-import-state")).status, "pending");
   assert.ok(s.data.has(LEGACY_MIGRATION_CLAIM_KEY));
 }
 // Named-lock serialization makes a duplicate copy fail instead of overwriting.

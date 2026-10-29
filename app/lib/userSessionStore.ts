@@ -3,6 +3,7 @@ import { createAccountScopedStorage } from "./accountScopedStorage";
 import type { ValidatedStorageOwner } from "./accountScopedStorage";
 import { createAccountBusinessStorage } from "./accountBusinessStorage";
 import { createBrowserSupabaseClient } from "./supabaseClient";
+import type { ResourceLockManager } from "./resourceWriteCoordinator";
 
 type AuthClient = { auth: Pick<SupabaseClient["auth"], "getSession" | "getUser" | "onAuthStateChange"> };
 type SessionUser = Readonly<{ id: string; email?: string }>;
@@ -25,6 +26,7 @@ export function createUserSessionStore(dependencies: {
   getClient: () => AuthClient | null;
   now?: () => number;
   getStorage?: () => Pick<Storage, "getItem" | "setItem" | "removeItem">;
+  resourceLocks?: ResourceLockManager;
 }) {
   const now = dependencies.now ?? Date.now;
   const listeners = new Set<() => void>();
@@ -85,7 +87,7 @@ export function createUserSessionStore(dependencies: {
     validateUser: validatedUser,
     getStorage: dependencies.getStorage,
   });
-  const businessStorage = createAccountBusinessStorage(scopedStorage);
+  const businessStorage = createAccountBusinessStorage(scopedStorage, { resourceLocks: dependencies.resourceLocks });
 
   function scheduleExpiry() {
     if (state.expiresAt === null) return;

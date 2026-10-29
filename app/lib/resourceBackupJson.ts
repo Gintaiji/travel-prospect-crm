@@ -1,8 +1,8 @@
 import { assertResources } from "./resourceAccess";
 import type { Resource } from "./types";
 import type { SessionCapture, UserSessionStore } from "./userSessionStore";
+import { coordinateResourceWrite, exportResourceRecoveryDiagnostic, type ResourceLockManager } from "./resourceWriteCoordinator";
 
-export const RESOURCE_BACKUP_LOCK = "travel-prospect-crm:resource-json-import";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -52,8 +52,8 @@ export type ResourceImportPreview = Readonly<{
 export function createResourceBackupJson(dependencies: {
   enabled: boolean;
   store: UserSessionStore;
-  withExclusiveLock: <T>(operation: () => Promise<T>) => Promise<T>;
-  /** Stay blocked until EVERY isolated resource writer participates in the same lock. */
+  resourceLocks?: ResourceLockManager;
+  /** Explicit activation policy; stays blocked pending browser/recovery validation. */
   replacementPolicy?: "blocked" | "coordinated";
 }) {
   type Operation = Awaited<ReturnType<UserSessionStore["beginOperation"]>>;
@@ -116,41 +116,25 @@ export function createResourceBackupJson(dependencies: {
       (preview.sourceOwnerUserId === null && !confirmation.legacyOwnershipVerified)) throw new Error("Propriétaire incertain : chargement refusé.");
     if (!confirmation.previewReviewed || !confirmation.safetyBackupSaved) throw new Error("Aperçu et sauvegarde préalable obligatoires.");
     if (captured.before !== null && dependencies.replacementPolicy !== "coordinated") {
-      throw new Error("Destination existante : remplacement bloqué tant que tous les écrivains Ressources ne partagent pas le verrou sécurisé.");
+      throw new Error("Destination existante : remplacement bloqué par la politique d’activation.");
     }
     if (captured.before !== null && !confirmation.replaceExisting) throw new Error("Destination existante : remplacement non autorisé.");
-    return dependencies.withExclusiveLock(async () => {
-      const { operation: op, before, candidate } = captured;
-      op.assertCurrent();
-      const scoped = dependencies.store.scopedStorage;
-      // Recheck migration and import gates after waiting for the cross-tab lock.
-      const current = op.business.loadResources();
-      if (current.status === "migration-required") throw new Error("Migration nécessaire");
-      if (scoped.read(op.owner, "resources") !== before) throw new Error("Destination modifiée depuis l’aperçu. Recommencez.");
-      const oldJournal = scoped.read(op.owner, "resource-import-journal");
-      const entries: unknown = oldJournal === null ? [] : JSON.parse(oldJournal);
-      if (!Array.isArray(entries)) throw new Error("Journal de sécurité invalide.");
-      const importId = crypto.randomUUID();
-      const createdAt = new Date().toISOString();
-      const journal = JSON.stringify([...entries, { importId, userId: op.userId, createdAt,
-        sourceOwnerUserId: preview.sourceOwnerUserId, beforeRaw: before, candidateRaw: candidate }]);
-      // Append-only recovery journal: no previous safety entry is removed.
-      scoped.write(op.owner, "resource-import-journal", journal);
-      if (scoped.read(op.owner, "resource-import-journal") !== journal) throw new Error("Sauvegarde de sécurité non vérifiée.");
-      if (scoped.read(op.owner, "resources") !== before) throw new Error("Destination modifiée pendant la sauvegarde de sécurité.");
-      const pending = JSON.stringify({ userId: op.userId, importId, createdAt, status: "pending" });
-      scoped.write(op.owner, "resource-import-state", pending);
-      if (scoped.read(op.owner, "resource-import-state") !== pending) throw new Error("Préparation d’import non vérifiée.");
-      if (scoped.read(op.owner, "resources") !== before) throw new Error("Destination modifiée pendant la préparation d’import.");
-      // Business readers are now blocked. Only this validated, owner-bound write may commit.
-      scoped.write(op.owner, "resources", candidate);
-      if (scoped.read(op.owner, "resources") !== candidate) throw new Error("Copie Ressources non vérifiée. Journal conservé, accès bloqué.");
-      const verified = JSON.stringify({ userId: op.userId, importId, createdAt, status: "verified", verifiedAt: new Date().toISOString() });
-      scoped.write(op.owner, "resource-import-state", verified);
-      if (scoped.read(op.owner, "resource-import-state") !== verified) throw new Error("État final d’import non vérifié.");
-      op.assertCurrent(); previews.delete(preview);
-      return { userId: op.userId, resourcesCount: JSON.parse(candidate).length as number };
+    const { operation: op, before, candidate } = captured;
+    await coordinateResourceWrite({
+      scoped: dependencies.store.scopedStorage, owner: op.owner, expectedRaw: before, candidateRaw: candidate,
+      kind: "import", locks: dependencies.resourceLocks, sourceOwnerUserId: preview.sourceOwnerUserId,
+      preflight: () => {
+        op.assertCurrent();
+        if (op.business.getStatus().status !== "available") throw new Error("Migration nécessaire");
+      },
     });
+    op.assertCurrent(); previews.delete(preview);
+    return { userId: op.userId, resourcesCount: JSON.parse(candidate).length as number };
   }
-  return { exportResources, preview, apply };
+  async function exportRecoveryDiagnostic(capture: SessionCapture) {
+    enabled();
+    const op = await dependencies.store.beginOperation(capture);
+    return exportResourceRecoveryDiagnostic(dependencies.store.scopedStorage, op.owner, dependencies.resourceLocks);
+  }
+  return { exportResources, preview, apply, exportRecoveryDiagnostic };
 }

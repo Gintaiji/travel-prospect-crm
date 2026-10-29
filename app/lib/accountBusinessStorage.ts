@@ -2,6 +2,7 @@ import type { createAccountScopedStorage, ValidatedStorageOwner } from "./accoun
 import type { Prospect, Resource, AppSettings } from "./types";
 import type { CustomMessageTemplates } from "./messageTemplateStorage";
 import type { StreetMarketingSurveyStorage } from "./streetMarketingSurveyStorage";
+import { assertResourceRecoveryClear, coordinateResourceWrite, type ResourceLockManager } from "./resourceWriteCoordinator";
 
 /** 97C-2B1: preparation only. No page imports, auth calls, legacy reads or migration. */
 export type AccountBusinessData = {
@@ -47,13 +48,7 @@ function migrationRequired(reason: MigrationRequired["reason"]): MigrationRequir
 
 /** Resource-only import gate. The other four business categories are unchanged. */
 function assertResourceImportReadable(scoped: ScopedStorage, owner: ValidatedStorageOwner) {
-  const raw = scoped.read(owner, "resource-import-state");
-  if (raw === null) return;
-  let state: unknown;
-  try { state = JSON.parse(raw); } catch { throw new Error("État d’import Ressources illisible. Vérification manuelle nécessaire."); }
-  if (!isRecord(state) || state.userId !== owner.userId || state.status !== "verified" || typeof state.importId !== "string") {
-    throw new Error("Import Ressources non vérifié. Accès bloqué ; les copies de sécurité sont conservées.");
-  }
+  assertResourceRecoveryClear(scoped, owner);
 }
 
 /** Validate JSON containers without normalizing, filtering fields or rewriting legacy values. */
@@ -80,9 +75,10 @@ function assertBusinessShape(name: BusinessDataName, value: unknown): void {
   if (!valid) throw new Error(`Format métier invalide : ${name}. Aucune donnée remplacée par défaut.`);
 }
 
-export function createAccountBusinessStorage(scoped: ScopedStorage) {
+export function createAccountBusinessStorage(scoped: ScopedStorage, options: { resourceLocks?: ResourceLockManager } = {}) {
   /** Capture this owner once per operation/context; never rebind old results to a new account. */
   function forOwner(owner: ValidatedStorageOwner) {
+    let resourceReadSnapshot: string | null | undefined;
     function getStatus(): BusinessStorageStatus {
       // The scoped layer rejects unknown/expired identities BEFORE reading any stored data.
       const raw = scoped.read(owner, "migration-state");
@@ -106,14 +102,27 @@ export function createAccountBusinessStorage(scoped: ScopedStorage) {
       if (status.status !== "available") return status;
       if (name === "resources") assertResourceImportReadable(scoped, owner);
       const raw = scoped.read(owner, name);
-      if (raw === null) return { status: "absent" };
+      if (raw === null) {
+        if (name === "resources") {
+          assertResourceImportReadable(scoped, owner);
+          if (scoped.read(owner, name) !== raw) throw new Error("Ressources modifiées pendant la lecture. Rechargez.");
+          resourceReadSnapshot = null;
+        }
+        return { status: "absent" };
+      }
       // Parse/storage errors propagate. Never convert unreadable data to [] or defaults.
       const value: unknown = JSON.parse(raw);
       assertBusinessShape(name, value);
+      if (name === "resources") {
+        assertResourceImportReadable(scoped, owner);
+        if (scoped.read(owner, name) !== raw) throw new Error("Ressources modifiées pendant la lecture. Rechargez.");
+        resourceReadSnapshot = raw;
+      }
       return { status: "available", data: value as AccountBusinessData[K] };
     }
 
-    function write<K extends BusinessDataName>(name: K, value: AccountBusinessData[K]): void {
+    function write<K extends BusinessDataName>(name: K, value: AccountBusinessData[K], expectedRaw?: string | null): K extends "resources" ? Promise<void> : void;
+    function write(name: BusinessDataName, value: AccountBusinessData[BusinessDataName], expectedRaw?: string | null): void | Promise<void> {
       if (!names.has(name)) throw new Error("Nom de données métier inconnu.");
       const status = getStatus();
       if (status.status !== "available") throw new Error(`${status.label} : écriture refusée (${status.reason}).`);
@@ -126,8 +135,16 @@ export function createAccountBusinessStorage(scoped: ScopedStorage) {
       const current = getStatus();
       if (current.status !== "available") throw new Error("Migration nécessaire : écriture refusée.");
       if (name === "resources") assertResourceImportReadable(scoped, owner);
-      // One native setItem; no delete-before-write. Quota failures preserve the old value.
-      // scoped.write checks owner/revision again immediately before this synchronous write.
+      if (name === "resources") {
+        const baseline = expectedRaw === undefined ? resourceReadSnapshot : expectedRaw;
+        if (baseline === undefined) throw new Error("Lecture préalable des ressources nécessaire avant écriture.");
+        return coordinateResourceWrite({
+        scoped, owner, expectedRaw: baseline,
+        candidateRaw: raw, kind: "edit", locks: options.resourceLocks,
+        preflight: () => { if (getStatus().status !== "available") throw new Error("Migration nécessaire."); },
+        }).then(() => { resourceReadSnapshot = raw; });
+      }
+      // Other categories keep their original synchronous write path.
       scoped.write(owner, name, raw);
     }
 
@@ -137,7 +154,7 @@ export function createAccountBusinessStorage(scoped: ScopedStorage) {
       loadProspects: () => read("prospects"),
       saveProspects: (value: Prospect[]) => write("prospects", value),
       loadResources: () => read("resources"),
-      saveResources: (value: Resource[]) => write("resources", value),
+      saveResources: (value: Resource[], expectedRaw?: string | null) => write("resources", value, expectedRaw),
       loadSettings: () => read("settings"),
       saveSettings: (value: AppSettings) => write("settings", value),
       loadCustomMessageTemplates: () => read("custom-message-templates"),

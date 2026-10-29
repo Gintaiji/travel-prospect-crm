@@ -1,23 +1,6 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import vm from "node:vm";
-import { webcrypto } from "node:crypto";
-import ts from "typescript";
-
-const cache = new Map();
-function load(file) {
-  const absolute = path.resolve(file);
-  if (cache.has(absolute)) return cache.get(absolute);
-  const exports = {}; cache.set(absolute, exports);
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync(absolute, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText, { exports, crypto: webcrypto, require(name) {
-    assert.ok(name.startsWith("."), `No auth/network dependency allowed: ${name}`);
-    return load(path.join(path.dirname(absolute), name + ".ts"));
-  } });
-  return exports;
-}
+import { createTsLoader } from "./helpers/loadTs.mjs";
+const load = createTsLoader();
 const { createResourceBackupJson, parseResourceBackup, isHistoricalBackup } = load("app/lib/resourceBackupJson.ts");
 const { createAccountScopedStorage } = load("app/lib/accountScopedStorage.ts");
 const { createAccountBusinessStorage } = load("app/lib/accountBusinessStorage.ts");
@@ -57,7 +40,7 @@ function fixture(enabled = true, replacementPolicy = "coordinated") {
   } };
   // Positive replacement tests simulate the future coordinated writer environment.
   // The production panel deliberately does NOT opt in to this policy.
-  const api = createResourceBackupJson({ enabled, store, replacementPolicy, withExclusiveLock: operation => lock(operation) });
+  const api = createResourceBackupJson({ enabled, store, replacementPolicy, resourceLocks: { request: (_name, _options, operation) => lock(operation) } });
   return { api, store, data, capture: () => ({ ...session }), counts: () => ({ reads, writes }),
     switchUser(userId) { session = { userId, generation: session.generation + 1 }; ownerPromise = null; },
     setLock(fn) { lock = fn; }, fail(fn) { failWrite = fn; },

@@ -1,16 +1,6 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import vm from "node:vm";
-import ts from "typescript";
-
-// Execute the real modules with in-memory storage only; no auth/network/browser calls.
-function load(path) {
-  const exports = {};
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText, { exports });
-  return exports;
-}
+import { createTsLoader } from "./helpers/loadTs.mjs";
+const load = createTsLoader();
 const { createAccountScopedStorage } = load("app/lib/accountScopedStorage.ts");
 const { createAccountBusinessStorage } = load("app/lib/accountBusinessStorage.ts");
 const A = "11111111-1111-4111-8111-111111111111";
@@ -121,7 +111,7 @@ for (const invalid of [
   assert.deepEqual(plain(store.loadCustomMessageTemplates().data), business["custom-message-templates"]);
   assert.deepEqual(plain(store.loadStreetMarketingSurvey().data), business["street-marketing-survey"]);
   for (const [name, value] of Object.entries(business)) {
-    store.write(name, value);
+    await store.write(name, value);
     assert.deepEqual(JSON.parse(s.data.get(key(A, name))), value);
   }
   assert.throws(() => store.read("migration-state"));
@@ -140,7 +130,7 @@ for (const invalid of [
   assert.deepEqual([...s.data], before);
   assert.equal(s.writes(), 0);
   store.saveProspects([]);
-  store.saveResources([]);
+  await store.saveResources([]);
   store.saveCustomMessageTemplates({});
   store.saveStreetMarketingSurvey({ surveys: [], activeSurveyId: "" });
   assert.deepEqual(plain(store.loadProspects()), { status: "available", data: [] });

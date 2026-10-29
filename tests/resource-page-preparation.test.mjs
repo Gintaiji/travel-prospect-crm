@@ -58,7 +58,7 @@ for (const isolated of [false, true]) {
   inputs[0].props.onChange({ target: { value: "New resource" } });
   inputs[2].props.onChange({ target: { value: "https://example.test/new" } });
   tree = render(); createForm = findNodes(tree, n => n.type === "form")[0];
-  createForm.props.onSubmit({ preventDefault }); tree = render();
+  createForm.props.onSubmit({ preventDefault }); await Promise.resolve(); tree = render();
   assert.equal(JSON.parse(stored).length, 2);
   assert.equal(JSON.parse(stored)[0].title, "New resource");
 
@@ -69,7 +69,7 @@ for (const isolated of [false, true]) {
   let editForm = findNodes(tree, n => n.type === "form")[1];
   findNodes(editForm, n => n.type === "input")[0].props.onChange({ target: { value: "Edited resource" } });
   tree = render(); editForm = findNodes(tree, n => n.type === "form")[1];
-  editForm.props.onSubmit({ preventDefault }); tree = render();
+  editForm.props.onSubmit({ preventDefault }); await Promise.resolve(); tree = render();
   assert.equal(JSON.parse(stored).find(r => r.id === "created").title, "Edited resource");
 
   // Search still filters resource cards, with no storage writes.
@@ -79,7 +79,7 @@ for (const isolated of [false, true]) {
   findNodes(tree, n => n.type === "input" && n.props.placeholder?.startsWith("Titre, type"))[0].props.onChange({ target: { value: "" } });
   tree = render();
   card = findNodes(tree, n => n.type === "article" && n.key === "created")[0];
-  findNodes(card, n => n.type === "button" && text(n) === "Supprimer")[0].props.onClick(); tree = render();
+  findNodes(card, n => n.type === "button" && text(n) === "Supprimer")[0].props.onClick(); await Promise.resolve(); tree = render();
   assert.equal(JSON.parse(stored).length, 1);
   assert.equal(JSON.parse(stored)[0].id, "original");
   if (isolated) { assert.equal(legacyReads, 0); assert.equal(legacyWrites, 0); assert.equal(isolatedWrites, 3); }

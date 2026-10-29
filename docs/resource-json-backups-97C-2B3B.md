@@ -1,5 +1,9 @@
 # 97C-2B3B — JSON des ressources isolées, non activé
 
+Mise à jour : [97C-2B3C](resource-writes-97C-2B3C.md) centralise désormais les
+écritures sous un verrou par compte et renforce le diagnostic des interruptions.
+Les limitations de coordination décrites plus bas correspondent à l'étape 2B3B.
+
 `ACCOUNT_SCOPED_RESOURCES_ENABLED` reste à `false`. Aucun import, export du
 navigateur, migration réelle ou accès à Supabase n'a été effectué pendant les tests.
 Les écritures cloud et les actions ressources vers l'historique/relance des

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createResourceId,
   loadResources,
@@ -67,6 +67,9 @@ function IsolatedResourcesPage() {
 function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResources }) {
   const [resources, setResources] = useState<Resource[]>(scopedAccess?.resources ?? []);
   const [storageError, setStorageError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [recoveryRequired, setRecoveryRequired] = useState(false);
+  const pendingWrite = useRef(false);
   const [formState, setFormState] = useState<ResourceFormState>(initialResourceFormState);
   const [editingResourceId, setEditingResourceId] = useState<string | null>(null);
   const [editingFormState, setEditingFormState] = useState<ResourceFormState>(initialResourceFormState);
@@ -84,16 +87,26 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
     return () => window.clearTimeout(loadStoredResources);
   }, [scopedAccess]);
 
-  function persistResources(next: Resource[]) {
-    if (!scopedAccess) { saveLegacyResources(next); return true; }
-    try {
-      scopedAccess.save(next);
-      setStorageError("");
-      return true;
-    } catch (error) {
-      if (scopedAccess.isCurrent()) setStorageError(error instanceof Error ? error.message : "Enregistrement impossible.");
-      return false;
-    }
+  function persistResources(next: Resource[], onSuccess: () => void) {
+    if (!scopedAccess) { saveLegacyResources(next); onSuccess(); return; }
+    if (pendingWrite.current || recoveryRequired) return;
+    pendingWrite.current = true; setIsSaving(true);
+    void (async () => {
+      try {
+        await scopedAccess.save(next);
+        scopedAccess.assertCurrent();
+        setStorageError(""); onSuccess();
+      } catch (error) {
+        if (scopedAccess.isCurrent()) {
+          const message = error instanceof Error ? error.message : "Enregistrement impossible.";
+          setStorageError(message);
+          if (message.startsWith("Récupération nécessaire")) setRecoveryRequired(true);
+        }
+      } finally {
+        pendingWrite.current = false;
+        if (scopedAccess.isCurrent()) setIsSaving(false);
+      }
+    })();
   }
 
   const filteredResources = useMemo(() => {
@@ -155,9 +168,9 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
     };
     const updatedResources = [newResource, ...resources];
 
-    if (!persistResources(updatedResources)) return;
-    setResources(updatedResources);
-    setFormState(initialResourceFormState);
+    persistResources(updatedResources, () => {
+      setResources(updatedResources); setFormState(initialResourceFormState);
+    });
   }
 
   function openEditResourceForm(resource: Resource) {
@@ -192,10 +205,9 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
       };
     });
 
-    if (!persistResources(updatedResources)) return;
-    setResources(updatedResources);
-    setEditingResourceId(null);
-    setEditingFormState(initialResourceFormState);
+    persistResources(updatedResources, () => {
+      setResources(updatedResources); setEditingResourceId(null); setEditingFormState(initialResourceFormState);
+    });
   }
 
   function handleDeleteResource(resourceId: string) {
@@ -207,13 +219,10 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
 
     const updatedResources = resources.filter((resource) => resource.id !== resourceId);
 
-    if (!persistResources(updatedResources)) return;
-    setResources(updatedResources);
-
-    if (editingResourceId === resourceId) {
-      setEditingResourceId(null);
-      setEditingFormState(initialResourceFormState);
-    }
+    persistResources(updatedResources, () => {
+      setResources(updatedResources);
+      if (editingResourceId === resourceId) { setEditingResourceId(null); setEditingFormState(initialResourceFormState); }
+    });
   }
 
   async function handleCopyResourceLink(resource: Resource) {
@@ -248,6 +257,7 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
           </p>
         </header>
         {storageError && <p role="alert" className="mb-4 text-sm text-amber-100">{storageError}</p>}
+        {isSaving && <p role="status" className="mb-4 text-sm text-amber-100">Enregistrement sécurisé des ressources…</p>}
 
         <form
           className="mb-6 rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-5"
@@ -264,7 +274,8 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
               Titre
               <input
                 className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
-                value={formState.title}
+                disabled={isSaving || recoveryRequired}
+                            value={formState.title}
                 onChange={(event) => updateFormField("title", event.target.value)}
                 placeholder="Présentation courte"
                 required
@@ -275,7 +286,8 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
               Type
               <select
                 className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition focus:border-emerald-400"
-                value={formState.type}
+                disabled={isSaving || recoveryRequired}
+                            value={formState.type}
                 onChange={(event) =>
                   updateFormField("type", event.target.value as Resource["type"])
                 }
@@ -292,7 +304,8 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
               Sous-catégorie
               <input
                 className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
-                value={formState.subCategory}
+                disabled={isSaving || recoveryRequired}
+                            value={formState.subCategory}
                 onChange={(event) => updateFormField("subCategory", event.target.value)}
                 placeholder="Présentation publique, TikTok..."
               />
@@ -302,7 +315,8 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
               URL
               <input
                 className="rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
-                value={formState.url}
+                disabled={isSaving || recoveryRequired}
+                            value={formState.url}
                 onChange={(event) => updateFormField("url", event.target.value)}
                 placeholder="https://..."
                 required
@@ -314,7 +328,8 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
               Notes
               <textarea
                 className="min-h-28 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-400"
-                value={formState.notes}
+                disabled={isSaving || recoveryRequired}
+                            value={formState.notes}
                 onChange={(event) => updateFormField("notes", event.target.value)}
                 placeholder="Contexte, usage conseillé, audience..."
               />
@@ -322,7 +337,8 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
 
             <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-300">
               <input
-                checked={formState.isFavorite}
+                disabled={isSaving || recoveryRequired}
+                            checked={formState.isFavorite}
                 className="h-4 w-4 accent-emerald-400"
                 onChange={(event) => updateFormField("isFavorite", event.target.checked)}
                 type="checkbox"
@@ -333,7 +349,8 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
 
           <button
             className="mt-5 min-h-11 rounded-full bg-emerald-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300"
-            type="submit"
+            disabled={isSaving || recoveryRequired}
+                          type="submit"
           >
             Ajouter la ressource
           </button>
@@ -479,6 +496,7 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
                           Titre
                           <input
                             className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                            disabled={isSaving || recoveryRequired}
                             value={editingFormState.title}
                             onChange={(event) => updateEditingFormField("title", event.target.value)}
                             required
@@ -489,6 +507,7 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
                           Type
                           <select
                             className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                            disabled={isSaving || recoveryRequired}
                             value={editingFormState.type}
                             onChange={(event) =>
                               updateEditingFormField("type", event.target.value as Resource["type"])
@@ -506,6 +525,7 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
                           Sous-catégorie
                           <input
                             className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                            disabled={isSaving || recoveryRequired}
                             value={editingFormState.subCategory}
                             onChange={(event) =>
                               updateEditingFormField("subCategory", event.target.value)
@@ -518,6 +538,7 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
                           URL
                           <input
                             className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                            disabled={isSaving || recoveryRequired}
                             value={editingFormState.url}
                             onChange={(event) => updateEditingFormField("url", event.target.value)}
                             required
@@ -529,6 +550,7 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
                           Notes
                           <textarea
                             className="min-h-24 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                            disabled={isSaving || recoveryRequired}
                             value={editingFormState.notes}
                             onChange={(event) => updateEditingFormField("notes", event.target.value)}
                           />
@@ -536,6 +558,7 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
 
                         <label className="flex items-center gap-3 text-xs text-slate-300">
                           <input
+                            disabled={isSaving || recoveryRequired}
                             checked={editingFormState.isFavorite}
                             className="h-4 w-4 accent-emerald-400"
                             onChange={(event) =>
@@ -550,6 +573,7 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
                       <div className="flex flex-wrap gap-2">
                         <button
                           className="min-h-10 rounded-full bg-emerald-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-300"
+                          disabled={isSaving || recoveryRequired}
                           type="submit"
                         >
                           Enregistrer

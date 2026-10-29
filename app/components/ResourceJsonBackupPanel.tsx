@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { AccountSessionBoundary, useUserSession } from "./UserSessionProvider";
 import { ACCOUNT_SCOPED_RESOURCES_ENABLED } from "../lib/resourceIsolationSettings";
-import { createResourceBackupJson, RESOURCE_BACKUP_LOCK, type ResourceImportPreview } from "../lib/resourceBackupJson";
+import { createResourceBackupJson, type ResourceImportPreview } from "../lib/resourceBackupJson";
 
 function download(json: string, filename: string) {
   const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
@@ -39,10 +39,6 @@ function ResourceJsonBackupContent() {
   const capture = { userId: session.userId ?? "", generation: session.generation };
   const api = useMemo(() => createResourceBackupJson({
     enabled: ACCOUNT_SCOPED_RESOURCES_ENABLED, store: session.store,
-    withExclusiveLock: async operation => {
-      if (!navigator.locks) throw new Error("Verrouillage entre onglets indisponible : chargement refusé.");
-      return await navigator.locks.request(RESOURCE_BACKUP_LOCK, { mode: "exclusive" }, operation);
-    },
   }), [session.store]);
   const current = () => { try { session.store.assertCurrent(capture); return true; } catch { return false; } };
 
@@ -89,6 +85,13 @@ function ResourceJsonBackupContent() {
   return <div className="mt-3 grid gap-3 text-sm">
     <p className="break-all">Compte confirmé : {session.userId}</p>
     <button type="button" className={buttonClass} disabled={busy} onClick={() => void exportResources()}>Exporter uniquement mes ressources isolées</button>
+    <button type="button" className={buttonClass} disabled={busy} onClick={() => {
+      setBusy(true);
+      void api.exportRecoveryDiagnostic(capture).then(json => {
+        if (current()) download(json, `travel-prospect-crm-diagnostic-ressources-${capture.userId}.json`);
+      }).catch(error => { if (current()) setMessage(error instanceof Error ? error.message : "Diagnostic indisponible."); })
+        .finally(() => { if (current()) setBusy(false); });
+    }}>Exporter un diagnostic local sans modifier les données</button>
     <label>Prévisualiser un fichier JSON
       <input className="mt-2 block w-full" type="file" accept=".json,application/json" disabled={busy} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void previewFile(file); }} />
     </label>
@@ -108,7 +111,7 @@ function ResourceJsonBackupContent() {
       }}>Télécharger la sauvegarde préalable de la destination</button>
       <label><input type="checkbox" disabled={!downloaded} checked={saved} onChange={event => setSaved(event.target.checked)} /> J’ai enregistré et vérifié cette sauvegarde préalable.</label>
       {preview.destinationCount !== null && <label><input type="checkbox" disabled={!preview.replacementAllowed} checked={replace} onChange={event => setReplace(event.target.checked)} /> J’autorise explicitement le remplacement de la destination sauvegardée.</label>}
-      {preview.destinationCount !== null && !preview.replacementAllowed && <p className="text-amber-100">Destination déjà présente : remplacement bloqué à cette étape. La coordination de toutes les écritures Ressources doit être préparée avant de le permettre.</p>}
+      {preview.destinationCount !== null && !preview.replacementAllowed && <p className="text-amber-100">Destination déjà présente : remplacement maintenu bloqué. Sa disponibilité nécessite une décision d’activation distincte et la validation de la procédure de récupération.</p>}
       <button type="button" className={buttonClass} disabled={busy || !reviewed || !certain || ownerId !== preview.userId || !downloaded || !saved ||
         (preview.sourceOwnerUserId === null && !legacyVerified) || (preview.destinationCount !== null && (!replace || !preview.replacementAllowed))} onClick={() => void apply()}>Charger uniquement les ressources après vérification</button>
     </>}
