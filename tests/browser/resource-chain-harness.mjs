@@ -10,7 +10,8 @@ const namespace = new URL(location.href).searchParams.get("namespace");
 if (!/^e2e-[a-z0-9-]+$/.test(namespace ?? "")) throw Error("Dedicated namespace required");
 const prefix = `tpc-chain:${namespace}:`, nativeStorage = window.localStorage;
 const events = [], listeners = new Set();
-let fault = null, clockOffset = 0;
+let fault = null, clockOffset = 0, quotaBytes = null, quotaAfterJournal = false;
+const nativeUsageBytes = () => Object.keys(nativeStorage).reduce((sum, name) => sum + (name.length + nativeStorage.getItem(name).length) * 2, 0);
 const validKey = key => {
   if (![A, B].some(id => key.startsWith(`travel-prospect-crm:account:v1:${id}:`)) &&
     !["fake-auth", "travel-prospect-crm-resources", "travel-prospect-crm-prospects", "travel-prospect-crm-settings", "travel-prospect-crm-street-marketing-survey", "travel-prospect-crm-custom-message-templates", "travel-prospect-crm:legacy-migration:v1"].includes(key)) throw Error(`Recipe key forbidden: ${key}`);
@@ -24,9 +25,21 @@ const storage = {
   },
   setItem(key, value) {
     const qualified = validKey(key);
+    const previous = nativeStorage.getItem(qualified);
+    const projected = nativeUsageBytes() + (value.length - (previous?.length ?? 0) + (previous === null ? qualified.length : 0)) * 2;
+    if (quotaBytes !== null && projected > quotaBytes) {
+      events.push({ action: "quota-refusal", key, projectedBytes: projected, quotaBytes });
+      throw new DOMException("Synthetic measured localStorage quota exceeded", "QuotaExceededError");
+    }
     if (fault === "journal" && key.endsWith(":resource-import-journal")) throw Error("Synthetic quota failure at journal");
     if (fault === "verified" && key.endsWith(":resource-import-state") && JSON.parse(value).status === "verified") throw Error("Synthetic quota failure at verified");
-    nativeStorage.setItem(qualified, value); events.push({ action: "write", key });
+    try { nativeStorage.setItem(qualified, value); }
+    catch (error) { events.push({ action: "native-storage-refusal", key, projectedBytes: projected, candidateValueUtf16Bytes: value.length * 2, errorName: error.name }); throw error; }
+    events.push({ action: "write", key });
+    if (quotaAfterJournal && key.endsWith(":resource-import-journal")) {
+      quotaBytes = nativeUsageBytes() + 1024; quotaAfterJournal = false;
+      events.push({ action: "quota-armed-after-journal", quotaBytes });
+    }
   },
   removeItem() { throw Error("Recipe deletion forbidden"); },
 };
@@ -66,6 +79,9 @@ globalThis.chainRecipe = {
   },
   snapshot: () => Object.fromEntries(Object.keys(nativeStorage).sort().map(k => [k.slice(prefix.length), nativeStorage.getItem(k)])),
   physicalKeys: () => Object.keys(nativeStorage),
+  storageUsage: () => ({ estimatedUtf16KeyValueBytes: nativeUsageBytes(), quotaBytes }),
+  setQuota(bytes) { if (bytes !== null && (!Number.isSafeInteger(bytes) || bytes < 0)) throw Error("Invalid fictional quota"); quotaBytes = bytes; },
+  quotaAfterJournal() { quotaAfterJournal = true; },
   session: () => store.getSnapshot(),
   async exportJson() { return backup.exportResources(capture()); },
   async initialize() { return createResourceAccountInitialization({ enabled: true, store }).initialize(capture(), { ownerUserId: capture().userId, emptySpaceConfirmed: true }); },

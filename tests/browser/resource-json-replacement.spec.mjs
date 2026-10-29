@@ -31,6 +31,7 @@ async function prepare(page, info, id, name = "safety.json", checkBadFile = fals
   await expect(button).toBeEnabled();
   return { before, file, button };
 }
+export { prepare };
 test.describe("remplacement JSON activé uniquement dans le bundle de recette", () => {
   test.use({ replacementEnabled: true });
   test("interface : remplacement A, sauvegarde relue, B inchangé et liste vide volontaire", async ({ chain }, info) => {
