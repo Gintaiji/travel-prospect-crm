@@ -12,6 +12,8 @@ import {
   updateProspectNextActionDate as updateProspectNextActionDateFromAction,
 } from "../lib/prospectActions";
 import { loadResources } from "../lib/resourceStorage";
+import { ACCOUNT_SCOPED_RESOURCES_ENABLED } from "../lib/resourceIsolationSettings";
+import { IsolatedProspectResources } from "../components/PreparedResourceViews";
 import {
   buildGoogleCalendarFollowUpUrl,
   formatProspectNextAction,
@@ -1074,7 +1076,7 @@ export default function ProspectsPage () {
       const loadedSettings = loadSettings();
 
       setProspects(loadProspects());
-      setResources(loadResources());
+      if (!ACCOUNT_SCOPED_RESOURCES_ENABLED) setResources(loadResources());
       setAppSettings(loadedSettings);
       setCustomMessageTemplates(loadCustomMessageTemplates());
       setMessageAssistantState((currentState) => ({
@@ -5659,7 +5661,7 @@ export default function ProspectsPage () {
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
                         Partager une ressource
                       </p>
-                      {sortedResources.length === 0 ? (
+                      {ACCOUNT_SCOPED_RESOURCES_ENABLED ? <IsolatedProspectResources /> : sortedResources.length === 0 ? (
                         <p className="mt-3 text-sm leading-6 text-slate-300">
                           Aucune ressource disponible. Ajoute d’abord tes liens dans la page Ressources.
                         </p>
@@ -5820,7 +5822,7 @@ export default function ProspectsPage () {
                           )}
                         </div>
 
-                        {sortedResources.length > 0 ? (
+                        {ACCOUNT_SCOPED_RESOURCES_ENABLED ? <IsolatedProspectResources message={getGeneratedMessageForProspect(prospect.id)} /> : sortedResources.length > 0 ? (
                           <div className="grid gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-3">
                             <label className="grid gap-1 text-xs text-slate-300">
                               Ressource à joindre

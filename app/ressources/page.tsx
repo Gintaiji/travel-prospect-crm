@@ -4,9 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import {
   createResourceId,
   loadResources,
-  saveResources,
+  saveResources as saveLegacyResources,
 } from "../lib/resourceStorage";
 import { RESOURCE_TYPES, type Resource } from "../lib/types";
+import { ACCOUNT_SCOPED_RESOURCES_ENABLED } from "../lib/resourceIsolationSettings";
+import type { AvailableResources } from "../lib/resourceAccess";
+import { usePreparedResources } from "../hooks/usePreparedResources";
+import { AccountSessionBoundary } from "../components/UserSessionProvider";
+import { ResourceAccessNotice } from "../components/PreparedResourceViews";
 
 type ResourceFormState = {
   title: string;
@@ -46,7 +51,22 @@ function getResourceSearchText(resource: Resource) {
 }
 
 export default function ResourcesPage() {
-  const [resources, setResources] = useState<Resource[]>([]);
+  // Default branch preserves the existing resource page and historical storage.
+  if (!ACCOUNT_SCOPED_RESOURCES_ENABLED) return <ResourcesPageContent />;
+  return <IsolatedResourcesPage />;
+}
+
+function IsolatedResourcesPage() {
+  const { state, reload } = usePreparedResources(true);
+  const notice = <main className="p-6 text-white"><h1 className="text-2xl">Ressources</h1><ResourceAccessNotice state={state} reload={reload} /></main>;
+  return <AccountSessionBoundary fallback={notice}>
+    {state.status === "available" ? <ResourcesPageContent scopedAccess={state} /> : notice}
+  </AccountSessionBoundary>;
+}
+
+function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResources }) {
+  const [resources, setResources] = useState<Resource[]>(scopedAccess?.resources ?? []);
+  const [storageError, setStorageError] = useState("");
   const [formState, setFormState] = useState<ResourceFormState>(initialResourceFormState);
   const [editingResourceId, setEditingResourceId] = useState<string | null>(null);
   const [editingFormState, setEditingFormState] = useState<ResourceFormState>(initialResourceFormState);
@@ -56,12 +76,25 @@ export default function ResourcesPage() {
   const [favoriteFilter, setFavoriteFilter] = useState<FavoriteFilter>("Tous");
 
   useEffect(() => {
+    if (scopedAccess) return;
     const loadStoredResources = window.setTimeout(() => {
       setResources(loadResources());
     }, 0);
 
     return () => window.clearTimeout(loadStoredResources);
-  }, []);
+  }, [scopedAccess]);
+
+  function persistResources(next: Resource[]) {
+    if (!scopedAccess) { saveLegacyResources(next); return true; }
+    try {
+      scopedAccess.save(next);
+      setStorageError("");
+      return true;
+    } catch (error) {
+      if (scopedAccess.isCurrent()) setStorageError(error instanceof Error ? error.message : "Enregistrement impossible.");
+      return false;
+    }
+  }
 
   const filteredResources = useMemo(() => {
     const normalizedSearchQuery = normalizeSearchText(searchQuery);
@@ -122,7 +155,7 @@ export default function ResourcesPage() {
     };
     const updatedResources = [newResource, ...resources];
 
-    saveResources(updatedResources);
+    if (!persistResources(updatedResources)) return;
     setResources(updatedResources);
     setFormState(initialResourceFormState);
   }
@@ -159,7 +192,7 @@ export default function ResourcesPage() {
       };
     });
 
-    saveResources(updatedResources);
+    if (!persistResources(updatedResources)) return;
     setResources(updatedResources);
     setEditingResourceId(null);
     setEditingFormState(initialResourceFormState);
@@ -174,7 +207,7 @@ export default function ResourcesPage() {
 
     const updatedResources = resources.filter((resource) => resource.id !== resourceId);
 
-    saveResources(updatedResources);
+    if (!persistResources(updatedResources)) return;
     setResources(updatedResources);
 
     if (editingResourceId === resourceId) {
@@ -184,13 +217,16 @@ export default function ResourcesPage() {
   }
 
   async function handleCopyResourceLink(resource: Resource) {
+    if (scopedAccess && !scopedAccess.isCurrent()) return;
     if (!resource.url || !navigator.clipboard?.writeText) {
       return;
     }
 
     await navigator.clipboard.writeText(resource.url);
+    if (scopedAccess && !scopedAccess.isCurrent()) return;
     setCopiedResourceId(resource.id);
     window.setTimeout(() => {
+      if (scopedAccess && !scopedAccess.isCurrent()) return;
       setCopiedResourceId((currentResourceId) =>
         currentResourceId === resource.id ? null : currentResourceId,
       );
@@ -211,6 +247,7 @@ export default function ResourcesPage() {
             Retrouve rapidement tes liens utiles pour présenter le club privé et accompagner tes conversations.
           </p>
         </header>
+        {storageError && <p role="alert" className="mb-4 text-sm text-amber-100">{storageError}</p>}
 
         <form
           className="mb-6 rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl sm:p-5"
