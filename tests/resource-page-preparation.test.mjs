@@ -34,7 +34,7 @@ for (const isolated of [false, true]) {
     save(resources) { isolatedWrites++; stored = JSON.stringify(resources); },
     assertCurrent() {}, isCurrent: () => true,
   };
-  const module = compile("app/ressources/page.tsx", {
+  const pageModule = compile("app/ressources/page.tsx", {
     react: h.react, "react/jsx-runtime": jsx,
     "../lib/resourceStorage": legacy,
     "../lib/types": { RESOURCE_TYPES: ["Site", "Document"] },
@@ -45,7 +45,7 @@ for (const isolated of [false, true]) {
     "../components/UserSessionProvider": { AccountSessionBoundary: "boundary" },
     "../components/PreparedResourceViews": { ResourceAccessNotice: "notice" },
   }, { window: { setTimeout(fn) { timers.push(fn); return timers.length; }, clearTimeout() {}, confirm: () => true } });
-  let element = module.default();
+  let element = pageModule.default();
   if (isolated) element = element.type(element.props).props.children;
   const render = () => h.render(() => element.type(element.props));
   let tree = render(); h.effects(); timers.splice(0).forEach(fn => fn()); tree = render();
@@ -108,6 +108,9 @@ for (const isolated of [false, true]) {
   tree = render();
   findNodes(tree, n => n.type === "button" && text(n) === "Copier le lien")[0].props.onClick();
   valid = false; finishCopy();
+  let blockedLink = false;
+  findNodes(tree, n => n.type === "a")[0].props.onClick({ preventDefault() { blockedLink = true; } });
+  assert.equal(blockedLink, true);
   for (let i = 0; i < 10; i++) await Promise.resolve();
   tree = render(); assert.equal(text(tree).includes("Copié."), false);
   assert.equal(findNodes(tree, n => n.type === "button" && text(n).includes("historique")).length, 0);

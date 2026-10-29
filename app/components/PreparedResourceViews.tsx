@@ -63,7 +63,7 @@ function AvailableProspectResources({ access, message }: { access: AvailableReso
         <div className="flex flex-wrap gap-3">
           <button type="button" className="min-h-10 underline" onClick={() => void copy(false)}>Copier le lien</button>
           {message && <button type="button" className="min-h-10 underline" onClick={() => void copy(true)}>Copier message + ressource</button>}
-          <a className="inline-flex min-h-10 items-center underline" href={selected.url} target="_blank" rel="noreferrer">Ouvrir</a>
+          <a className="inline-flex min-h-10 items-center underline" href={selected.url} onClick={event => { if (!access.isCurrent()) event.preventDefault(); }} target="_blank" rel="noreferrer">Ouvrir</a>
         </div>
       </>}
     </>}

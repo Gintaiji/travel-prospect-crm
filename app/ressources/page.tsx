@@ -416,6 +416,7 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
                       <a
                         className="mt-2 block break-all text-sm text-sky-200 underline-offset-4 hover:underline"
                         href={resource.url}
+                        onClick={event => { if (scopedAccess && !scopedAccess.isCurrent()) event.preventDefault(); }}
                         target="_blank"
                         rel="noreferrer"
                       >
@@ -441,6 +442,7 @@ function ResourcesPageContent({ scopedAccess }: { scopedAccess?: AvailableResour
                     <a
                       className="min-h-10 rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/20"
                       href={resource.url}
+                      onClick={event => { if (scopedAccess && !scopedAccess.isCurrent()) event.preventDefault(); }}
                       target="_blank"
                       rel="noreferrer"
                     >
