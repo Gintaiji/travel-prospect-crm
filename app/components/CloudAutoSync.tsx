@@ -1,5 +1,7 @@
 "use client";
 
+import { CLOUD_SYNC_SUSPENDED } from "../lib/cloudSyncSuspension";
+import { createBrowserSupabaseClient } from "../lib/supabaseClient";
 import { useEffect, useRef } from "react";
 import {
   loadCloudSyncSettings,
@@ -30,15 +32,25 @@ export default function CloudAutoSync() {
       }
     }
 
+    let generation = 0;
+    let disposed = false;
+    function invalidateScheduledSync() {
+      generation += 1;
+      clearAutoSyncTimer();
+    }
+    const supabase = createBrowserSupabaseClient();
+    const authSubscription = supabase?.auth.onAuthStateChange(invalidateScheduledSync);
+
     function refreshSettings() {
       settingsRef.current = loadCloudSyncSettings();
 
-      if (!settingsRef.current.autoSyncEnabled) {
+      if (CLOUD_SYNC_SUSPENDED || !settingsRef.current.autoSyncEnabled) {
         clearAutoSyncTimer();
       }
     }
 
-    async function runAutoSync() {
+    async function runAutoSync(scheduledGeneration: number) {
+      if (disposed || CLOUD_SYNC_SUSPENDED || scheduledGeneration !== generation) return;
       if (isSyncingRef.current || !settingsRef.current.autoSyncEnabled) {
         return;
       }
@@ -67,6 +79,7 @@ export default function CloudAutoSync() {
           return;
         }
 
+        if (disposed || CLOUD_SYNC_SUSPENDED || scheduledGeneration !== generation) return;
         await uploadLocalDataToCloud({ backupType: "auto" });
         clearLastLocalChangeDate();
       } catch (error) {
@@ -79,16 +92,17 @@ export default function CloudAutoSync() {
     function scheduleAutoSync() {
       refreshSettings();
 
-      if (!settingsRef.current.autoSyncEnabled) {
+      if (CLOUD_SYNC_SUSPENDED || !settingsRef.current.autoSyncEnabled) {
         return;
       }
 
       clearAutoSyncTimer();
 
+      const scheduledGeneration = generation;
       timerRef.current = window.setTimeout(
         () => {
           timerRef.current = null;
-          void runAutoSync();
+          void runAutoSync(scheduledGeneration);
         },
         Math.max(10, settingsRef.current.autoSyncDelaySeconds) * 1000,
       );
@@ -102,7 +116,9 @@ export default function CloudAutoSync() {
     refreshSettings();
 
     return () => {
-      clearAutoSyncTimer();
+      disposed = true;
+      invalidateScheduledSync();
+      authSubscription?.data.subscription.unsubscribe();
       unsubscribeFromLocalChanges();
       unsubscribeFromSettingsChanges();
     };

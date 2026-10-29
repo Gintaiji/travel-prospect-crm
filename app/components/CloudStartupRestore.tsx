@@ -1,5 +1,6 @@
 "use client";
 
+import { CLOUD_SYNC_SUSPENDED } from "../lib/cloudSyncSuspension";
 import { useEffect, useRef } from "react";
 import {
   getCloudDataSummary,
@@ -19,6 +20,8 @@ export default function CloudStartupRestore() {
   const checkedUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // TEMPORARY: no automatic reads or local overwrites.
+    if (CLOUD_SYNC_SUSPENDED) return;
     const supabase = createBrowserSupabaseClient();
 
     if (!supabase) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { CLOUD_SYNC_SUSPENDED, CLOUD_SYNC_SUSPENSION_MESSAGE } from "../lib/cloudSyncSuspension";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
@@ -74,7 +75,9 @@ export default function QuickCloudSyncButton({
   }
 
   useEffect(() => {
-    refreshCloudState();
+    if (CLOUD_SYNC_SUSPENDED) return;
+    const timer = window.setTimeout(() => { void refreshCloudState(); }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   async function syncNow() {
@@ -107,6 +110,10 @@ export default function QuickCloudSyncButton({
     } finally {
       setIsSyncing(false);
     }
+  }
+
+  if (CLOUD_SYNC_SUSPENDED) {
+    return <p role="status" className="text-sm text-amber-100">{CLOUD_SYNC_SUSPENSION_MESSAGE}</p>;
   }
 
   if (isConnected === false) {

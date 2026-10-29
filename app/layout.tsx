@@ -1,3 +1,4 @@
+import { CLOUD_SYNC_SUSPENDED, CLOUD_SYNC_SUSPENSION_MESSAGE } from "./lib/cloudSyncSuspension";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import CloudAutoSync from "./components/CloudAutoSync";
@@ -52,6 +53,11 @@ export default function RootLayout({
         <CloudAutoSync />
         <NotificationManager />
         <Navigation />
+        {CLOUD_SYNC_SUSPENDED && (
+          <p role="status" className="mx-4 mt-4 rounded-xl border border-amber-300/40 bg-amber-300/10 p-4 text-sm text-amber-100">
+            {CLOUD_SYNC_SUSPENSION_MESSAGE}
+          </p>
+        )}
         {children}
         <PwaInstallPrompt />
         <MobileBottomNav />

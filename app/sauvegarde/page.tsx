@@ -1,5 +1,6 @@
 "use client";
 
+import { CLOUD_SYNC_SUSPENDED, CLOUD_SYNC_SUSPENSION_MESSAGE } from "../lib/cloudSyncSuspension";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import AppVersionChecker from "../components/AppVersionChecker";
@@ -508,6 +509,10 @@ export default function BackupPage() {
   }
 
   async function uploadToCloud() {
+    if (CLOUD_SYNC_SUSPENDED) {
+      setSyncMessage(CLOUD_SYNC_SUSPENSION_MESSAGE);
+      return;
+    }
     setSyncMessage("");
 
     try {
@@ -938,7 +943,7 @@ export default function BackupPage() {
                   Statut
                 </p>
                 <p className="mt-2 text-lg font-bold text-white">
-                  {cloudSyncStatus?.statusLabel ?? cloudSyncStatusMessage}
+                  {CLOUD_SYNC_SUSPENDED ? CLOUD_SYNC_SUSPENSION_MESSAGE : cloudSyncStatus?.statusLabel ?? cloudSyncStatusMessage}
                 </p>
               </article>
               <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
@@ -954,7 +959,7 @@ export default function BackupPage() {
                   Synchro automatique
                 </p>
                 <p className="mt-2 text-lg font-bold text-white">
-                  {cloudSyncSettings.autoSyncEnabled ? "Activée" : "Désactivée"}
+                  {CLOUD_SYNC_SUSPENDED ? "Suspendue temporairement" : cloudSyncSettings.autoSyncEnabled ? "Activée" : "Désactivée"}
                 </p>
               </article>
             </div>
@@ -1037,7 +1042,7 @@ export default function BackupPage() {
                 className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
                 type="button"
                 onClick={uploadToCloud}
-                disabled={isSyncing || shouldBlockEmptyLocalProspectUpload}
+                disabled={CLOUD_SYNC_SUSPENDED || isSyncing || shouldBlockEmptyLocalProspectUpload}
               >
                 Sauvegarder dans le cloud
               </button>
@@ -1346,7 +1351,7 @@ export default function BackupPage() {
                         className="min-h-10 rounded-full bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
                         type="button"
                         onClick={() => restoreFromCloudBackupHistory(backup.id)}
-                        disabled={isSyncing}
+                        disabled={CLOUD_SYNC_SUSPENDED || isSyncing}
                       >
                         {restoringBackupId === backup.id
                           ? "Restauration..."
@@ -1386,14 +1391,9 @@ export default function BackupPage() {
               Synchronisation automatique
             </h2>
             <p className="mt-4 text-sm leading-6 text-slate-300">
-              Quand cette option est activée, le CRM envoie automatiquement les
-              données locales vers le cloud après une modification. La
-              protection anti-écrasement reste active.
-            </p>
-            <p className="mt-2 text-sm leading-6 text-slate-300">
-              Activée par défaut, elle envoie tes modifications vers le cloud
-              après un court délai, sauf si la sécurité anti-écrasement bloque
-              l’envoi.
+              {CLOUD_SYNC_SUSPENDED
+                ? CLOUD_SYNC_SUSPENSION_MESSAGE
+                : "Les modifications locales sont automatiquement envoyees selon le delai choisi."}
             </p>
             {!cloudSyncStatus && cloudSyncStatusMessage ? (
               <p className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm font-medium leading-6 text-amber-100">
@@ -1408,7 +1408,8 @@ export default function BackupPage() {
                 <input
                   className="mt-1 h-5 w-5 accent-emerald-400"
                   type="checkbox"
-                  checked={cloudSyncSettings.autoSyncEnabled}
+                  disabled={CLOUD_SYNC_SUSPENDED}
+                  checked={!CLOUD_SYNC_SUSPENDED && cloudSyncSettings.autoSyncEnabled}
                   onChange={(event) =>
                     saveAutoSyncSettings({
                       ...cloudSyncSettings,
@@ -1434,6 +1435,7 @@ export default function BackupPage() {
                     className="min-h-11 w-28 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
                     min={10}
                     type="number"
+                    disabled={CLOUD_SYNC_SUSPENDED}
                     value={cloudSyncSettings.autoSyncDelaySeconds}
                     onChange={(event) =>
                       setCloudSyncSettings({

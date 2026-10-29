@@ -1,3 +1,4 @@
+import { CLOUD_SYNC_SUSPENDED, CLOUD_SYNC_SUSPENSION_MESSAGE, assertCloudWritesAllowed } from "./cloudSyncSuspension";
 import { createBrowserSupabaseClient } from "./supabaseClient";
 import {
   loadCustomMessageTemplates,
@@ -102,6 +103,7 @@ export type CloudSyncStatus = {
   localLastUpdatedAt: string | null;
   needsSync: boolean;
   statusLabel:
+    | typeof CLOUD_SYNC_SUSPENSION_MESSAGE
     | "Jamais synchronisé"
     | "Synchronisation recommandée"
     | "Cloud à jour";
@@ -385,6 +387,10 @@ export function getLocalDataSummary(): LocalDataSummary {
 }
 
 export async function getCloudSyncStatus(): Promise<CloudSyncStatus> {
+  if (CLOUD_SYNC_SUSPENDED) return {
+    lastCloudSyncAt: null, localLastUpdatedAt: null, needsSync: true,
+    statusLabel: CLOUD_SYNC_SUSPENSION_MESSAGE,
+  };
   const cloudSyncState = await getCloudSyncState();
   const localLastUpdatedAt = getLocalDataLastUpdatedAt();
   const lastCloudSyncAt = cloudSyncState.lastSyncAt;
@@ -581,6 +587,7 @@ async function pruneOldCloudBackupHistory(
     return;
   }
 
+  assertCloudWritesAllowed();
   const { error: deleteError } = await supabase
     .from("crm_backup_history")
     .delete()
@@ -595,6 +602,7 @@ async function createCloudBackupHistory(
   backupType: CloudBackupType,
   payload: CloudBackupHistoryPayload,
 ) {
+  assertCloudWritesAllowed();
   const { error } = await supabase.from("crm_backup_history").insert({
     user_id: userId,
     backup_type: backupType,
@@ -653,6 +661,8 @@ export async function getCloudBackupHistory(): Promise<CloudBackupHistoryEntry[]
 export async function restoreCloudBackupHistoryToLocal(
   backupId: string,
 ): Promise<RestoreCloudSummary> {
+  // Historical restore writes a safety snapshot and prunes history. Listing stays available.
+  assertCloudWritesAllowed();
   const { supabase, userId } = await getConnectedUserId();
   const { data, error } = await supabase
     .from("crm_backup_history")
@@ -725,6 +735,7 @@ export async function restoreCloudBackupHistoryToLocal(
 export async function uploadLocalDataToCloud(
   options: UploadLocalDataToCloudOptions = {},
 ): Promise<UploadCloudSummary> {
+  assertCloudWritesAllowed();
   const { supabase, userId } = await getConnectedUserId();
   const uploadSafetyCheck = await canUploadLocalDataSafely();
 
@@ -750,12 +761,14 @@ export async function uploadLocalDataToCloud(
     throw new Error(CLOUD_BACKUP_HISTORY_ERROR_MESSAGE);
   }
 
+  assertCloudWritesAllowed();
   const { error: deleteProspectsError } = await supabase
     .from("crm_prospects")
     .delete()
     .eq("user_id", userId);
   throwIfSupabaseError(deleteProspectsError);
 
+  assertCloudWritesAllowed();
   const { error: deleteResourcesError } = await supabase
     .from("crm_resources")
     .delete()
@@ -763,6 +776,7 @@ export async function uploadLocalDataToCloud(
   throwIfSupabaseError(deleteResourcesError);
 
   if (prospects.length > 0) {
+    assertCloudWritesAllowed();
     const { error } = await supabase.from("crm_prospects").insert(
       prospects.map((prospect) => ({
         user_id: userId,
@@ -774,6 +788,7 @@ export async function uploadLocalDataToCloud(
   }
 
   if (resources.length > 0) {
+    assertCloudWritesAllowed();
     const { error } = await supabase.from("crm_resources").insert(
       resources.map((resource) => ({
         user_id: userId,
@@ -784,6 +799,7 @@ export async function uploadLocalDataToCloud(
     throwIfSupabaseError(error);
   }
 
+  assertCloudWritesAllowed();
   const { error: settingsError } = await supabase
     .from("crm_settings")
     .upsert(
@@ -795,6 +811,7 @@ export async function uploadLocalDataToCloud(
     );
   throwIfSupabaseError(settingsError);
 
+  assertCloudWritesAllowed();
   const { error: templatesError } = await supabase
     .from("crm_message_templates")
     .upsert(
@@ -803,6 +820,7 @@ export async function uploadLocalDataToCloud(
     );
   throwIfSupabaseError(templatesError);
 
+  assertCloudWritesAllowed();
   const { error: syncStateError } = await supabase
     .from("crm_sync_state")
     .upsert(
