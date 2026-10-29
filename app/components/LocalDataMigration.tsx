@@ -1,22 +1,24 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createAccountScopedStorage } from "../lib/accountScopedStorage";
+import type { createAccountScopedStorage, ValidatedStorageOwner } from "../lib/accountScopedStorage";
 import {
   BUSINESS_STORAGE_NAMES, createLegacyDataMigration, LEGACY_MIGRATION_LOCK,
   type MigrationPreview,
 } from "../lib/legacyDataMigration";
-import { createBrowserSupabaseClient } from "../lib/supabaseClient";
+import { useUserSession } from "./UserSessionProvider";
 
 type Runtime = {
   scoped: ReturnType<typeof createAccountScopedStorage>;
   migration: ReturnType<typeof createLegacyDataMigration>;
   userId: string | null;
   revision: number;
+  validateOwner: () => Promise<ValidatedStorageOwner>;
 };
 const labels = ["Prospects", "Ressources", "Paramètres", "Sondages Street Marketing", "Messages personnalisés"];
 
 export default function LocalDataMigration() {
+  const { store } = useUserSession();
   const runtime = useRef<Runtime | null>(null);
   const [account, setAccount] = useState<{ userId: string; email?: string } | null>(null);
   const [summary, setSummary] = useState<string[]>([]);
@@ -29,19 +31,8 @@ export default function LocalDataMigration() {
   const [message, setMessage] = useState("Lecture du compte connecté…");
 
   useEffect(() => {
-    const client = createBrowserSupabaseClient();
-    if (!client) return;
     let disposed = false;
-    let revision = 0;
-    let userId: string | null = null;
-    const scoped = createAccountScopedStorage({
-      getSessionSnapshot: () => ({ userId, revision }),
-      validateUser: async () => {
-        const { data, error } = await client.auth.getUser();
-        if (error) throw new Error("Impossible de valider le compte connecté.");
-        return data.user;
-      },
-    });
+    const scoped = store.scopedStorage;
     const migration = createLegacyDataMigration({
       scoped, getLegacyStorage: () => window.localStorage,
       withExclusiveLock: async operation => {
@@ -49,16 +40,23 @@ export default function LocalDataMigration() {
         return await navigator.locks.request(LEGACY_MIGRATION_LOCK, { mode: "exclusive" }, operation);
       },
     });
-    function update(user: { id: string; email?: string } | null) {
+    function update() {
       if (disposed) return;
-      revision += 1;
-      userId = user?.id ?? null;
-      scoped.invalidateSession();
-      runtime.current = { scoped, migration, userId, revision };
+      const state = store.getSnapshot();
+      const user = state.status === "connected" ? state.user : null;
+      const userId = user?.id ?? null;
+      runtime.current = {
+        scoped, migration, userId, revision: state.generation,
+        validateOwner: async () => {
+          if (!userId) throw new Error("Identité non confirmée.");
+          const operation = await store.beginOperation({ userId, generation: state.generation });
+          return operation.owner;
+        },
+      };
       setAccount(user ? { userId: user.id, email: user.email } : null);
       setPreview(null); setCertain(false); setTypedOwner("");
       setDownloaded(false); setSaved(false); setBusy(false);
-      setMessage(user ? "Aucune copie effectuée. Vérifiez à qui appartiennent les données historiques." : "Connectez-vous pour préparer une migration.");
+      setMessage(state.error ?? (user ? "Aucune copie effectuée. Vérifiez à qui appartiennent les données historiques." : "Connectez-vous pour préparer une migration."));
       try {
         setSummary(BUSINESS_STORAGE_NAMES.map((name, index) => {
           const raw = window.localStorage.getItem(`travel-prospect-crm-${name}`);
@@ -68,17 +66,14 @@ export default function LocalDataMigration() {
         }));
       } catch { setSummary(["Données illisibles : migration à vérifier manuellement."]); }
     }
-    const { data } = client.auth.onAuthStateChange((_event, session) => update(session?.user ?? null));
-    const initialRevision = revision;
-    void client.auth.getSession().then(({ data, error }) => {
-      if (!disposed && initialRevision === revision) update(error ? null : data.session?.user ?? null);
-    }).catch(() => { if (!disposed && initialRevision === revision) update(null); });
+    const unsubscribe = store.subscribe(update);
+    const initialUpdate = window.setTimeout(update, 0);
     return () => {
-      disposed = true; revision += 1; userId = null;
-      scoped.invalidateSession(); runtime.current = null;
-      data.subscription.unsubscribe();
+      disposed = true; runtime.current = null;
+      window.clearTimeout(initialUpdate);
+      unsubscribe();
     };
-  }, []);
+  }, [store]);
 
   async function showPreview() {
     const captured = runtime.current;
@@ -86,7 +81,7 @@ export default function LocalDataMigration() {
     setBusy(true); setPreview(null); setDownloaded(false); setSaved(false);
     setCertain(false); setTypedOwner("");
     try {
-      const owner = await captured.scoped.validateOwner(captured.userId);
+      const owner = await captured.validateOwner();
       const next = await captured.migration.preview(owner);
       if (runtime.current !== captured) return;
       setPreview(next);

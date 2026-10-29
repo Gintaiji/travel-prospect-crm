@@ -61,8 +61,8 @@ deps["./supabaseClient"] = {
   let localChange, authChange, cleanup, timers = 0;
   const autoDeps = {
     "../lib/cloudSyncSuspension": suspension,
-    "../lib/supabaseClient": { createBrowserSupabaseClient: () => ({
-      auth: { onAuthStateChange(fn) { authChange = fn; return { data: { subscription: { unsubscribe() {} } } }; } },
+    "../lib/userSessionStore": { getUserSessionStore: () => ({
+      subscribe(fn) { authChange = fn; return () => {}; },
     }) },
     react: { useRef: value => ({ current: value }), useEffect: fn => { cleanup = fn(); } },
     "../lib/cloudSyncSettingsStorage": {

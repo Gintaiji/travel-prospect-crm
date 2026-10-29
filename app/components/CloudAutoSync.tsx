@@ -1,7 +1,7 @@
 "use client";
 
 import { CLOUD_SYNC_SUSPENDED } from "../lib/cloudSyncSuspension";
-import { createBrowserSupabaseClient } from "../lib/supabaseClient";
+import { getUserSessionStore } from "../lib/userSessionStore";
 import { useEffect, useRef } from "react";
 import {
   loadCloudSyncSettings,
@@ -38,8 +38,7 @@ export default function CloudAutoSync() {
       generation += 1;
       clearAutoSyncTimer();
     }
-    const supabase = createBrowserSupabaseClient();
-    const authSubscription = supabase?.auth.onAuthStateChange(invalidateScheduledSync);
+    const unsubscribeFromSession = getUserSessionStore().subscribe(invalidateScheduledSync);
 
     function refreshSettings() {
       settingsRef.current = loadCloudSyncSettings();
@@ -118,7 +117,7 @@ export default function CloudAutoSync() {
     return () => {
       disposed = true;
       invalidateScheduledSync();
-      authSubscription?.data.subscription.unsubscribe();
+      unsubscribeFromSession();
       unsubscribeFromLocalChanges();
       unsubscribeFromSettingsChanges();
     };

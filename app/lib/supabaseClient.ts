@@ -2,6 +2,12 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "";
+// One browser auth client for Connexion, the session provider and existing readers.
+// Never share a user session between server requests.
+function makeBrowserClient() {
+  return createClient(supabaseUrl, supabaseAnonKey);
+}
+let browserClient: ReturnType<typeof makeBrowserClient> | null = null;
 
 function isValidSupabaseUrl(url: string) {
   return (
@@ -18,6 +24,8 @@ export function isSupabaseConfigured() {
 }
 
 export function createBrowserSupabaseClient() {
+  if (typeof window === "undefined") return null;
+  if (browserClient) return browserClient;
   if (!isValidSupabaseUrl(supabaseUrl)) {
     console.warn("Configuration Supabase invalide. Vérifie NEXT_PUBLIC_SUPABASE_URL.");
 
@@ -32,5 +40,6 @@ export function createBrowserSupabaseClient() {
     return null;
   }
 
-  return createClient(supabaseUrl, supabaseAnonKey);
+  browserClient = makeBrowserClient();
+  return browserClient;
 }

@@ -8,6 +8,7 @@ import Navigation from "./components/Navigation";
 import NotificationManager from "./components/NotificationManager";
 import PwaInstallPrompt from "./components/PwaInstallPrompt";
 import ServiceWorkerRegister from "./components/ServiceWorkerRegister";
+import { UserSessionProvider } from "./components/UserSessionProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -48,19 +49,21 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-slate-950 pb-20 text-white md:pb-0">
-        <ServiceWorkerRegister />
-        <CloudStartupRestore />
-        <CloudAutoSync />
-        <NotificationManager />
-        <Navigation />
-        {CLOUD_SYNC_SUSPENDED && (
-          <p role="status" className="mx-4 mt-4 rounded-xl border border-amber-300/40 bg-amber-300/10 p-4 text-sm text-amber-100">
-            {CLOUD_SYNC_SUSPENSION_MESSAGE}
-          </p>
-        )}
-        {children}
-        <PwaInstallPrompt />
-        <MobileBottomNav />
+        <UserSessionProvider>
+          <ServiceWorkerRegister />
+          <CloudStartupRestore />
+          <CloudAutoSync />
+          <NotificationManager />
+          <Navigation />
+          {CLOUD_SYNC_SUSPENDED && (
+            <p role="status" className="mx-4 mt-4 rounded-xl border border-amber-300/40 bg-amber-300/10 p-4 text-sm text-amber-100">
+              {CLOUD_SYNC_SUSPENSION_MESSAGE}
+            </p>
+          )}
+          {children}
+          <PwaInstallPrompt />
+          <MobileBottomNav />
+        </UserSessionProvider>
       </body>
     </html>
   );
