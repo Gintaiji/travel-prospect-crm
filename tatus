@@ -1,0 +1,147 @@
+[1mdiff --git a/docs/resource-diagnostic-97C-2B3D2.md b/docs/resource-diagnostic-97C-2B3D2.md[m
+[1mnew file mode 100644[m
+[1mindex 0000000..7ad02c8[m
+[1m--- /dev/null[m
+[1m+++ b/docs/resource-diagnostic-97C-2B3D2.md[m
+[36m@@ -0,0 +1,305 @@[m
+[32m+[m[32m# 97C-2B3D2 — Diagnostic de concurrence et audit npm[m
+[32m+[m
+[32m+[m[32mRecette du 29 octobre 2026. **Activation déconseillée.** Une course de lecture est reproductible : le refus protège les écritures, mais « Récupération nécessaire » peut signaler un état transitoire ou une lecture incohérente plutôt qu’un import interrompu. La cause exacte du premier échec historique n’est pas démontrée. L’audit signale aussi Next.js critique dans les dépendances de production.[m
+[32m+[m
+[32m+[m[32m## Périmètre et préservation[m
+[32m+[m
+[32m+[m[32mAucun fichier applicatif, manifeste ou lockfile modifié. Aucun correctif de logique métier ni de dépendance. Aucun accès aux vraies données CRM, comptes ou tables Supabase. Le mode isolé reste désactivé et le cloud suspendu. Les garde-fous existants restent intacts.[m
+[32m+[m
+[32m+[m[32mLe banc navigateur autonome charge les vrais modules TypeScript en mémoire, mais utilise exclusivement deux comptes fictifs, un profil Chrome neuf et des clés préfixées par scénario. Les requêtes externes sont bloquées. Aucun diagnostic n’est ajouté aux routes de production. Les tests ne lancent aucune migration réelle.[m
+[32m+[m
+[32m+[m[32mLes pièces 97C-2B3D1 restent à leur emplacement original, notamment `test-results/resource-browser-observed-race/`. SHA-256 du premier `trace.zip` :[m
+[32m+[m
+[32m+[m[32m`542c2c9a579a1939eba24fd3a80a32bec2d1f23900d1a964c144cce89a36fa1b`[m
+[32m+[m
+[32m+[m[32m`audit-execution.json` conserve les empreintes avant/après des manifestes, indicateurs et premières preuves ; elles sont identiques. Les résultats D2 ont leur propre répertoire `test-results/resource-diagnostic-97C-2B3D2/`. Ces artefacts sont locaux, ignorés par Git : les archiver avec le rapport pour conserver les preuves.[m
+[32m+[m
+[32m+[m[32m## Conditions exactes des états[m
+[32m+[m
+[32m+[m[32m| État / refus | Condition dans le code | Conséquence |[m
+[32m+[m[32m|---|---|---|[m
+[32m+[m[32m| Conflit Ressources | Sous verrou exclusif, propriétaire encore valide, contrôle de récupération réussi, mais octets actuels des ressources différents de la base attendue | Aucun nouveau journal ni ressource écrit par cette tentative ; recharger la base avant nouvelle proposition |[m
+[32m+[m[32m| Récupération nécessaire | Journal/état absents partiellement, illisibles ou invalides ; propriétaire/identifiants/dates/snapshots incohérents ; dernier identifiant différent du marqueur ; marqueur non `verified` ; ressources différentes du dernier candidat vérifié | Refus d’écriture ; conservation des sources et snapshots ; aucun rétablissement automatique |[m
+[32m+[m[32m| Session périmée | Capacité propriétaire invalidée par génération, déconnexion ou autre compte, y compris après attente du verrou | Refus ; aucune réattribution au compte courant |[m
+[32m+[m[32m| Web Locks indisponible | API native absente | Refus sans verrou localStorage de remplacement |[m
+[32m+[m
+[32m+[m[32mLe contrôle de récupération précède le contrôle de conflit : un même candidat périmé peut donc recevoir récupération plutôt que conflit. `accountBusinessStorage.ts` effectue en outre ses contrôles **avant** l’acquisition du verrou par `coordinateResourceWrite`. `assertResourceRecoveryClear` lit séparément journal, marqueur puis ressources ; cet ensemble de lectures n’est pas un snapshot atomique.[m
+[32m+[m
+[32m+[m[32mFichiers concernés par le diagnostic : `app/lib/accountBusinessStorage.ts`, `resourceWriteCoordinator.ts`, `accountScopedStorage.ts`, `resourceAccess.ts`, `resourceBackupJson.ts`, `legacyDataMigration.ts`, `userSessionStore.ts` et leurs tests. Aucun n’a été corrigé dans cette étape.[m
+[32m+[m
+[32m+[m[32m## Ce qui est démontré[m
+[32m+[m
+[32m+[m[32m### 1. Écriture active : récupération transitoire, puis conflit[m
+[32m+[m
+[32m+[m[32mDeux onglets ont une base identique. Le premier est suspendu par CDP juste avant le marqueur final `verified`, en conservant son vrai Web Lock. Son journal, marqueur `pending` et candidat sont déjà stockés. Le second tente d’écrire : le contrôle métier **avant verrou** refuse avec « Récupération nécessaire », sans nouvelle demande de verrou et sans modification du stockage. Après reprise, le premier valide. Une nouvelle tentative du second avec sa base ancienne obtient « Conflit Ressources ».[m
+[32m+[m
+[32m+[m[32mIl s’agit d’un repli sûr pour l’intégrité des écritures, mais le libellé confond opération active et opération abandonnée. Une récupération manuelle à ce stade serait injustifiée et dangereuse si elle ignorait le verrou.[m
+[32m+[m
+[32m+[m[32m### 2. Course de lecture : générations différentes dans le même contrôle[m
+[32m+[m
+[32m+[m[32mUne première écriture est vérifiée. Le second onglet commence une écriture et lit le journal génération 1 ; un point d’arrêt intervient juste avant sa lecture du marqueur. Le premier onglet termine entièrement une écriture génération 2. À la reprise, le second lit le marqueur génération 2 avec son journal génération 1 et reçoit « Récupération nécessaire ». L’état durable est pourtant cohérent et `verified`. Une lecture fraîche fonctionne.[m
+[32m+[m
+[32m+[m[32m**Course confirmée entre contrôle de lecture hors verrou et écriture.** C’est un faux positif de récupération, pas la preuve d’une corruption. Aucun verrou d’écriture natif n’est contourné, aucune validation partielle n’est présentée comme complète. Le test vérifie les snapshots initiaux conservés dans le journal, la dernière correspondance candidat/ressources, le compte B intact et la sauvegarde JSON précédente intacte.[m
+[32m+[m
+[32m+[m[32m### 3. Concurrence réellement sérialisée[m
+[32m+[m
+[32m+[m[32mLe test historique strict conserve l’exigence « Conflit Ressources » : deux demandes sont explicitement mises en attente derrière un verrou-barrière, puis libérées. Une seule écriture est validée et le perdant reçoit le conflit lors du passage final. Les quatre tests de résistance exécutent chacun trois tours : file de deux demandes, écriture terminée avant la seconde tentative, puis nouvelle file, avec ordre des onglets choisi par PRNG et graines 7, 19, 73, 103. Soit **12 tours, 24 tentatives**. Les observations enregistrent le refus réel ; elles ne remplacent pas l’assertion stricte du scénario historique. Une répétition réussie ne prouve pas l’absence de course.[m
+[32m+[m
+[32m+[m[32m### 4. Interruption et écritures partielles[m
+[32m+[m
+[32m+[m[32mUne transaction multi-clés localStorage n’est pas atomique. Des états partiels sont possibles et reproduits : journal ajouté avant marqueur ; ressources remplacées avant marqueur final. Après rafraîchissement, ils restent bloqués en récupération. Le dernier journal conserve `beforeRaw` et `candidateRaw`, et les sauvegardes JSON antérieures restent intactes. Une panne avant la toute première écriture du journal laisse la source intacte ; une panne après le journal laisse une preuve permettant d’examiner la reprise.[m
+[32m+[m
+[32m+[m[32mLes anciennes ressources sont donc récupérables **dans les scénarios vérifiés, tant que le journal et/ou la sauvegarde indépendante restent intacts**. Cela ne garantit pas une récupération après suppression du profil navigateur, corruption disque ou altération de toutes les copies. Aucun rollback automatique n’est exécuté.[m
+[32m+[m
+[32m+[m[32m## Ce qui reste incertain : premier échec conservé[m
+[32m+[m
+[32m+[m[32mLa trace historique montre les deux demandes en attente avant libération de la barrière, puis le refus récupération plutôt que conflit. Elle ne contient pas les lectures internes, les générations observées ni une pile du refus permettant de localiser le contrôle. L’assertion a échoué avant le relevé d’état final. L’inspection en lecture seule est reproductible avec `node tests/diagnostics/inspect-first-race.mjs` et produit `first-trace-summary.json`.[m
+[32m+[m
+[32m+[m[32mLes deux scénarios D2 reproduisent la **transition suspecte**, mais ne démontrent pas la cause unique de cet échec historique : ils ne reproduisent pas exactement ses deux demandes déjà en attente. Une visibilité interprocessus du stockage ou un autre entrelacement reste une hypothèse, pas un résultat établi. Aucun élément disponible ne prouve une écriture partielle lors de cet ancien passage ; aucun élément disponible ne permet non plus d’affirmer son état durable final.[m
+[32m+[m
+[32m+[m[32m## Instrumentation de test[m
+[32m+[m
+[32m+[m[32mUniquement dans `tests/browser/resource-harness.mjs` : ordre et horodatage des événements, onglet via fichier de trace, scénario via pièce jointe, demandes/acquisitions/fin de callback/résolution des Web Locks natifs, alias A/B, génération de session, nombre d’entrées et identifiant d’opération du journal, statut du marqueur, transitions des jobs et pile de refus. `lock-callback-end` précède la libération effective ; `lock-settled` est l’observation de résolution, pas un événement natif de libération.[m
+[32m+[m
+[32m+[m[32mLes journaux instrumentés ne contiennent ni contenu métier, ni UUID personnel, ni token : seulement métadonnées et identifiants d’opérations synthétiques. Les anciens artefacts ne sont pas réécrits. Les captures/JSON historiques du banc ne contiennent que des fixtures fictives. Les points d’arrêt sont contrôlés par CDP ; aucun délai Playwright n’a été augmenté et aucun retry ajouté.[m
+[32m+[m
+[32m+[m[32mUn premier lancement D2 a été interrompu car le pilote attendait le retour d’un `evaluate` lui-même suspendu au point d’arrêt de lecture. Le pilote a été corrigé pour attendre l’événement CDP avant de reprendre ; il s’agissait d’un interblocage du test, pas d’un défaut applicatif. Le répertoire du premier lancement D2 est conservé séparément des passages complets `browser-run2` et `browser-final`. Le passage final utilise les graines avec choix d’onglet par les bits hauts du PRNG et inclut les transitions des jobs ; 16/16 réussites en 15,1 secondes.[m
+[32m+[m
+[32m+[m[32m## Résultats et invariants[m
+[32m+[m
+[32m+[m[32m| Scénario navigateur | Résultat | Invariant vérifié |[m
+[32m+[m[32m|---|---|---|[m
+[32m+[m[32m| Deux écritures mises en file | Réussi | Une validation, un conflit, journal unique, B et JSON inchangés |[m
+[32m+[m[32m| Changement A vers B pendant attente | Réussi | Ancienne opération refusée, ressources A/B inchangées |[m
+[32m+[m[32m| Accès B / sauvegarde A sous B | Réussi | Lecture avec capacité forgée et import inter-compte refusés |[m
+[32m+[m[32m| Import réussi puis édition | Réussi | Journal et JSON précédents conservés |[m
+[32m+[m[32m| Rafraîchissement avant `pending` | Réussi | Journal incomplet détecté, nouvelles écritures refusées |[m
+[32m+[m[32m| Rafraîchissement avant `verified` | Réussi | Candidat non activé comme complet, récupération obligatoire |[m
+[32m+[m[32m| Échec écriture journal | Réussi | Source et sauvegarde conservées |[m
+[32m+[m[32m| Échec écriture ressources | Réussi | Ancienne source conservée, récupération bloquante |[m
+[32m+[m[32m| Échec écriture `verified` | Réussi | Snapshot initial conservé, pas de faux succès |[m
+[32m+[m[32m| Absence de Web Locks | Réussi | Refus sans fallback |[m
+[32m+[m[32m| Écriture active / récupération / conflit | Réussi | Aucune écriture concurrente autorisée pendant récupération |[m
+[32m+[m[32m| Lecture journal v1 / marqueur v2 | Réussi | Refus sûr, dernier état durable cohérent et relisible |[m
+[32m+[m[32m| Résistance graines 7, 19, 73, 103 | 4 réussis, 12 tours | Un succès par tour, aucun mélange, snapshots et JSON conservés |[m
+[32m+[m
+[32m+[m[32mLes données sont protégées dans les scénarios effectivement vérifiés, avec les limites de récupération indiquées ci-dessus. Cela ne constitue pas une preuve exhaustive de tous les ordonnancements, navigateurs ou pannes matérielles.[m
+[32m+[m
+[32m+[m[32mValidation : 16/16 tests navigateur, sans retry ; 12/12 fichiers unitaires ; `tsc --noEmit` réussi ; ESLint ciblé réussi ; `npm run build` réussi (20 pages générées). `npm run lint` global échoue sur **9 erreurs et 3 avertissements préexistants** après suppression d’un avertissement introduit dans la configuration de test : assistant, connexion, useSpeechRecognition, prospects, sauvegarde, Street Marketing et aujourd’hui. Ces fichiers n’ont pas été modifiés.[m
+[32m+[m
+[32m+[m[32mCommandes :[m
+[32m+[m
+[32m+[m[32m```text[m
+[32m+[m[32mnpm run test:browser -- --config=playwright.resource-diagnostic.config.mjs --output=test-results/resource-diagnostic-97C-2B3D2/browser-final[m
+[32m+[m[32mnode --test tests/*.test.mjs tests/cloud-sync-suspension.cjs[m
+[32m+[m[32mnode_modules\.bin\tsc.cmd --noEmit[m
+[32m+[m[32mnode_modules\.bin\eslint.cmd tests/browser/resource-harness.mjs tests/browser/resource-isolation.spec.mjs tests/browser/resource-diagnostic.spec.mjs tests/diagnostics/*.mjs playwright.resource-diagnostic.config.mjs[m
+[32m+[m[32mnpm run lint[m
+[32m+[m[32mnpm run build[m
+[32m+[m[32mnode tests/diagnostics/audit-dependencies.mjs[m
+[32m+[m[32mnode tests/diagnostics/dependency-report.mjs[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m## Vulnérabilités et priorités ultérieures[m
+[32m+[m
+[32m+[m[32mL’audit complet compte **11 paquets vulnérables : 1 critique, 8 élevés, 1 modéré, 1 faible**. L’audit sans dev compte **6 paquets : 1 critique, 4 élevés, 1 modéré**. Il s’agit du comptage npm par paquet, pas de onze avis distincts ni de onze exploitations démontrées. Les sorties audit ont un code 1 à cause des constats ; `npm ls --all --json` réussit.[m
+[32m+[m
+[32m+[m[32m**P0 — Dépendances production.** Préparer séparément une mise à jour contrôlée de Next et de ses dépendances transitives, avec vérification du déploiement réel. npm propose Next 16.4.3 ; ne pas conclure qu’une seule montée de version corrige chaque branche avant nouvel audit. L’avis Windows décrit une RCE non authentifiée ; l’avis SVG concerne notamment Linux glibc avec optimisation d’images. L’OS du poste de développement ne prouve pas celui de production. Sources : [avis Windows](https://github.com/advisories/GHSA-p293-qw3h-jr36), [avis SVG](https://github.com/advisories/GHSA-2464-fhr4-w9xw).[m
+[32m+[m
+[32m+[m[32mL’examen du dépôt ne trouve pas d’import `next/image`, `next/og`, de directive `use server`/`use cache` ni de rewrites applicatives ; `next.config.ts` est vide d’options. Le build produit des pages statiques, mais le script de production reste `next start` et aucun `output: export` n’est configuré : ne pas assimiler cela à une absence de serveur Next exposé. L’atteignabilité de chaque avis dépend de l’hébergement et des fonctionnalités actives ; elle n’a pas été testée par exploitation. Les autres lignes production et les outils méritent également une mise à jour planifiée, voir tableau et avis détaillés.[m
+[32m+[m
+[32m+[m[32m**P1 — Cohérence des contrôles.** Pour une étape autorisée ultérieure, définir un contrôle d’intégrité effectué sous le même verrou que les écritures, sans verrou imbriqué, et une distinction explicite entre opération active, conflit de version et journal abandonné. Ne pas simplement ignorer `pending`, réduire les vérifications ou convertir tout refus récupération en conflit. Exiger des tests déterministes inversés, une nouvelle observation du cas historique et des lectures cohérentes inter-onglets avant activation.[m
+[32m+[m
+[32m+[m[32m**P1 — Récupération.** Conserver l’état bloqué ; confirmer propriétaire et session ; attendre la fin/libération du verrou ; exporter un diagnostic cohérent et des copies indépendantes des sources/journal/ressources/JSON ; comparer octets et intégrité de chaque snapshot avant toute décision. Un retour à `beforeRaw` ou une finalisation du candidat doit faire l’objet d’une procédure séparée, explicitement confirmée, sous verrou et avec vérification de copie. Ne jamais effacer le journal ni marquer `verified` sur la seule présence d’un candidat.[m
+[32m+[m
+[32m+[m[32m**P2 — Outillage.** Planifier la mise à jour des branches ESLint/Babel/YAML/Zod et corriger séparément le passif ESLint. Garder les reproductions et l’instrumentation hors production ; collecter un nouvel échec spontané avec métadonnées s’il apparaît.[m
+[32m+[m
+[32m+[m[32m## Conditions avant activation[m
+[32m+[m
+[32m+[m[32mActivation déconseillée tant que les lectures concurrentes et les états de récupération ne sont pas clarifiés/corrigés avec une recette indépendante, que les dépendances critiques ne sont pas traitées et que la procédure manuelle de reprise n’est pas validée. Restent aussi les prérequis existants : migration explicitement attribuée au propriétaire, sauvegardes vérifiées, tests de session et d’échec, compatibilité JSON, absence de fallback historique et actions Ressources vers Prospects bloquées tant que les prospects restent partagés.[m
+[32m+[m
+[32m+[m[32m## Fichiers modifiés / ajoutés[m
+[32m+[m
+[32m+[m[32m- `tests/browser/resource-harness.mjs` : métadonnées expurgées, observation des vrais verrous, points d’arrêt de lecture et statuts de jobs.[m
+[32m+[m[32m- `tests/browser/resource-isolation.spec.mjs` : export des fixtures/helpers pour réutiliser les dix scénarios stricts existants.[m
+[32m+[m[32m- `tests/browser/resource-diagnostic.spec.mjs` : deux reproductions déterministes et quatre tests bornés à graines.[m
+[32m+[m[32m- `playwright.resource-diagnostic.config.mjs` : sorties D2 séparées, mêmes délais, sans retry.[m
+[32m+[m[32m- `tests/diagnostics/audit-dependencies.mjs` : audit en lecture seule et empreintes de préservation.[m
+[32m+[m[32m- `tests/diagnostics/inspect-first-race.mjs` : inspection non destructive de la première trace.[m
+[32m+[m[32m- `tests/diagnostics/dependency-report.mjs` : tableau, chaînes npm et avis à partir des preuves conservées.[m
+[32m+[m[32m- Ce rapport : conclusions, limites et inventaire npm ci-dessous.[m
+[32m+[m
+[32m+[m[32m## Audit des dépendances — inventaire reproductible[m
+[32m+[m
+[32m+[m[32mSources : sorties brutes de `npm audit --json`, `npm audit --omit=dev --json` et `npm ls --all --json`, conservées dans `test-results/resource-diagnostic-97C-2B3D2/`. Les bornes hors plage ci-dessous sont des cibles à vérifier lors d’une future mise à jour contrôlée, pas des installations effectuées. La présence dans l’arbre production ne démontre pas une exposition HTTP.[m
+[32m+[m
+[32m+[m[32m| Paquet installé | Gravité max. | Nature / portée | Plage agrégée audit | Mise à jour possible | Impact potentiel |[m
+[32m+[m[32m|---|---|---|---|---|---|[m
+[32m+[m[32m| @babel/core 7.29.0 | low | Transitive / développement | <=7.29.0 | >7.29.0 via outils Babel/ESLint | Lecture de fichiers lors du traitement de sourcemaps non fiables par les outils. |[m
+[32m+[m[32m| baseline-browser-mapping 2.10.27 | moderate | Transitive / production (éventuellement aussi outils) | >=2.0.0 <2.11.0 | >=2.11.0 via Browserslist/Next | Arrêt du processus sur entrée invalide ; atteignabilité runtime à établir. |[m
+[32m+[m[32m| brace-expansion 5.0.5, 1.1.14 | high | Transitive / développement | <=1.1.20 \|\| 3.0.0 - 5.0.11 | >=1.1.21 et >=5.0.12 via minimatch/ESLint | Consommation CPU/mémoire sur motifs hostiles dans les outils. |[m
+[32m+[m[32m| browserslist 4.28.2 | high | Transitive / développement | <=4.28.6 | >4.28.6 via parent | Déni de service/cache i

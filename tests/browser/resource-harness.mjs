@@ -51,6 +51,7 @@ const qualified = key => {
 const storage = {
   getItem: key => {
     if (readBreakpoint && key.endsWith(`:${readBreakpoint}`)) { readBreakpoint = null; trace({ action: "read-pause", name: key.split(":").at(-1) }); debugger; }
+    if (fault === "read-state" && key.endsWith(":resource-import-state")) throw new DOMException("Synthetic read failure", "SecurityError");
     const value = localStorage.getItem(qualified(key)); trace({ action: "get", ...summarize(key, value) }); return value;
   },
   setItem(key, value) {
@@ -141,6 +142,14 @@ globalThis.resourceHarness = Object.freeze({
     return { status: access.status, userId: access.userId, resources: access.resources };
   },
   startSave(name, handle, id) { recordJob(name, () => accesses.get(handle).save([resource(id)])); },
+  startLoad(name, handle) { recordJob(name, () => globalThis.resourceHarness.load(handle)); },
+  startExport(name) { recordJob(name, () => backup.exportResources(capture())); },
+  startPreview(name, id) { recordJob(name, () => globalThis.resourceHarness.prepareImport(name, id)); },
+  // Negative control only: reproduce the old unlocked inspection, never used by the app.
+  startUnsafeInspection(name) { recordJob(name, async () => {
+    const op = await store.beginOperation(capture());
+    coordinator.assertResourceRecoveryClear(store.scopedStorage, op.owner);
+  }); },
   job: name => jobs.get(name) ?? null,
   async holdLock(name) {
     let release, entered;

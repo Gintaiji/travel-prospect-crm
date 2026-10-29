@@ -134,14 +134,14 @@ for (const failedName of ["resource-import-state", "resources"]) {
   await migration.copy(await migration.preview(tab.owner), { ownershipCertain: true, ownerUserId: A, jsonBackupSaved: true });
   const { createAccountBusinessStorage } = tab.load("app/lib/accountBusinessStorage.ts");
   const business = createAccountBusinessStorage(tab.scoped, { resourceLocks: locks }).forOwner(tab.owner);
-  business.loadResources();
+  await business.loadResources();
   await business.saveResources(JSON.parse(raw("edited")));
   const { createResourceBackupJson } = tab.load("app/lib/resourceBackupJson.ts");
   const store = { scopedStorage: tab.scoped, beginOperation: async () => ({ owner: tab.owner, userId: A, generation: 1, business, assertCurrent() {} }) };
   const api = createResourceBackupJson({ enabled: true, store, resourceLocks: locks, replacementPolicy: "coordinated" });
   const preview = await api.preview(JSON.stringify({ appName: "Travel Prospect CRM", version: 5, storageScope: "account-resources", ownerUserId: A, resources: JSON.parse(raw("imported")) }), { userId: A, generation: 1 });
   await api.apply(preview, { ownerUserId: A, ownershipCertain: true, legacyOwnershipVerified: false, previewReviewed: true, safetyBackupSaved: true, replaceExisting: true });
-  assert.equal(names.length, 3); assert.ok(names.every(name => name === tab.resourceWriteLockName(A)));
+  assert.equal(names.length, 5); assert.ok(names.every(name => name === tab.resourceWriteLockName(A)));
   assert.deepEqual(JSON.parse(data.get(key(A, "resource-import-journal"))).map(entry => entry.kind), ["migration", "edit", "import"]);
   assert.equal(data.get("travel-prospect-crm-resources"), raw("migrated"));
 }

@@ -66,7 +66,7 @@ export function createResourceBackupJson(dependencies: {
   async function exportResources(capture: SessionCapture) {
     enabled();
     const op = await dependencies.store.beginOperation(capture);
-    const result = op.business.loadResources();
+    const result = await op.business.loadResources();
     if (result.status !== "available") throw new Error(result.status === "migration-required" ? "Migration nécessaire" : "Ressources absentes : aucune liste vide inventée.");
     assertResources(result.data); op.assertCurrent();
     return JSON.stringify(resourceEnvelope(op.userId, result.data), null, 2);
@@ -76,14 +76,9 @@ export function createResourceBackupJson(dependencies: {
     const parsed = parseResourceBackup(json);
     const op = await dependencies.store.beginOperation(capture);
     if (parsed.ownerUserId !== null && parsed.ownerUserId !== op.userId) throw new Error("Cette sauvegarde appartient à un autre compte. Chargement refusé.");
-    const before = dependencies.store.scopedStorage.read(op.owner, "resources");
-    const result = op.business.loadResources();
+    const { raw: before, result } = await op.business.loadResourceSnapshot();
+    op.assertCurrent();
     if (result.status === "migration-required") throw new Error("Migration nécessaire");
-    if (dependencies.store.scopedStorage.read(op.owner, "resources") !== before ||
-      (before === null ? result.status !== "absent" : result.status !== "available" ||
-        JSON.stringify(result.data) !== JSON.stringify(JSON.parse(before)))) {
-      throw new Error("Destination instable pendant l’aperçu. Recommencez.");
-    }
     const candidate = JSON.stringify(parsed.resources);
     const safetyJson = JSON.stringify({
       ...resourceEnvelope(op.userId, result.status === "available" ? result.data : []),

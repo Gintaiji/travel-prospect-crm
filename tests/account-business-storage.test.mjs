@@ -91,7 +91,7 @@ for (const invalid of [
   const store = s.adapter.forOwner(await s.scoped.validateOwner(A));
   const before = [...s.data];
   assert.equal(store.getStatus().status, "migration-required");
-  assert.equal(store.loadResources().status, "migration-required");
+  assert.equal((await store.loadResources()).status, "migration-required");
   assert.throws(() => store.saveResources([]));
   assert.deepEqual([...s.data], before);
 }
@@ -102,11 +102,11 @@ for (const invalid of [
   const store = s.adapter.forOwner(await s.scoped.validateOwner(A));
   const before = [...s.data];
   assert.equal(store.getStatus().label, "Données disponibles");
-  for (const [name, value] of Object.entries(business)) assert.deepEqual(plain(store.read(name).data), value);
+  for (const [name, value] of Object.entries(business)) assert.deepEqual(plain((await store.read(name)).data), value);
   assert.deepEqual([...s.data], before, "reading must never normalize/write");
   assert.equal(s.writes(), 0);
   assert.deepEqual(plain(store.loadProspects().data), business.prospects);
-  assert.deepEqual(plain(store.loadResources().data), business.resources);
+  assert.deepEqual(plain((await store.loadResources()).data), business.resources);
   assert.deepEqual(plain(store.loadSettings().data), business.settings);
   assert.deepEqual(plain(store.loadCustomMessageTemplates().data), business["custom-message-templates"]);
   assert.deepEqual(plain(store.loadStreetMarketingSurvey().data), business["street-marketing-survey"]);
@@ -126,7 +126,7 @@ for (const invalid of [
   const s = setup(); s.seed(A, {});
   const store = s.adapter.forOwner(await s.scoped.validateOwner(A));
   const before = [...s.data];
-  for (const name of Object.keys(business)) assert.equal(store.read(name).status, "absent");
+  for (const name of Object.keys(business)) assert.equal((await store.read(name)).status, "absent");
   assert.deepEqual([...s.data], before);
   assert.equal(s.writes(), 0);
   store.saveProspects([]);
@@ -134,7 +134,7 @@ for (const invalid of [
   store.saveCustomMessageTemplates({});
   store.saveStreetMarketingSurvey({ surveys: [], activeSurveyId: "" });
   assert.deepEqual(plain(store.loadProspects()), { status: "available", data: [] });
-  assert.deepEqual(plain(store.loadResources()), { status: "available", data: [] });
+  assert.deepEqual(plain(await store.loadResources()), { status: "available", data: [] });
   assert.deepEqual(plain(store.loadCustomMessageTemplates().data), {});
   assert.equal(s.data.has(key(A, "settings")), false);
 }
@@ -157,7 +157,7 @@ for (const invalid of [
   assert.throws(() => storeA.saveProspects([{ id: "stale-a" }]));
   s.switchUser(A);
   assert.throws(() => storeA.saveProspects([]), "same ID, new session remains stale");
-  assert.throws(() => storeB.loadResources());
+  await assert.rejects(storeB.loadResources());
   const freshA = s.adapter.forOwner(await s.scoped.validateOwner(A));
   assert.equal(freshA.loadProspects().data[0].id, "p-a");
   assert.deepEqual([...s.data], snapshot);

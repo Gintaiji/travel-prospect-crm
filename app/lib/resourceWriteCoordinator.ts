@@ -25,7 +25,7 @@ function object(value: unknown): value is Record<string, unknown> {
 }
 function fail(reason: string): never { throw new ResourceRecoveryRequiredError(reason); }
 
-/** Read-only integrity audit, including the journal-before-marker crash window. */
+/** Internal integrity audit: callers must hold the account resource lock throughout. */
 export function assertResourceRecoveryClear(scoped: Scoped, owner: ValidatedStorageOwner) {
   const journalRaw = scoped.read(owner, "resource-import-journal");
   const stateRaw = scoped.read(owner, "resource-import-state");
@@ -57,6 +57,26 @@ export function assertResourceRecoveryClear(scoped: Scoped, owner: ValidatedStor
 function browserLocks(): ResourceLockManager {
   if (typeof navigator === "undefined" || !navigator.locks) throw new Error("Web Locks indisponible : écriture isolée refusée. Aucun verrou localStorage de substitution.");
   return { request: async (name, options, callback) => await navigator.locks.request(name, options, callback) };
+}
+
+/** Serialize resource snapshots with writers. Never call from an already-held resource lock. */
+export async function coordinateResourceRead<T>(options: {
+  scoped: Scoped;
+  owner: ValidatedStorageOwner;
+  locks?: ResourceLockManager;
+  // Synchronous callback keeps validation, journal checks and data capture in one lock.
+  read: () => T;
+}): Promise<T> {
+  const { scoped, owner } = options;
+  scoped.read(owner, "migration-state"); // Validate the captured owner before waiting.
+  const snapshot = await (options.locks ?? browserLocks()).request(resourceWriteLockName(owner.userId), { mode: "exclusive" }, async () => {
+    scoped.read(owner, "migration-state"); // Session may have changed while queued.
+    const snapshot = options.read();
+    scoped.read(owner, "migration-state"); // Refuse a revoked owner before publishing data.
+    return snapshot;
+  });
+  scoped.read(owner, "migration-state"); // Also validate after the asynchronous lock handoff.
+  return snapshot;
 }
 
 /** Stable, owner-bound forensic export. Never marks an operation repaired or verified. */

@@ -214,9 +214,8 @@ test.describe("navigateur sans Web Locks", () => {
   test.use({ withoutLocks: true });
   test("refus sans verrou localStorage de secours", async ({ sandbox }) => {
     const [one] = sandbox.pages;
-    await call(one, "load", "writer"); await call(one, "startSave", "denied", "writer", "forbidden");
-    await expect.poll(async () => (await job(one, "denied"))?.status).toBe("rejected");
-    expect((await job(one, "denied")).error).toContain("Web Locks indisponible");
+    await expect(call(one, "load", "writer")).rejects.toThrow("Web Locks indisponible");
+    await expect(call(one, "exportBackup")).rejects.toThrow("Web Locks indisponible");
     expect(await call(one, "snapshot")).toEqual(sandbox.initial);
   });
 });

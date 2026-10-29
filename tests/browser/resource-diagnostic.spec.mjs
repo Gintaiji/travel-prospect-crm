@@ -27,7 +27,7 @@ function invariants(after, initial, entries) {
   expect(journal.at(-1).candidateRaw).toBe(after[key(A, "resources")]);
 }
 
-test("diagnostic déterministe : écriture active -> récupération puis conflit", async ({ sandbox }, info) => {
+test("écriture active : lecture, JSON et écriture attendent sans fausse récupération", async ({ sandbox }, info) => {
   const [one, two] = sandbox.pages;
   await call(one, "load", "one"); await call(two, "load", "two");
   const resume = await paused(sandbox.context, one, () => call(one, "pauseImportAt", "verified"),
@@ -35,24 +35,31 @@ test("diagnostic déterministe : écriture active -> récupération puis conflit
   try {
     const before = await call(two, "snapshot");
     await call(two, "startSave", "during", "two", "refused");
-    expect((await finished(two, "during")).error).toContain("Récupération nécessaire");
+    await call(two, "startLoad", "reader", "fresh");
+    await call(two, "startExport", "export");
+    await call(two, "startPreview", "preview", "preview-candidate");
+    await expect.poll(async () => (await call(two, "pendingLocks")).pending.length).toBe(4);
+    for (const name of ["during", "reader", "export", "preview"]) expect((await job(two, name)).status).toBe("pending");
     expect(await call(two, "snapshot")).toEqual(before);
-    expect((await call(two, "trace")).filter(e => e.action === "lock-request")).toHaveLength(0);
   } finally { await resume(); }
   expect((await finished(one, "writer")).status).toBe("fulfilled");
+  expect((await finished(two, "during")).error).toContain("Conflit Ressources");
+  expect((await finished(two, "reader")).result.resources[0].id).toBe("candidate");
+  expect(JSON.parse((await finished(two, "export")).result).resources[0].id).toBe("candidate");
+  expect(JSON.parse((await finished(two, "preview")).result.safetyJson).resources[0].id).toBe("candidate");
   await call(two, "startSave", "after", "two", "refused-again");
   expect((await finished(two, "after")).error).toContain("Conflit Ressources");
   invariants(await call(two, "snapshot"), sandbox.initial, 1);
-  await evidence(info, sandbox.pages, "pause before verified marker; attempt; resume; retry stale base");
+  await evidence(info, sandbox.pages, "pause before verified; four requests queue; resume; verified reads and stale conflict");
 });
 
-test("diagnostic déterministe : lecture journal et marqueur de générations différentes", async ({ sandbox }, info) => {
+test("contrôle négatif : ancienne inspection hors verrou reproduit la fausse alerte", async ({ sandbox }, info) => {
   const [one, two] = sandbox.pages;
   await call(one, "load", "first"); await call(one, "startSave", "first", "first", "generation-one");
   expect((await finished(one, "first")).status).toBe("fulfilled");
   await call(one, "load", "next"); await call(two, "load", "old");
   const resume = await paused(sandbox.context, two, () => call(two, "pauseReadAt", "resource-import-state"),
-    () => call(two, "startSave", "skew", "old", "never-written"));
+    () => call(two, "startUnsafeInspection", "skew"));
   try {
     await call(one, "startSave", "second", "next", "generation-two");
     expect((await finished(one, "second")).status).toBe("fulfilled");
@@ -61,6 +68,59 @@ test("diagnostic déterministe : lecture journal et marqueur de générations di
   invariants(await call(one, "snapshot"), sandbox.initial, 2);
   expect((await call(two, "load", "fresh")).status).toBe("available");
   await evidence(info, sandbox.pages, "read journal v1; commit v2; read state v2; refuse; fresh read succeeds");
+});
+
+test("lecture cohérente : un écrivain ne peut séparer journal et marqueur", async ({ sandbox }, info) => {
+  const [one, two] = sandbox.pages;
+  await call(one, "load", "initial"); await call(one, "startSave", "first", "initial", "generation-one");
+  expect((await finished(one, "first")).status).toBe("fulfilled");
+  await call(one, "load", "writer");
+  const resume = await paused(sandbox.context, two, () => call(two, "pauseReadAt", "resource-import-state"),
+    () => call(two, "startLoad", "consistent", "consistent-handle"));
+  try {
+    const before = await call(one, "snapshot");
+    await call(one, "startSave", "second", "writer", "generation-two");
+    await expect.poll(async () => (await call(one, "pendingLocks")).pending.length).toBe(1);
+    expect((await job(one, "second")).status).toBe("pending");
+    expect(await call(one, "snapshot")).toEqual(before);
+  } finally { await resume(); }
+  const read = await finished(two, "consistent");
+  expect(read.status).toBe("fulfilled");
+  expect(read.result.resources[0].id).toBe("generation-one");
+  expect((await finished(one, "second")).status).toBe("fulfilled");
+  await call(two, "startSave", "old-base", "consistent-handle", "must-not-write");
+  expect((await finished(two, "old-base")).error).toContain("Conflit Ressources");
+  invariants(await call(one, "snapshot"), sandbox.initial, 2);
+  await evidence(info, sandbox.pages, "read journal v1 holding lock; writer queues; read marker v1; release; commit v2");
+});
+
+test("lecture en attente puis changement de compte : résultat ancien refusé", async ({ sandbox }, info) => {
+  const [one, two] = sandbox.pages;
+  await call(one, "holdLock", "barrier");
+  await call(two, "startLoad", "old-account", "old-handle");
+  await call(two, "startExport", "old-export");
+  await expect.poll(async () => (await call(one, "pendingLocks")).pending.length).toBe(2);
+  await call(one, "signIn", B);
+  for (const page of sandbox.pages) await expect.poll(async () => (await call(page, "session")).userId).toBe(B);
+  await call(one, "releaseLock", "barrier");
+  for (const name of ["old-account", "old-export"]) expect((await finished(two, name)).status).toBe("rejected");
+  expect((await call(two, "load", "B")).resources[0].id).toBe("B-original");
+  const after = await call(one, "snapshot");
+  for (const id of [A, B]) expect(after[key(id, "resources")]).toBe(sandbox.initial[key(id, "resources")]);
+  expect(after[key(A, "resource-import-journal")]).toBeUndefined();
+  expect(after["json-backup-sentinel"]).toBe(sandbox.initial["json-backup-sentinel"]);
+  await evidence(info, sandbox.pages, "queue read and export under A; switch B; reject both; read only B");
+});
+
+test("échec de lecture : erreur propagée, aucune liste vide ni écriture", async ({ sandbox }, info) => {
+  const [one] = sandbox.pages;
+  await call(one, "setFailure", "read-state");
+  await call(one, "startLoad", "failed-read", "never-available");
+  expect((await finished(one, "failed-read")).error).toContain("Synthetic read failure");
+  expect(await call(one, "snapshot")).toEqual(sandbox.initial);
+  await call(one, "setFailure", null);
+  expect((await call(one, "load", "recovered-read")).resources[0].id).toBe("A-original");
+  await evidence(info, sandbox.pages, "read error propagates; storage unchanged; subsequent intact read succeeds");
 });
 
 for (const seed of [7, 19, 73, 103]) {
@@ -83,8 +143,7 @@ for (const seed of [7, 19, 73, 103]) {
       const results = [await finished(one, "a"), await finished(two, "b")];
       expect(results.map(r => r.status).sort()).toEqual(["fulfilled", "rejected"]);
       const refusal = results.find(r => r.status === "rejected").error;
-      // Safety classification recorded, never substituted for the strict original conflict test.
-      expect(/Conflit Ressources|Récupération nécessaire/.test(refusal)).toBe(true);
+      expect(refusal).toContain("Conflit Ressources");
       observations.push({ round, seed, refusal });
       invariants(await call(one, "snapshot"), sandbox.initial, round + 1);
     }

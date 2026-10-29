@@ -100,7 +100,7 @@ for (const version of [1, 2, 3, 4]) {
   assert.equal(journal[0].beforeRaw, originalRaw);
   assert.equal(JSON.parse(s.data.get(key(A, "resource-import-state"))).status, "verified");
   const op = await s.store.beginOperation(s.capture());
-  assert.equal(op.business.loadResources().data[0].title, "Incoming");
+  assert.equal((await op.business.loadResources()).data[0].title, "Incoming");
   assert.equal(s.data.get(key(A, "prospects")), '[{"id":"isolated-person"}]');
   assert.equal(s.data.get(key(A, "settings")), '{"businessName":"unchanged"}');
   assert.equal(s.data.get("travel-prospect-crm-resources"), "legacy untouched");
@@ -147,8 +147,8 @@ for (const corrupt of [false, true]) {
   const journal = JSON.parse(s.data.get(key(A, "resource-import-journal")));
   assert.equal(journal[0].beforeRaw, originalRaw);
   const op = await s.store.beginOperation(s.capture());
-  assert.throws(() => op.business.loadResources(), /non vérifié/);
-  assert.throws(() => op.business.saveResources([]), /non vérifié/);
+  await assert.rejects(op.business.loadResources(), /non vérifié/);
+  await assert.rejects(op.business.saveResources([], originalRaw), /non vérifié/);
   assert.equal(op.business.loadProspects().data[0].id, "isolated-person");
 }
 // Absence never becomes an invented export; importing into an absent key is explicit.
