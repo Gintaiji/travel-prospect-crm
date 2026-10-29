@@ -45,6 +45,17 @@ function migrationRequired(reason: MigrationRequired["reason"]): MigrationRequir
   return { status: "migration-required", label: "Migration nécessaire", reason };
 }
 
+/** Resource-only import gate. The other four business categories are unchanged. */
+function assertResourceImportReadable(scoped: ScopedStorage, owner: ValidatedStorageOwner) {
+  const raw = scoped.read(owner, "resource-import-state");
+  if (raw === null) return;
+  let state: unknown;
+  try { state = JSON.parse(raw); } catch { throw new Error("État d’import Ressources illisible. Vérification manuelle nécessaire."); }
+  if (!isRecord(state) || state.userId !== owner.userId || state.status !== "verified" || typeof state.importId !== "string") {
+    throw new Error("Import Ressources non vérifié. Accès bloqué ; les copies de sécurité sont conservées.");
+  }
+}
+
 /** Validate JSON containers without normalizing, filtering fields or rewriting legacy values. */
 function assertBusinessShape(name: BusinessDataName, value: unknown): void {
   let valid = false;
@@ -93,6 +104,7 @@ export function createAccountBusinessStorage(scoped: ScopedStorage) {
       if (!names.has(name)) throw new Error("Nom de données métier inconnu.");
       const status = getStatus();
       if (status.status !== "available") return status;
+      if (name === "resources") assertResourceImportReadable(scoped, owner);
       const raw = scoped.read(owner, name);
       if (raw === null) return { status: "absent" };
       // Parse/storage errors propagate. Never convert unreadable data to [] or defaults.
@@ -105,6 +117,7 @@ export function createAccountBusinessStorage(scoped: ScopedStorage) {
       if (!names.has(name)) throw new Error("Nom de données métier inconnu.");
       const status = getStatus();
       if (status.status !== "available") throw new Error(`${status.label} : écriture refusée (${status.reason}).`);
+      if (name === "resources") assertResourceImportReadable(scoped, owner);
       assertBusinessShape(name, value);
       const raw = JSON.stringify(value);
       // Serialization may invoke application getters/toJSON. Recheck both the marker
@@ -112,6 +125,7 @@ export function createAccountBusinessStorage(scoped: ScopedStorage) {
       assertBusinessShape(name, JSON.parse(raw));
       const current = getStatus();
       if (current.status !== "available") throw new Error("Migration nécessaire : écriture refusée.");
+      if (name === "resources") assertResourceImportReadable(scoped, owner);
       // One native setItem; no delete-before-write. Quota failures preserve the old value.
       // scoped.write checks owner/revision again immediately before this synchronous write.
       scoped.write(owner, name, raw);

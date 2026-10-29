@@ -18,7 +18,7 @@ export type ResourceAccessResult = AvailableResources | {
   label: string;
 };
 
-function assertResources(resources: Resource[]) {
+export function assertResources(resources: Resource[]) {
   if (!Array.isArray(resources) || resources.some(resource =>
     !resource || [resource.id, resource.title, resource.type, resource.url, resource.notes,
       resource.createdAt, resource.updatedAt].some(value => typeof value !== "string") ||

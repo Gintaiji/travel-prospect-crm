@@ -16,6 +16,8 @@ export const ACCOUNT_STORAGE_NAMES = [
   "startup-cloud-check-running",
   "notification-settings",
   "migration-state",
+  "resource-import-state",
+  "resource-import-journal",
 ] as const;
 
 export type AccountStorageName = (typeof ACCOUNT_STORAGE_NAMES)[number];

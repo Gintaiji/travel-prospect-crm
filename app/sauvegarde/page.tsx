@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import AppVersionChecker from "../components/AppVersionChecker";
 import LocalDataMigration from "../components/LocalDataMigration";
+import ResourceJsonBackupPanel from "../components/ResourceJsonBackupPanel";
+import { ACCOUNT_SCOPED_RESOURCES_ENABLED } from "../lib/resourceIsolationSettings";
+import { isHistoricalBackup } from "../lib/resourceBackupJson";
 import {
   loadLastBackupDate,
   saveLastBackupDate,
@@ -76,6 +79,7 @@ type BackupFile = {
   settings?: AppSettings;
   streetMarketingSurvey?: StreetMarketingSurveyStorage;
   customMessageTemplates?: CustomMessageTemplates;
+  storageScope?: "legacy-shared";
 };
 
 type ProtectionStatus = "unknown" | "granted" | "denied";
@@ -91,6 +95,7 @@ function getTotalConversationCount(prospects: Prospect[]) {
 }
 
 function isBackupFile(value: unknown): value is BackupFile {
+  if (!isHistoricalBackup(value)) return false;
   if (!value || typeof value !== "object") {
     return false;
   }
@@ -438,6 +443,7 @@ export default function BackupPage() {
       settings,
       streetMarketingSurvey: streetMarketingSurvey ?? loadStreetMarketingSurvey(),
       customMessageTemplates,
+      ...(ACCOUNT_SCOPED_RESOURCES_ENABLED ? { storageScope: "legacy-shared" } : {}),
     };
     const backupBlob = new Blob([JSON.stringify(backup, null, 2)], {
       type: "application/json",
@@ -629,6 +635,10 @@ export default function BackupPage() {
   }
 
   function handleImportBackup(event: React.ChangeEvent<HTMLInputElement>) {
+    if (ACCOUNT_SCOPED_RESOURCES_ENABLED) {
+      setImportError("Utilisez le chargement isolé des ressources. Aucun chargement historique automatique dans ce mode.");
+      return;
+    }
     const selectedFile = event.target.files?.[0];
 
     setImportMessage("");
@@ -722,8 +732,9 @@ export default function BackupPage() {
 
         <div className="grid gap-5">
           <LocalDataMigration />
+          {ACCOUNT_SCOPED_RESOURCES_ENABLED && <ResourceJsonBackupPanel />}
           <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
-            <h2 className="text-xl font-bold text-white">Résumé des données</h2>
+            <h2 className="text-xl font-bold text-white">{ACCOUNT_SCOPED_RESOURCES_ENABLED ? "Résumé des données historiques partagées" : "Résumé des données"}</h2>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
@@ -784,7 +795,7 @@ export default function BackupPage() {
           <section className="rounded-2xl border border-white/10 bg-white/5 p-4 sm:p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <h2 className="text-xl font-bold text-white">Sauvegarde complète</h2>
+                <h2 className="text-xl font-bold text-white">{ACCOUNT_SCOPED_RESOURCES_ENABLED ? "Sauvegarde historique partagée — cinq catégories" : "Sauvegarde complète"}</h2>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
                   Sauvegarde les prospects, ressources, paramètres et modèles
                   personnalisés dans un fichier JSON complet.
@@ -795,7 +806,7 @@ export default function BackupPage() {
                 type="button"
                 onClick={exportCompleteBackup}
               >
-                Sauvegarder mes données
+                {ACCOUNT_SCOPED_RESOURCES_ENABLED ? "Exporter l’historique partagé (non isolé)" : "Sauvegarder mes données"}
               </button>
             </div>
           </section>
@@ -811,6 +822,7 @@ export default function BackupPage() {
                   className="min-h-11 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-200 file:mr-4 file:rounded-full file:border-0 file:bg-emerald-400/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-emerald-200 hover:file:bg-emerald-400/20"
                   accept=".json,application/json"
                   type="file"
+                  disabled={ACCOUNT_SCOPED_RESOURCES_ENABLED}
                   onChange={handleImportBackup}
                 />
               </label>
