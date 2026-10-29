@@ -62,6 +62,8 @@ const test = base.extend({
   },
 });
 
+export { test, expect, call, job, key, A, B };
+
 test("deux onglets : exclusion Web Locks et refus de la deuxième liste périmée", async ({ sandbox }, info) => {
   const [one, two] = sandbox.pages;
   await call(one, "load", "one"); await call(two, "load", "two");

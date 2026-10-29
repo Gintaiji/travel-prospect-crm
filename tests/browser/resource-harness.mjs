@@ -17,10 +17,30 @@ if (!namespace || !/^e2e-[a-z0-9-]+$/.test(namespace)) throw new Error("Dedicate
 const prefix = `tpc-browser-test:${namespace}:`;
 const authKey = prefix + "fake-auth";
 const callbacks = new Set();
-let fault = null, breakpoint = null;
+let fault = null, breakpoint = null, readBreakpoint = null;
 const held = new Map(), jobs = new Map(), accesses = new Map();
 const events = [];
-const trace = event => { events.push({ at: performance.now(), ...event }); if (events.length > 1500) events.shift(); };
+const trace = event => { events.push({ order: events.length, at: performance.timeOrigin + performance.now(), ...event }); if (events.length > 1500) events.shift(); };
+// Test-only metadata: never record resource contents, identity UUIDs or auth values.
+const summarize = (key, value) => {
+  const name = key.split(":").at(-1);
+  const meta = { name, account: key.includes(A) ? "A" : key.includes(B) ? "B" : "fixture", present: value !== null };
+  if (value && name === "resource-import-state") { const v = JSON.parse(value); meta.status = v.status; meta.version = v.importId; }
+  if (value && name === "resource-import-journal") { const v = JSON.parse(value); meta.entries = v.length; meta.version = v.at(-1)?.importId; }
+  return meta;
+};
+if (navigator.locks) {
+  const nativeRequest = navigator.locks.request.bind(navigator.locks);
+  let requestNumber = 0;
+  navigator.locks.request = (name, options, callback) => {
+    const request = ++requestNumber;
+    trace({ action: "lock-request", request });
+    return nativeRequest(name, options, async lock => {
+      trace({ action: "lock-acquired", request });
+      try { return await callback(lock); } finally { trace({ action: "lock-callback-end", request }); }
+    }).finally(() => trace({ action: "lock-settled", request }));
+  };
+}
 let downloadedJson = null;
 const qualified = key => {
   if (!key.startsWith(`travel-prospect-crm:account:v1:${A}:`) && !key.startsWith(`travel-prospect-crm:account:v1:${B}:`)) {
@@ -29,13 +49,17 @@ const qualified = key => {
   return prefix + key;
 };
 const storage = {
-  getItem: key => { const value = localStorage.getItem(qualified(key)); trace({ action: "get", key, value }); return value; },
+  getItem: key => {
+    if (readBreakpoint && key.endsWith(`:${readBreakpoint}`)) { readBreakpoint = null; trace({ action: "read-pause", name: key.split(":").at(-1) }); debugger; }
+    const value = localStorage.getItem(qualified(key)); trace({ action: "get", ...summarize(key, value) }); return value;
+  },
   setItem(key, value) {
     qualified(key);
     const stateWrite = key.endsWith(":resource-import-state");
     const status = stateWrite ? JSON.parse(value).status : null;
     if (breakpoint && stateWrite && status === breakpoint) {
       breakpoint = null;
+      trace({ action: "write-pause", status });
       debugger;
     }
     if (fault === "journal" && key.endsWith(":resource-import-journal") || fault === "resources" && key.endsWith(":resources") ||
@@ -43,7 +67,7 @@ const storage = {
       throw new DOMException("Synthetic test storage failure", "QuotaExceededError");
     }
     localStorage.setItem(qualified(key), value);
-    trace({ action: "set", key, value });
+    trace({ action: "set", ...summarize(key, value) });
   },
   removeItem() { throw new Error("Fixture storage deletion is forbidden"); },
 };
@@ -62,12 +86,13 @@ const auth = {
 };
 const announce = () => { const session = fakeSession(); callbacks.forEach(callback => callback(session ? "SIGNED_IN" : "SIGNED_OUT", session)); };
 window.addEventListener("storage", event => {
-  if (event.key?.startsWith(prefix)) trace({ action: "storage-event", key: event.key.slice(prefix.length), value: event.newValue });
+  if (event.key?.startsWith(prefix)) trace({ action: "storage-event", ...summarize(event.key, event.newValue) });
   if (event.key === authKey) announce();
 });
 const store = createUserSessionStore({ getClient: () => ({ auth }), getStorage: () => storage });
 store.subscribe(() => {
   const state = store.getSnapshot(); document.querySelector("#session").textContent = `${state.status}:${state.userId ?? "none"}`;
+  trace({ action: "session", status: state.status, generation: state.generation, account: state.userId === A ? "A" : state.userId === B ? "B" : "none" });
 });
 store.start();
 const resourceAccess = createResourceAccess({ isolated: true, sessionStore: store, legacy: {
@@ -81,8 +106,9 @@ const resource = (id, title = id) => ({ id, title, type: "Site", url: `https://e
 const snapshot = () => Object.fromEntries(Object.keys(localStorage).filter(k => k.startsWith(prefix)).sort().map(k => [k.slice(prefix.length), localStorage.getItem(k)]));
 const recordJob = (name, operation) => {
   const job = { status: "pending" }; jobs.set(name, job);
-  Promise.resolve().then(operation).then(result => { job.status = "fulfilled"; job.result = result ?? null; })
-    .catch(error => { job.status = "rejected"; job.error = String(error.message); document.querySelector("#status").textContent = job.error; });
+  trace({ action: "job-transition", job: name, status: "pending" });
+  Promise.resolve().then(operation).then(result => { job.status = "fulfilled"; job.result = result ?? null; trace({ action: "job-transition", job: name, status: "fulfilled" }); })
+    .catch(error => { job.status = "rejected"; job.error = String(error.message); job.frames = String(error.stack).split("\n").slice(1).map(line => line.replace(/https?:\/\/[^ )]+\//g, "fixture/")); trace({ action: "refusal", job: name, reason: job.error, frames: job.frames }); document.querySelector("#status").textContent = job.error; });
 };
 document.querySelector("#download").addEventListener("click", () => {
   if (!downloadedJson) throw new Error("No fixture backup prepared");
@@ -127,6 +153,7 @@ globalThis.resourceHarness = Object.freeze({
   async pendingLocks() { return navigator.locks.query(); },
   setFailure(point) { fault = point; },
   pauseImportAt(point) { breakpoint = point; },
+  pauseReadAt(name) { readBreakpoint = name; },
   async prepareImport(name, id) {
     const json = JSON.stringify({ appName: "Travel Prospect CRM", version: 5, storageScope: "account-resources", ownerUserId: capture().userId,
       exportedAt: new Date().toISOString(), resources: [resource(id)] });
