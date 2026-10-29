@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { AccountSessionBoundary, useUserSession } from "./UserSessionProvider";
 import { ACCOUNT_SCOPED_RESOURCES_ENABLED } from "../lib/resourceIsolationSettings";
 import { createResourceBackupJson, type ResourceImportPreview } from "../lib/resourceBackupJson";
+import type { assessResourceRecovery } from "../lib/resourceRecoveryAssessment";
 
 function download(json: string, filename: string) {
   const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
@@ -35,6 +36,8 @@ function ResourceJsonBackupContent() {
   const [replace, setReplace] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [diagnostic, setDiagnostic] = useState<{ status: string; reason: string | null; assessment: ReturnType<typeof assessResourceRecovery> } | null>(null);
+  const [backupCheck, setBackupCheck] = useState("Sauvegarde externe absente ou non inspectée.");
   const attempt = useRef(0);
   const capture = { userId: session.userId ?? "", generation: session.generation };
   const api = useMemo(() => createResourceBackupJson({
@@ -86,12 +89,41 @@ function ResourceJsonBackupContent() {
     <p className="break-all">Compte confirmé : {session.userId}</p>
     <button type="button" className={buttonClass} disabled={busy} onClick={() => void exportResources()}>Exporter uniquement mes ressources isolées</button>
     <button type="button" className={buttonClass} disabled={busy} onClick={() => {
-      setBusy(true);
+      setBusy(true); setDiagnostic(null); setMessage("");
       void api.exportRecoveryDiagnostic(capture).then(json => {
-        if (current()) download(json, `travel-prospect-crm-diagnostic-ressources-${capture.userId}.json`);
-      }).catch(error => { if (current()) setMessage(error instanceof Error ? error.message : "Diagnostic indisponible."); })
+        if (current()) {
+          setDiagnostic(JSON.parse(json));
+          download(json, `travel-prospect-crm-diagnostic-ressources-${capture.userId}.json`);
+        }
+      }).catch(() => { if (current()) setMessage("Diagnostic indisponible : accès, lecture ou verrou impossible. L’intégrité n’a pas pu être déterminée ; aucune corruption ne peut être conclue. Réessayez avec une session confirmée."); })
         .finally(() => { if (current()) setBusy(false); });
     }}>Exporter un diagnostic local sans modifier les données</button>
+    {diagnostic && <div role="status" className="grid gap-2 rounded-xl border border-amber-300/30 p-3">
+      <p>{diagnostic.status === "ready" ? "Contrôle terminé : aucune récupération requise." : "Récupération nécessaire — examen manuel uniquement."}</p>
+      <p>{diagnostic.reason}</p>
+      <p>{diagnostic.assessment.corruptionDetected ? "Structure invalide détectée après lecture réussie. Conservez les preuves pour examen." : "Aucune corruption structurelle détectée. Une opération non vérifiée peut rester bloquante."}</p>
+      <p>Intégrité (valid = valide, absent = absent, corrupt = invalide) : données {diagnostic.assessment.resourcesIntegrity}, journal {diagnostic.assessment.journalIntegrity}, état {diagnostic.assessment.stateIntegrity}.</p>
+      <ul className="list-disc pl-5">{diagnostic.assessment.copies.map((copy, index) => <li key={index}>Copie {index + 1} ({copy.operationId ?? "opération non fiable"}) : avant {copy.before}, candidat {copy.candidate}. « untrusted » : propriétaire non confirmé, copie exclue des options.</li>)}</ul>
+      <p>Opération : {diagnostic.assessment.operation ? `${String(diagnostic.assessment.operation.id)} — ${String(diagnostic.assessment.operation.kind)} — ${String(diagnostic.assessment.operation.status)} — propriétaire ${diagnostic.assessment.operation.ownerUserId}` : "non identifiable avec certitude"}.</p>
+      <p>Journal : {diagnostic.assessment.journalStorage.journalBytes.toLocaleString("fr-FR")} octets ; état : {diagnostic.assessment.journalStorage.stateBytes.toLocaleString("fr-FR")} octets. Estimation UTF-16 hors clés et surcoût navigateur.</p>
+      {diagnostic.assessment.journalStorage.oversized && <p className="text-amber-100">Journal anormalement volumineux (seuil indicatif : 1 Mio). Archiver et examiner avant tout futur nettoyage.</p>}
+      <ul className="list-disc pl-5">{diagnostic.assessment.options.map(option => <li key={option}>{option}</li>)}</ul>
+      <p>{diagnostic.assessment.retention}</p>
+      <p>Analyse ponctuelle : relancer le diagnostic avant une décision. Aucune option de récupération n’est exécutée ici.</p>
+    </div>}
+    <label>Vérifier une sauvegarde externe pour préparer la récupération (lecture seule)
+      <input className="mt-2 block w-full" type="file" accept=".json,application/json" disabled={busy} onChange={event => {
+        const file = event.target.files?.[0]; event.target.value = "";
+        setBackupCheck("Sauvegarde externe absente ou non inspectée.");
+        if (!file) return;
+        setBusy(true);
+        void file.text().then(json => { session.store.assertCurrent(capture); return api.inspectRecoveryBackup(json, capture); })
+          .then(result => { if (current()) setBackupCheck(`Structure valide pour ${result.ownerUserId} : ${result.resourcesCount} ressource(s). Vérifier manuellement le contenu et la date avant toute décision.`); })
+          .catch(() => { if (current()) setBackupCheck("Sauvegarde non utilisable : fichier illisible, format invalide ou propriétaire non confirmé. Aucun contenu chargé dans les ressources."); })
+          .finally(() => { if (current()) setBusy(false); });
+      }} />
+    </label>
+    <p role="status">{backupCheck}</p>
     <label>Prévisualiser un fichier JSON
       <input className="mt-2 block w-full" type="file" accept=".json,application/json" disabled={busy} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void previewFile(file); }} />
     </label>

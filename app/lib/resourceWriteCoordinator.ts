@@ -1,4 +1,5 @@
 import type { AccountStorageName, ValidatedStorageOwner } from "./accountScopedStorage";
+import { assessResourceRecovery } from "./resourceRecoveryAssessment";
 
 export type ResourceLockManager = {
   request<T>(name: string, options: { mode: "exclusive" }, callback: () => Promise<T>): Promise<T>;
@@ -81,23 +82,27 @@ export async function coordinateResourceRead<T>(options: {
 
 /** Stable, owner-bound forensic export. Never marks an operation repaired or verified. */
 export async function exportResourceRecoveryDiagnostic(scoped: Scoped, owner: ValidatedStorageOwner, locks?: ResourceLockManager) {
-  scoped.read(owner, "resources");
-  return (locks ?? browserLocks()).request(resourceWriteLockName(owner.userId), { mode: "exclusive" }, async () => {
+  const diagnostic = await coordinateResourceRead({ scoped, owner, locks, read: () => {
+    const rawResources = scoped.read(owner, "resources");
+    const rawJournal = scoped.read(owner, "resource-import-journal");
+    const rawState = scoped.read(owner, "resource-import-state");
+    const rawMigrationState = scoped.read(owner, "migration-state");
+    const captured = { resources: rawResources, "resource-import-journal": rawJournal, "resource-import-state": rawState };
     let status = "ready", reason: string | null = null;
-    try { assertResourceRecoveryClear(scoped, owner); }
+    try { assertResourceRecoveryClear({ ...scoped, read: (_owner, name) => captured[name as keyof typeof captured] }, owner); }
     catch (error) {
       if (!(error instanceof ResourceRecoveryRequiredError)) throw error;
       status = "recovery-required"; reason = error.message;
     }
-    return JSON.stringify({
+    const assessment = assessResourceRecovery(owner.userId, rawResources, rawJournal, rawState);
+    if (assessment.corruptionDetected) { status = "recovery-required"; reason ??= "Structure des données ou copies invalide après lecture réussie."; }
+    return {
       appName: "Travel Prospect CRM", storageScope: "resource-recovery-diagnostic", userId: owner.userId,
       capturedAt: new Date().toISOString(), status, reason,
-      rawResources: scoped.read(owner, "resources"),
-      rawJournal: scoped.read(owner, "resource-import-journal"),
-      rawState: scoped.read(owner, "resource-import-state"),
-      rawMigrationState: scoped.read(owner, "migration-state"),
-    }, null, 2);
-  });
+      rawResources, rawJournal, rawState, rawMigrationState, assessment,
+    };
+  } });
+  return JSON.stringify(diagnostic, null, 2);
 }
 
 /** Sole writer of resource data and its append-only recovery journal. */

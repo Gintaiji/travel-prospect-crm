@@ -1,3 +1,4 @@
+import { assertResources } from "./resourceValidation";
 import type { Resource } from "./types";
 import type { SessionCapture, UserSessionStore } from "./userSessionStore";
 import { ResourceRecoveryRequiredError } from "./resourceWriteCoordinator";
@@ -22,15 +23,7 @@ export type ResourceAccessResult = AvailableResources | {
   label: string;
 };
 
-export function assertResources(resources: Resource[]) {
-  if (!Array.isArray(resources) || resources.some(resource =>
-    !resource || [resource.id, resource.title, resource.type, resource.url, resource.notes,
-      resource.createdAt, resource.updatedAt].some(value => typeof value !== "string") ||
-    typeof resource.isFavorite !== "boolean" ||
-    (resource.subCategory !== undefined && typeof resource.subCategory !== "string"))) {
-    throw new Error("Format des ressources isolées invalide. Aucune donnée remplacée.");
-  }
-}
+export { assertResources } from "./resourceValidation";
 
 /** Shared resource-only seam. Legacy access is a mode, NEVER a fallback for isolated errors. */
 export function createResourceAccess(dependencies: {

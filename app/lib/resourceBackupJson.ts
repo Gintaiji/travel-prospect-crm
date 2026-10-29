@@ -129,7 +129,17 @@ export function createResourceBackupJson(dependencies: {
   async function exportRecoveryDiagnostic(capture: SessionCapture) {
     enabled();
     const op = await dependencies.store.beginOperation(capture);
-    return exportResourceRecoveryDiagnostic(dependencies.store.scopedStorage, op.owner, dependencies.resourceLocks);
+    const json = await exportResourceRecoveryDiagnostic(dependencies.store.scopedStorage, op.owner, dependencies.resourceLocks);
+    op.assertCurrent();
+    return json;
   }
-  return { exportResources, preview, apply, exportRecoveryDiagnostic };
+  async function inspectRecoveryBackup(json: string, capture: SessionCapture) {
+    enabled();
+    const op = await dependencies.store.beginOperation(capture);
+    const parsed = parseResourceBackup(json);
+    if (parsed.ownerUserId !== op.userId) throw new Error("Sauvegarde non attribuée à ce compte confirmé : vérification refusée.");
+    op.assertCurrent();
+    return { ownerUserId: op.userId, resourcesCount: parsed.resources.length };
+  }
+  return { exportResources, preview, apply, exportRecoveryDiagnostic, inspectRecoveryBackup };
 }
