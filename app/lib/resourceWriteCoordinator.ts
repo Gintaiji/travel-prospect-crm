@@ -1,5 +1,5 @@
 import type { AccountStorageName, ValidatedStorageOwner } from "./accountScopedStorage";
-import { assessResourceRecovery } from "./resourceRecoveryAssessment";
+import { assessResourceRecovery, recoverableResourceCopies, validRecoveryStage } from "./resourceRecoveryAssessment";
 
 export type ResourceLockManager = {
   request<T>(name: string, options: { mode: "exclusive" }, callback: () => Promise<T>): Promise<T>;
@@ -41,6 +41,7 @@ export function assertResourceRecoveryClear(scoped: Scoped, owner: ValidatedStor
       (entry.beforeRaw !== null && typeof entry.beforeRaw !== "string") ||
       (entry.candidateRaw !== null && typeof entry.candidateRaw !== "string")) fail("journal incohérent ou propriétaire incorrect");
     if (typeof entry.createdAt !== "string" || !Number.isFinite(Date.parse(entry.createdAt))) fail("date du journal invalide");
+    if (!validRecoveryStage(entry, owner.userId)) fail("préparation de récupération invalide");
     for (const raw of [entry.beforeRaw, entry.candidateRaw]) {
       if (raw !== null) {
         try { if (!Array.isArray(JSON.parse(raw as string))) fail("snapshot du journal invalide"); }
@@ -111,7 +112,10 @@ export async function coordinateResourceWrite(options: {
   owner: ValidatedStorageOwner;
   expectedRaw: string | null;
   candidateRaw: string | null;
-  kind: "edit" | "import" | "migration";
+  kind: "edit" | "import" | "migration" | "recovery";
+  /** Explicit fixture/activation injection; recovery is refused by default here too. */
+  manualRecoveryEnabled?: boolean;
+  recovery?: { diagnosticJson: string; verifiedBackupJson: string; operationId: string; side: "beforeRaw" | "candidateRaw"; confirmedOwnerUserId: string; previewReviewed: boolean };
   locks?: ResourceLockManager;
   sourceOwnerUserId?: string | null;
   preflight?: () => void;
@@ -119,13 +123,27 @@ export async function coordinateResourceWrite(options: {
   work?: () => Promise<void> | void;
 }) {
   const { scoped, owner, expectedRaw, candidateRaw } = options;
+  if (options.kind === "recovery" && options.manualRecoveryEnabled !== true) throw new Error("Récupération manuelle désactivée dans le coordinateur.");
   // Capture before waiting. No lock is ever implemented through a localStorage key.
   scoped.read(owner, "resources");
   if (candidateRaw === null && (expectedRaw !== null || options.kind !== "migration")) throw new Error("Suppression de clé Ressources interdite.");
   if (candidateRaw !== null && !Array.isArray(JSON.parse(candidateRaw))) throw new Error("Le candidat Ressources doit être une liste JSON.");
   return (options.locks ?? browserLocks()).request(resourceWriteLockName(owner.userId), { mode: "exclusive" }, async () => {
     scoped.read(owner, "resources"); // Owner/session validated again after lock wait.
-    assertResourceRecoveryClear(scoped, owner);
+    if (options.kind === "recovery") {
+      const recovery = options.recovery;
+      if (!recovery || recovery.verifiedBackupJson !== recovery.diagnosticJson || !recovery.previewReviewed || recovery.confirmedOwnerUserId !== owner.userId) fail("sauvegarde préalable ou confirmation manquante");
+      const diagnostic = JSON.parse(recovery.diagnosticJson);
+      if (diagnostic.appName !== "Travel Prospect CRM" || diagnostic.storageScope !== "resource-recovery-diagnostic" || diagnostic.userId !== owner.userId || diagnostic.status !== "recovery-required") fail("diagnostic non attribuable ou récupération inutile");
+      for (const [name, field] of [["resources", "rawResources"], ["resource-import-journal", "rawJournal"], ["resource-import-state", "rawState"], ["migration-state", "rawMigrationState"]] as const) {
+        if (scoped.read(owner, name) !== diagnostic[field]) throw new Error("Conflit de récupération : état modifié depuis l’aperçu.");
+      }
+      const copies = recoverableResourceCopies(owner.userId, diagnostic.rawResources, diagnostic.rawJournal, diagnostic.rawState);
+      if (!copies.some(copy => copy.operationId === recovery.operationId && copy.side === recovery.side && copy.raw === candidateRaw)) fail("copie absente ou non vérifiée");
+    } else {
+      if (options.recovery) throw new Error("Options de récupération interdites pour une écriture normale.");
+      assertResourceRecoveryClear(scoped, owner);
+    }
     if (scoped.read(owner, "resources") !== expectedRaw) throw new Error("Conflit Ressources : destination modifiée depuis la lecture. Rechargez avant de recommencer.");
     options.preflight?.();
     const permit = Object.freeze({ userId: owner.userId });
@@ -135,7 +153,9 @@ export async function coordinateResourceWrite(options: {
       const entries = old === null ? [] : JSON.parse(old) as unknown[];
       const importId = crypto.randomUUID(), createdAt = new Date().toISOString();
       const journal = JSON.stringify([...entries, { importId, userId: owner.userId, createdAt, kind: options.kind,
-        sourceOwnerUserId: options.sourceOwnerUserId ?? null, beforeRaw: expectedRaw, candidateRaw }]);
+        sourceOwnerUserId: options.sourceOwnerUserId ?? null, beforeRaw: expectedRaw, candidateRaw,
+        ...(options.kind === "recovery" ? { stagedRaw: candidateRaw, diagnosticJson: options.recovery!.diagnosticJson,
+          recoveredFrom: { operationId: options.recovery!.operationId, side: options.recovery!.side } } : {}) }]);
       scoped.write(owner, "resource-import-journal", journal, permit);
       if (scoped.read(owner, "resource-import-journal") !== journal) fail("copie du journal non vérifiée");
       const pending = JSON.stringify({ userId: owner.userId, importId, createdAt, kind: options.kind, status: "pending" });
@@ -149,6 +169,8 @@ export async function coordinateResourceWrite(options: {
       const verified = JSON.stringify({ userId: owner.userId, importId, createdAt, kind: options.kind, status: "verified", verifiedAt: new Date().toISOString() });
       scoped.write(owner, "resource-import-state", verified, permit);
       if (scoped.read(owner, "resource-import-state") !== verified) fail("état final non vérifié");
+      if (scoped.read(owner, "resource-import-journal") !== journal || scoped.read(owner, "resources") !== candidateRaw) fail("vérification finale des données ou du journal échouée");
+      assertResourceRecoveryClear(scoped, owner);
     } catch (error) {
       try { assertResourceRecoveryClear(scoped, owner); }
       catch (recovery) { if (recovery instanceof ResourceRecoveryRequiredError) throw recovery; }

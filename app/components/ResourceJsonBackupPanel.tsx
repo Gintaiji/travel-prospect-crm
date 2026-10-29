@@ -5,6 +5,7 @@ import { AccountSessionBoundary, useUserSession } from "./UserSessionProvider";
 import { ACCOUNT_SCOPED_RESOURCES_ENABLED } from "../lib/resourceIsolationSettings";
 import { createResourceBackupJson, type ResourceImportPreview } from "../lib/resourceBackupJson";
 import type { assessResourceRecovery } from "../lib/resourceRecoveryAssessment";
+import ResourceManualRecoveryPanel from "./ResourceManualRecoveryPanel";
 
 function download(json: string, filename: string) {
   const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
@@ -124,6 +125,7 @@ function ResourceJsonBackupContent() {
       }} />
     </label>
     <p role="status">{backupCheck}</p>
+    <ResourceManualRecoveryPanel />
     <label>Prévisualiser un fichier JSON
       <input className="mt-2 block w-full" type="file" accept=".json,application/json" disabled={busy} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void previewFile(file); }} />
     </label>

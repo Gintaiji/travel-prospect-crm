@@ -100,6 +100,8 @@ const resourceAccess = createResourceAccess({ isolated: true, sessionStore: stor
   load() { throw new Error("Legacy fallback forbidden in browser fixture"); }, save() { throw new Error("Legacy writes forbidden"); },
 } });
 const backup = createResourceBackupJson({ enabled: true, store, replacementPolicy: "coordinated" });
+// Fictional, namespaced storage only; production recovery switch remains false.
+const recovery = createResourceBackupJson({ enabled: true, recoveryEnabled: true, store });
 const capture = () => ({ userId: store.getSnapshot().userId ?? "", generation: store.getSnapshot().generation });
 const key = (id, name) => `travel-prospect-crm:account:v1:${id}:${name}`;
 const resource = (id, title = id) => ({ id, title, type: "Site", url: `https://example.invalid/${id}`, notes: "FICTIONAL TEST DATA",
@@ -187,5 +189,16 @@ globalThis.resourceHarness = Object.freeze({
     catch (error) { return { accepted: false, error: error.message }; }
   },
   async diagnostic() { return JSON.parse(await backup.exportRecoveryDiagnostic(capture())); },
+  async prepareRecovery(name) {
+    const preview = await recovery.previewRecovery(capture()); accesses.set(name, preview);
+    return { diagnosticJson: preview.diagnosticJson, copies: preview.copies };
+  },
+  verifyRecovery(name, json) { recovery.verifyRecoverySafetyBackup(accesses.get(name), json); },
+  startRecovery(name, handle) {
+    const preview = accesses.get(handle);
+    recordJob(name, () => recovery.applyRecovery(preview, preview.copies[0], {
+      ownerUserId: preview.userId, previewReviewed: true, recoverExplicitly: true,
+    }));
+  },
 });
 document.documentElement.dataset.fixtureReady = "true";

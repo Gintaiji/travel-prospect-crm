@@ -3,6 +3,18 @@ import type { Resource } from "./types";
 
 export const RESOURCE_JOURNAL_WARNING_BYTES = 1024 * 1024;
 
+export function validRecoveryStage(entry: Record<string, unknown>, userId: string) {
+  if (entry.kind !== "recovery") return true;
+  if (entry.stagedRaw !== entry.candidateRaw || typeof entry.diagnosticJson !== "string") return false;
+  try {
+    const d = JSON.parse(entry.diagnosticJson);
+    const source = entry.recoveredFrom as { operationId?: unknown; side?: unknown } | null;
+    return d?.appName === "Travel Prospect CRM" && d.storageScope === "resource-recovery-diagnostic" && d.userId === userId &&
+      d.status === "recovery-required" && d.rawResources === entry.beforeRaw && typeof d.rawJournal === "string" &&
+      !!source && typeof source.operationId === "string" && ["beforeRaw", "candidateRaw"].includes(String(source.side));
+  } catch { return false; }
+}
+
 /** Pure analysis of the existing, locked diagnostic snapshot. No storage access. */
 export function assessResourceRecovery(userId: string, rawResources: string | null, rawJournal: string | null, rawState: string | null) {
   const integrity = (raw: unknown) => {
@@ -32,7 +44,7 @@ export function assessResourceRecovery(userId: string, rawResources: string | nu
     const before = integrity(entry.beforeRaw), candidate = integrity(entry.candidateRaw);
     if (typeof entry.importId !== "string" || !entry.importId || ids.has(entry.importId) ||
       typeof entry.createdAt !== "string" || !Number.isFinite(Date.parse(entry.createdAt)) ||
-      !["edit", "import", "migration"].includes(String(entry.kind)) || before === "corrupt" || candidate === "corrupt") journalIntegrity = "corrupt";
+      !["edit", "import", "migration", "recovery"].includes(String(entry.kind)) || before === "corrupt" || candidate === "corrupt" || !validRecoveryStage(entry, userId)) journalIntegrity = "corrupt";
     ids.add(String(entry.importId));
     return { operationId: typeof entry.importId === "string" ? entry.importId : null, before, candidate };
   });
@@ -62,4 +74,18 @@ export function assessResourceRecovery(userId: string, rawResources: string | nu
       warningThresholdBytes: RESOURCE_JOURNAL_WARNING_BYTES, oversized: journalBytes + stateBytes >= RESOURCE_JOURNAL_WARNING_BYTES },
     retention: "Conserver tous les journaux et snapshots pendant une récupération. Prévoir ensuite un archivage exporté, relu et vérifié pour le même propriétaire, puis une politique explicite de conservation par âge et volume. Tout nettoyage futur exige une décision distincte, un verrou et une nouvelle vérification de session ; aucune suppression disponible ici.",
   };
+}
+
+/** Conservative eligibility: never reinterpret a damaged journal or foreign marker. */
+export function recoverableResourceCopies(userId: string, rawResources: string | null, rawJournal: string | null, rawState: string | null) {
+  const assessment = assessResourceRecovery(userId, rawResources, rawJournal, rawState);
+  if (assessment.journalIntegrity !== "valid" || assessment.stateIntegrity === "corrupt" || assessment.resourcesIntegrity === "corrupt") {
+    throw new Error("Récupération refusée : journal, état ou données invalides. Expertise manuelle nécessaire.");
+  }
+  const entries = JSON.parse(rawJournal!) as { importId: string; beforeRaw: string | null; candidateRaw: string | null; sourceOwnerUserId?: unknown }[];
+  if (entries.some(entry => entry.sourceOwnerUserId != null && entry.sourceOwnerUserId !== userId)) throw new Error("Propriétaire de la source non confirmé pour ce compte.");
+  return entries.flatMap(entry => (["beforeRaw", "candidateRaw"] as const).flatMap(side => {
+    const raw = entry[side];
+    return raw === null ? [] : [{ operationId: entry.importId, side, raw }];
+  }));
 }

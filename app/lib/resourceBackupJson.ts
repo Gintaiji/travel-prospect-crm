@@ -2,6 +2,13 @@ import { assertResources } from "./resourceAccess";
 import type { Resource } from "./types";
 import type { SessionCapture, UserSessionStore } from "./userSessionStore";
 import { coordinateResourceWrite, exportResourceRecoveryDiagnostic, type ResourceLockManager } from "./resourceWriteCoordinator";
+import { recoverableResourceCopies } from "./resourceRecoveryAssessment";
+
+export const MANUAL_RESOURCE_RECOVERY_ENABLED: boolean = false;
+export type ResourceRecoveryPreview = Readonly<{
+  userId: string; diagnosticJson: string;
+  copies: readonly { operationId: string; side: "beforeRaw" | "candidateRaw"; resources: readonly Resource[] }[];
+}>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function record(value: unknown): value is Record<string, unknown> {
@@ -55,9 +62,16 @@ export function createResourceBackupJson(dependencies: {
   resourceLocks?: ResourceLockManager;
   /** Explicit activation policy; stays blocked pending browser/recovery validation. */
   replacementPolicy?: "blocked" | "coordinated";
+  /** Injection reserved for fictional fixtures; production uses the false source switch. */
+  recoveryEnabled?: boolean;
 }) {
   type Operation = Awaited<ReturnType<UserSessionStore["beginOperation"]>>;
   const previews = new WeakMap<ResourceImportPreview, { operation: Operation; before: string | null; candidate: string }>();
+  const recoveries = new WeakMap<ResourceRecoveryPreview, { operation: Operation; json: string; backupVerified: boolean; copies: ReturnType<typeof recoverableResourceCopies> }>();
+  function recoveryEnabled() {
+    enabled();
+    if (!(dependencies.recoveryEnabled ?? MANUAL_RESOURCE_RECOVERY_ENABLED)) throw new Error("Récupération manuelle désactivée.");
+  }
   function enabled() { if (!dependencies.enabled) throw new Error("Sauvegardes isolées désactivées."); }
   function resourceEnvelope(userId: string, resources: Resource[]) {
     return { appName: "Travel Prospect CRM", version: 5, storageScope: "account-resources", ownerUserId: userId,
@@ -141,5 +155,52 @@ export function createResourceBackupJson(dependencies: {
     op.assertCurrent();
     return { ownerUserId: op.userId, resourcesCount: parsed.resources.length };
   }
-  return { exportResources, preview, apply, exportRecoveryDiagnostic, inspectRecoveryBackup };
+  async function previewRecovery(capture: SessionCapture): Promise<ResourceRecoveryPreview> {
+    recoveryEnabled();
+    const operation = await dependencies.store.beginOperation(capture);
+    const json = await exportResourceRecoveryDiagnostic(dependencies.store.scopedStorage, operation.owner, dependencies.resourceLocks);
+    operation.assertCurrent();
+    const d = JSON.parse(json);
+    if (d.status !== "recovery-required") throw new Error("Aucune récupération nécessaire.");
+    const copies = recoverableResourceCopies(operation.userId, d.rawResources, d.rawJournal, d.rawState);
+    if (!copies.length) throw new Error("Aucune copie récupérable.");
+    const result: ResourceRecoveryPreview = Object.freeze({ userId: operation.userId, diagnosticJson: json,
+      copies: Object.freeze(copies.map(copy => Object.freeze({ operationId: copy.operationId, side: copy.side,
+        resources: Object.freeze(JSON.parse(copy.raw)) as Resource[] }))) });
+    recoveries.set(result, { operation, json, copies, backupVerified: false });
+    return result;
+  }
+  function verifyRecoverySafetyBackup(preview: ResourceRecoveryPreview, savedJson: string) {
+    recoveryEnabled();
+    const captured = recoveries.get(preview);
+    if (!captured) throw new Error("Aperçu de récupération inconnu.");
+    captured.operation.assertCurrent();
+    captured.backupVerified = false;
+    // Reloaded file must contain exactly the snapshot, journal and diagnostic being replaced.
+    if (savedJson !== captured.json) throw new Error("Sauvegarde préalable différente du diagnostic de cet aperçu.");
+    captured.backupVerified = true;
+  }
+  async function applyRecovery(preview: ResourceRecoveryPreview, selection: { operationId: string; side: "beforeRaw" | "candidateRaw" }, confirmation: {
+    ownerUserId: string; previewReviewed: boolean; recoverExplicitly: boolean;
+  }) {
+    recoveryEnabled();
+    const captured = recoveries.get(preview);
+    if (!captured || !captured.backupVerified || !confirmation.recoverExplicitly || !confirmation.previewReviewed || confirmation.ownerUserId !== captured.operation.userId) {
+      throw new Error("Sauvegarde préalable relue et confirmation explicite obligatoires.");
+    }
+    captured.operation.assertCurrent();
+    const copy = captured.copies.find(item => item.operationId === selection.operationId && item.side === selection.side);
+    if (!copy) throw new Error("Copie non proposée ou absente.");
+    // One attempt consumes the preview, including on failure: fresh diagnosis required.
+    recoveries.delete(preview);
+    await coordinateResourceWrite({ scoped: dependencies.store.scopedStorage, owner: captured.operation.owner,
+      expectedRaw: JSON.parse(captured.json).rawResources, candidateRaw: copy.raw, kind: "recovery", manualRecoveryEnabled: true, locks: dependencies.resourceLocks,
+      recovery: { diagnosticJson: captured.json, verifiedBackupJson: captured.json, operationId: copy.operationId, side: copy.side,
+        confirmedOwnerUserId: confirmation.ownerUserId, previewReviewed: confirmation.previewReviewed },
+      preflight: () => captured.operation.assertCurrent(),
+    });
+    captured.operation.assertCurrent();
+    return { userId: captured.operation.userId, resourcesCount: JSON.parse(copy.raw).length as number };
+  }
+  return { exportResources, preview, apply, exportRecoveryDiagnostic, inspectRecoveryBackup, previewRecovery, verifyRecoverySafetyBackup, applyRecovery };
 }
