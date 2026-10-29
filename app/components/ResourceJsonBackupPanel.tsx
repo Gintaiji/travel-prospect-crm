@@ -81,7 +81,7 @@ function ResourceJsonBackupContent() {
     } catch (error) {
       if (current()) {
         setPreview(null);
-        setMessage(`${error instanceof Error ? error.message : "Chargement impossible."} En cas de copie incomplète, conservez les fichiers et le journal pour une récupération manuelle.`);
+        setMessage(`${preview.destinationCount !== null ? "Récupération nécessaire — aucun remplacement réussi annoncé. " : ""}${error instanceof Error ? error.message : "Chargement impossible."} Conservez les fichiers et le journal ; refaites un diagnostic avant une nouvelle intervention.`);
       }
     } finally { if (current()) setBusy(false); }
   }
@@ -132,7 +132,12 @@ function ResourceJsonBackupContent() {
     {preview && <>
       <p>Propriétaire du fichier : {preview.sourceOwnerUserId ?? "inconnu — sauvegarde historique partagée"}. Source : {preview.sourceCount} ressource(s). Destination : {preview.destinationCount === null ? "clé absente" : `${preview.destinationCount} ressource(s)`}.</p>
       <p>Catégories présentes : {preview.categories.join(", ")}. Seules les ressources seront copiées.</p>
+      <h3 className="font-bold">Ressources actuelles</h3>
+      <pre className="max-h-48 overflow-auto whitespace-pre-wrap">{preview.currentResources === null ? "Destination absente" : JSON.stringify(preview.currentResources, null, 2)}</pre>
+      <h3 className="font-bold">Ressources à charger</h3>
+      {preview.resources.length === 0 && <p>Liste volontairement vide : le remplacement retirera les ressources de la destination. Les anciennes copies resteront dans le journal.</p>}
       <ul className="max-h-48 list-disc overflow-auto pl-5">{preview.resources.map((resource, index) => <li key={`${index}:${resource.id}`}>{resource.title} — {resource.url}</li>)}</ul>
+      <pre className="max-h-48 overflow-auto whitespace-pre-wrap">{JSON.stringify(preview.resources, null, 2)}</pre>
       <label><input type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)} /> J’ai vérifié l’aperçu.</label>
       {preview.sourceOwnerUserId === null && <label><input type="checkbox" checked={legacyVerified} onChange={event => setLegacyVerified(event.target.checked)} /> J’ai vérifié manuellement le propriétaire de ce fichier historique. En cas de doute ou de données mélangées, je n’effectue pas ce chargement.</label>}
       <label><input type="checkbox" checked={certain} onChange={event => setCertain(event.target.checked)} /> Ces ressources appartiennent exclusivement au compte affiché.</label>
@@ -143,7 +148,20 @@ function ResourceJsonBackupContent() {
         if (!current()) return;
         download(preview.safetyJson, `travel-prospect-crm-avant-chargement-${preview.userId}.json`); setDownloaded(true);
       }}>Télécharger la sauvegarde préalable de la destination</button>
-      <label><input type="checkbox" disabled={!downloaded} checked={saved} onChange={event => setSaved(event.target.checked)} /> J’ai enregistré et vérifié cette sauvegarde préalable.</label>
+      {preview.destinationCount !== null && <label>Relire la sauvegarde préalable complète enregistrée
+        <input className="mt-2 block w-full" type="file" accept=".json,application/json" disabled={busy || !downloaded} onChange={event => {
+          const file = event.target.files?.[0]; event.target.value = ""; setSaved(false);
+          if (!file) return;
+          setBusy(true); setMessage("");
+          void file.text().then(json => {
+            session.store.assertCurrent(capture); api.verifyImportSafetyBackup(preview, json);
+            if (current()) setSaved(true);
+          }).catch(() => { if (current()) setMessage("Sauvegarde préalable non vérifiée : sélectionner le fichier complet exact de cet aperçu. Aucun remplacement effectué."); })
+            .finally(() => { if (current()) setBusy(false); });
+        }} />
+      </label>}
+      {preview.destinationCount !== null && <p role="status">{saved ? "Sauvegarde préalable complète relue et vérifiée." : "Sauvegarde préalable complète non vérifiée."}</p>}
+      {preview.destinationCount === null && <label><input type="checkbox" disabled={!downloaded} checked={saved} onChange={event => setSaved(event.target.checked)} /> J’ai enregistré et vérifié cette sauvegarde préalable.</label>}
       {preview.destinationCount !== null && <label><input type="checkbox" disabled={!preview.replacementAllowed} checked={replace} onChange={event => setReplace(event.target.checked)} /> J’autorise explicitement le remplacement de la destination sauvegardée.</label>}
       {preview.destinationCount !== null && !preview.replacementAllowed && <p className="text-amber-100">Destination déjà présente : remplacement maintenu bloqué. Sa disponibilité nécessite une décision d’activation distincte et la validation de la procédure de récupération.</p>}
       <button type="button" className={buttonClass} disabled={busy || !reviewed || !certain || ownerId !== preview.userId || !downloaded || !saved ||

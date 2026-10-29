@@ -1,5 +1,5 @@
 import type { AccountStorageName, ValidatedStorageOwner } from "./accountScopedStorage";
-import { assessResourceRecovery, recoverableResourceCopies, validRecoveryStage } from "./resourceRecoveryAssessment";
+import { assessResourceRecovery, recoverableResourceCopies, validRecoveryStage, validReplacementStage } from "./resourceRecoveryAssessment";
 
 export type ResourceLockManager = {
   request<T>(name: string, options: { mode: "exclusive" }, callback: () => Promise<T>): Promise<T>;
@@ -44,6 +44,7 @@ export function assertResourceRecoveryClear(scoped: Scoped, owner: ValidatedStor
     if (typeof entry.createdAt !== "string" || !Number.isFinite(Date.parse(entry.createdAt))) fail("date du journal invalide");
     if (entry.kind === "initialization" && (ids.size !== 0 || entry.beforeRaw !== null || entry.candidateRaw !== "[]")) fail("journal d’initialisation invalide");
     if (!validRecoveryStage(entry, owner.userId)) fail("préparation de récupération invalide");
+    if (!validReplacementStage(entry, owner.userId)) fail("préparation de remplacement invalide");
     for (const raw of [entry.beforeRaw, entry.candidateRaw]) {
       if (raw !== null) {
         try { if (!Array.isArray(JSON.parse(raw as string))) fail("snapshot du journal invalide"); }
@@ -84,7 +85,7 @@ export async function coordinateResourceRead<T>(options: {
 }
 
 /** Stable, owner-bound forensic export. Never marks an operation repaired or verified. */
-export async function exportResourceRecoveryDiagnostic(scoped: Scoped, owner: ValidatedStorageOwner, locks?: ResourceLockManager) {
+export async function exportResourceRecoveryDiagnostic(scoped: Scoped, owner: ValidatedStorageOwner, locks?: ResourceLockManager, validate?: () => void) {
   const diagnostic = await coordinateResourceRead({ scoped, owner, locks, read: () => {
     const rawResources = scoped.read(owner, "resources");
     const rawJournal = scoped.read(owner, "resource-import-journal");
@@ -99,6 +100,7 @@ export async function exportResourceRecoveryDiagnostic(scoped: Scoped, owner: Va
     }
     const assessment = assessResourceRecovery(owner.userId, rawResources, rawJournal, rawState);
     if (assessment.corruptionDetected) { status = "recovery-required"; reason ??= "Structure des données ou copies invalide après lecture réussie."; }
+    if (status === "ready") validate?.();
     return {
       appName: "Travel Prospect CRM", storageScope: "resource-recovery-diagnostic", userId: owner.userId,
       capturedAt: new Date().toISOString(), status, reason,
@@ -116,6 +118,7 @@ export async function coordinateResourceWrite(options: {
   candidateRaw: string | null;
   kind: "edit" | "import" | "migration" | "recovery" | "initialization";
   initialization?: { enabled: boolean; confirmed: boolean; ownerUserId: string };
+  replacement?: { diagnosticJson: string; safetyJson: string; verifiedSafetyJson: string; confirmedOwnerUserId: string };
   /** Explicit fixture/activation injection; recovery is refused by default here too. */
   manualRecoveryEnabled?: boolean;
   recovery?: { diagnosticJson: string; verifiedBackupJson: string; operationId: string; side: "beforeRaw" | "candidateRaw"; confirmedOwnerUserId: string; previewReviewed: boolean };
@@ -150,6 +153,15 @@ export async function coordinateResourceWrite(options: {
       assertResourceRecoveryClear(scoped, owner);
     }
     if (scoped.read(owner, "resources") !== expectedRaw) throw new Error("Conflit Ressources : destination modifiée depuis la lecture. Rechargez avant de recommencer.");
+    if (options.replacement) {
+      const r = options.replacement;
+      if (options.kind !== "import" || expectedRaw === null || options.sourceOwnerUserId !== owner.userId || r.confirmedOwnerUserId !== owner.userId || r.verifiedSafetyJson !== r.safetyJson ||
+        !validReplacementStage({ kind: "import", sourceOwnerUserId: options.sourceOwnerUserId, beforeRaw: expectedRaw, candidateRaw, replacement: { diagnosticJson: r.diagnosticJson, safetyJson: r.safetyJson, stagedRaw: candidateRaw } }, owner.userId)) throw new Error("Sauvegarde ou propriétaire du remplacement non vérifié.");
+      const diagnostic = JSON.parse(r.diagnosticJson);
+      for (const [name, field] of [["resources", "rawResources"], ["resource-import-journal", "rawJournal"], ["resource-import-state", "rawState"], ["migration-state", "rawMigrationState"]] as const) {
+        if (scoped.read(owner, name) !== diagnostic[field]) throw new Error("Conflit Ressources : état modifié depuis l’aperçu de remplacement.");
+      }
+    }
     options.preflight?.();
     if (options.kind === "initialization" && scoped.isAccountEmpty?.(owner) !== true) throw new Error("Initialisation refusée : destination isolée existante. Aucune donnée remplacée.");
     const permit = Object.freeze({ userId: owner.userId });
@@ -160,6 +172,7 @@ export async function coordinateResourceWrite(options: {
       const importId = crypto.randomUUID(), createdAt = new Date().toISOString();
       const journal = JSON.stringify([...entries, { importId, userId: owner.userId, createdAt, kind: options.kind,
         sourceOwnerUserId: options.sourceOwnerUserId ?? null, beforeRaw: expectedRaw, candidateRaw,
+        ...(options.replacement ? { replacement: { stagedRaw: candidateRaw, diagnosticJson: options.replacement.diagnosticJson, safetyJson: options.replacement.safetyJson } } : {}),
         ...(options.kind === "recovery" ? { stagedRaw: candidateRaw, diagnosticJson: options.recovery!.diagnosticJson,
           recoveredFrom: { operationId: options.recovery!.operationId, side: options.recovery!.side } } : {}) }]);
       scoped.write(owner, "resource-import-journal", journal, permit);

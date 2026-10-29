@@ -169,6 +169,7 @@ globalThis.resourceHarness = Object.freeze({
     const json = JSON.stringify({ appName: "Travel Prospect CRM", version: 5, storageScope: "account-resources", ownerUserId: capture().userId,
       exportedAt: new Date().toISOString(), resources: [resource(id)] });
     const preview = await backup.preview(json, capture()); accesses.set(name, preview);
+    backup.verifyImportSafetyBackup(preview, preview.safetyJson); // Fixture models a separately saved/read safety file.
     downloadedJson = preview.safetyJson;
     return { owner: preview.userId, safetyJson: preview.safetyJson };
   },

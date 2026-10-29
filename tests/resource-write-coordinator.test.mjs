@@ -140,6 +140,7 @@ for (const failedName of ["resource-import-state", "resources"]) {
   const store = { scopedStorage: tab.scoped, beginOperation: async () => ({ owner: tab.owner, userId: A, generation: 1, business, assertCurrent() {} }) };
   const api = createResourceBackupJson({ enabled: true, store, resourceLocks: locks, replacementPolicy: "coordinated" });
   const preview = await api.preview(JSON.stringify({ appName: "Travel Prospect CRM", version: 5, storageScope: "account-resources", ownerUserId: A, resources: JSON.parse(raw("imported")) }), { userId: A, generation: 1 });
+  api.verifyImportSafetyBackup(preview, preview.safetyJson);
   await api.apply(preview, { ownerUserId: A, ownershipCertain: true, legacyOwnershipVerified: false, previewReviewed: true, safetyBackupSaved: true, replaceExisting: true });
   assert.equal(names.length, 5); assert.ok(names.every(name => name === tab.resourceWriteLockName(A)));
   assert.deepEqual(JSON.parse(data.get(key(A, "resource-import-journal"))).map(entry => entry.kind), ["migration", "edit", "import"]);

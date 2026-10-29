@@ -10,8 +10,9 @@ const test = base.extend({
   withoutLocks: [false, { option: true }],
   freshB: [false, { option: true }],
   absentB: [false, { option: true }],
-  chain: async ({ context, withoutLocks, freshB, absentB }, provide, info) => {
-    const server = await startResourceChainServer(), namespace = `e2e-${randomUUID()}`;
+  replacementEnabled: [false, { option: true }],
+  chain: async ({ context, withoutLocks, freshB, absentB, replacementEnabled }, provide, info) => {
+    const server = await startResourceChainServer({ jsonReplacement: replacementEnabled }), namespace = `e2e-${randomUUID()}`;
     const blocked = [], errors = [];
     const flags = ["app/lib/resourceIsolationSettings.ts", "app/lib/resourceBackupJson.ts", "app/lib/cloudSyncSuspension.ts"];
     const hashes = () => Object.fromEntries(flags.map(file => [file, createHash("sha256").update(fs.readFileSync(file)).digest("hex")]));
@@ -29,7 +30,7 @@ const test = base.extend({
       await expect.poll(async () => (await call(page, "session")).status).toBe("connected");
       const initial = await call(page, "snapshot");
       await provide({ page, initial, context, url: page.url() });
-      expect(await page.evaluate(() => window.chainRecipe.flags)).toEqual({ isolated: true, recovery: true, cloudSuspended: true });
+      expect(await page.evaluate(() => window.chainRecipe.flags)).toEqual({ isolated: true, recovery: true, jsonReplacement: replacementEnabled, cloudSuspended: true });
       expect((await call(page, "physicalKeys")).every(k => k.startsWith(`tpc-chain:${namespace}:`))).toBe(true);
       expect(blocked).toEqual([]); expect(errors).toEqual([]); expect(hashes()).toEqual(before);
     } finally {
@@ -38,6 +39,7 @@ const test = base.extend({
     }
   },
 });
+export { test, call, key, A, B, download, migrate, add };
 async function download(page, button, info, name) {
   const event = page.waitForEvent("download"); await button.click();
   const file = info.outputPath(name); await (await event).saveAs(file); return file;

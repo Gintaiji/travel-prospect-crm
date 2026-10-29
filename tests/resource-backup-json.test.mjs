@@ -14,6 +14,7 @@ const historical = { appName: "Travel Prospect CRM", version: 4, exportedAt: "20
   streetMarketingSurvey: { surveys: [], activeSurveyId: "" }, customMessageTemplates: { "legacy-id": "original text" } };
 const confirmation = id => ({ ownerUserId: id, ownershipCertain: true, legacyOwnershipVerified: true,
   previewReviewed: true, safetyBackupSaved: true, replaceExisting: true });
+const ownedJson = () => JSON.stringify({ appName: "Travel Prospect CRM", version: 5, storageScope: "account-resources", ownerUserId: A, resources: historical.resources });
 const plain = value => JSON.parse(JSON.stringify(value));
 function fixture(enabled = true, replacementPolicy = "coordinated") {
   const data = new Map([["travel-prospect-crm-resources", "legacy untouched"]]);
@@ -78,15 +79,16 @@ for (const version of [1, 2, 3, 4]) {
   assert.equal(parsed.categories.length, 5);
   assert.equal(isHistoricalBackup(backup), true);
 }
-// A preview never writes; no legacy import without separate ownership confirmation.
+// A replacement requires an owned backup; historical parser compatibility stays separate.
 {
   const s = fixture(); s.seed(A);
   const before = [...s.data];
-  const p = await s.api.preview(JSON.stringify(historical), s.capture());
-  assert.equal(p.sourceOwnerUserId, null); assert.equal(p.destinationCount, 1);
+  const p = await s.api.preview(ownedJson(), s.capture()); s.api.verifyImportSafetyBackup(p, p.safetyJson);
+  await assert.rejects(s.api.preview(JSON.stringify(historical), s.capture()), /sans propriétaire vérifié/);
+  assert.equal(p.sourceOwnerUserId, A); assert.equal(p.destinationCount, 1);
   assert.equal(JSON.parse(p.safetyJson).ownerUserId, A);
   assert.equal(JSON.parse(p.safetyJson).rawResources, s.data.get(key(A, "resources")));
-  for (const overrides of [{ legacyOwnershipVerified: false }, { ownershipCertain: false }, { ownerUserId: B },
+  for (const overrides of [{ ownershipCertain: false }, { ownerUserId: B },
     { previewReviewed: false }, { safetyBackupSaved: false }, { replaceExisting: false }]) {
     await assert.rejects(s.api.apply(p, { ...confirmation(A), ...overrides }));
     assert.deepEqual([...s.data], before);
@@ -105,21 +107,21 @@ for (const version of [1, 2, 3, 4]) {
   assert.equal(s.data.get(key(A, "settings")), '{"businessName":"unchanged"}');
   assert.equal(s.data.get("travel-prospect-crm-resources"), "legacy untouched");
   // A second successful import appends its safety copy instead of replacing the first.
-  const next = await s.api.preview(JSON.stringify(historical), s.capture());
+  const next = await s.api.preview(ownedJson(), s.capture()); s.api.verifyImportSafetyBackup(next, next.safetyJson);
   await s.api.apply(next, confirmation(A));
   assert.equal(JSON.parse(s.data.get(key(A, "resource-import-journal"))).length, 2);
 }
 // Destination changes after preview cannot be overwritten, even with old consent.
 {
   const s = fixture(true, "blocked"); s.seed(A);
-  const p = await s.api.preview(JSON.stringify(historical), s.capture());
+  const p = await s.api.preview(ownedJson(), s.capture()); s.api.verifyImportSafetyBackup(p, p.safetyJson);
   const before = [...s.data];
   assert.equal(p.replacementAllowed, false);
   await assert.rejects(s.api.apply(p, confirmation(A)), /remplacement bloqué/);
   assert.deepEqual([...s.data], before);
 }
 {
-  const s = fixture(); s.seed(A); const p = await s.api.preview(JSON.stringify(historical), s.capture());
+  const s = fixture(); s.seed(A); const p = await s.api.preview(ownedJson(), s.capture()); s.api.verifyImportSafetyBackup(p, p.safetyJson);
   s.data.set(key(A, "resources"), JSON.stringify([resource("concurrent", "Newer")]));
   const before = [...s.data];
   await assert.rejects(s.api.apply(p, confirmation(A)), /modifiée/); assert.deepEqual([...s.data], before);
@@ -127,7 +129,7 @@ for (const version of [1, 2, 3, 4]) {
 // Both a changed session and a change while waiting for the import lock are rejected.
 for (const delayed of [false, true]) {
   const s = fixture(); s.seed(A); s.seed(B);
-  const p = await s.api.preview(JSON.stringify(historical), s.capture());
+  const p = await s.api.preview(ownedJson(), s.capture()); s.api.verifyImportSafetyBackup(p, p.safetyJson);
   const before = [...s.data];
   if (delayed) s.setLock(async operation => { s.switchUser(B); return operation(); });
   else s.switchUser(B);
@@ -136,7 +138,7 @@ for (const delayed of [false, true]) {
 // Failed writes and silent corruption preserve the safety journal, block resources,
 // and leave the other business categories readable and untouched.
 for (const corrupt of [false, true]) {
-  const s = fixture(); s.seed(A); const p = await s.api.preview(JSON.stringify(historical), s.capture());
+  const s = fixture(); s.seed(A); const p = await s.api.preview(ownedJson(), s.capture()); s.api.verifyImportSafetyBackup(p, p.safetyJson);
   const originalRaw = s.data.get(key(A, "resources"));
   s.fail(name => {
     if (name !== key(A, "resources")) return false;
@@ -155,7 +157,7 @@ for (const corrupt of [false, true]) {
 {
   const s = fixture(); s.seed(A, null);
   await assert.rejects(s.api.exportResources(s.capture()), /absentes/);
-  const p = await s.api.preview(JSON.stringify(historical), s.capture());
+  const p = await s.api.preview(ownedJson(), s.capture()); s.api.verifyImportSafetyBackup(p, p.safetyJson);
   assert.equal(p.destinationCount, null);
   assert.equal(JSON.parse(p.safetyJson).rawResources, null);
   await s.api.apply(p, { ...confirmation(A), replaceExisting: false });
@@ -164,7 +166,7 @@ for (const corrupt of [false, true]) {
 {
   const s = fixture(false);
   await assert.rejects(s.api.exportResources(s.capture()), /désactivées/);
-  await assert.rejects(s.api.preview(JSON.stringify(historical), s.capture()), /désactivées/);
+  await assert.rejects(s.api.preview(ownedJson(), s.capture()), /désactivées/);
   assert.deepEqual(s.counts(), { reads: 0, writes: 0 });
 }
 console.log("PASS: owned JSON A/B, five-category legacy compatibility, explicit ownership, previews, safety snapshots, conflicts, stale sessions and failed-import gates.");

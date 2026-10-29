@@ -24,6 +24,7 @@ const storage = {
   },
   setItem(key, value) {
     const qualified = validKey(key);
+    if (fault === "journal" && key.endsWith(":resource-import-journal")) throw Error("Synthetic quota failure at journal");
     if (fault === "verified" && key.endsWith(":resource-import-state") && JSON.parse(value).status === "verified") throw Error("Synthetic quota failure at verified");
     nativeStorage.setItem(qualified, value); events.push({ action: "write", key });
   },
@@ -48,7 +49,7 @@ const key = (id, name) => `travel-prospect-crm:account:v1:${id}:${name}`;
 const resource = id => ({ id, title: id, type: "Site", url: `https://example.invalid/${id}`, notes: "FICTITIOUS", isFavorite: false, createdAt: "2026-10-29", updatedAt: "2026-10-29" });
 globalThis.chainRecipe = {
   store, A, B, events,
-  flags: { isolated: require("app/lib/resourceIsolationSettings").ACCOUNT_SCOPED_RESOURCES_ENABLED, recovery: require("app/lib/resourceBackupJson").MANUAL_RESOURCE_RECOVERY_ENABLED, cloudSuspended: require("app/lib/cloudSyncSuspension").CLOUD_SYNC_SUSPENDED },
+  flags: { isolated: require("app/lib/resourceIsolationSettings").ACCOUNT_SCOPED_RESOURCES_ENABLED, recovery: require("app/lib/resourceBackupJson").MANUAL_RESOURCE_RECOVERY_ENABLED, jsonReplacement: require("app/lib/resourceBackupJson").RESOURCE_JSON_REPLACEMENT_ENABLED, cloudSuspended: require("app/lib/cloudSyncSuspension").CLOUD_SYNC_SUSPENDED },
   seed(prepareB = true, absentB = false) {
     if (nativeStorage.length) throw Error("Recipe requires an empty browser profile");
     // Synthetic legacy set is attributed manually to A; B starts with a separate, verified empty fixture destination.
@@ -70,6 +71,7 @@ globalThis.chainRecipe = {
   async initialize() { return createResourceAccountInitialization({ enabled: true, store }).initialize(capture(), { ownerUserId: capture().userId, emptySpaceConfirmed: true }); },
   async importJson(json) {
     const p = await backup.preview(json, capture());
+    backup.verifyImportSafetyBackup(p, p.safetyJson); // API-only fixture; actual file readback is covered by the UI recipe.
     // API policy activation is explicit in this fixture. UI replacement remains blocked by default.
     return backup.apply(p, { ownerUserId: p.userId, ownershipCertain: true, legacyOwnershipVerified: false, previewReviewed: true, safetyBackupSaved: true, replaceExisting: true });
   },

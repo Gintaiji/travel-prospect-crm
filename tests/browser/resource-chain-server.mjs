@@ -16,7 +16,7 @@ const allowed = new Set([
   "app/lib/localChangeTracker", "app/lib/userSessionStore", "app/lib/cloudSyncSuspension", "app/lib/resourceIsolationSettings",
 ]);
 // This server is never imported by Next. No environment files or real SDK are loaded.
-export async function startResourceChainServer() {
+export async function startResourceChainServer({ jsonReplacement = false } = {}) {
   const modules = new Map();
   function include(id) {
     if (modules.has(id)) return;
@@ -35,6 +35,11 @@ export async function startResourceChainServer() {
         const flag = "export const MANUAL_RESOURCE_RECOVERY_ENABLED: boolean = false;";
         if (!source.includes(flag)) throw new Error("Recovery flag source changed: audit fixture injection");
         source = source.replace(flag, "export const MANUAL_RESOURCE_RECOVERY_ENABLED: boolean = true;");
+        if (jsonReplacement) {
+          const replacementFlag = "export const RESOURCE_JSON_REPLACEMENT_ENABLED: boolean = false;";
+          if (!source.includes(replacementFlag)) throw new Error("Replacement flag source changed: audit fixture injection");
+          source = source.replace(replacementFlag, "export const RESOURCE_JSON_REPLACEMENT_ENABLED: boolean = true;");
+        }
       }
       source = ts.transpileModule(source, { fileName: file, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText;
       if (id === "app/lib/userSessionStore") source += "\nexports.getUserSessionStore = () => globalThis.chainRecipe.store;";

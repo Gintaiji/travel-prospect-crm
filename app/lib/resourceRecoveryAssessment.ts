@@ -3,6 +3,20 @@ import type { Resource } from "./types";
 
 export const RESOURCE_JOURNAL_WARNING_BYTES = 1024 * 1024;
 
+export function validReplacementStage(entry: Record<string, unknown>, userId: string) {
+  if (entry.replacement === undefined) return true;
+  const stage = entry.replacement as Record<string, unknown> | null;
+  if (entry.kind !== "import" || entry.sourceOwnerUserId !== userId || typeof entry.beforeRaw !== "string" || !stage || stage.stagedRaw !== entry.candidateRaw ||
+    typeof stage.diagnosticJson !== "string" || typeof stage.safetyJson !== "string") return false;
+  try {
+    const d = JSON.parse(stage.diagnosticJson), backup = JSON.parse(stage.safetyJson);
+    return d?.appName === "Travel Prospect CRM" && d.storageScope === "resource-recovery-diagnostic" && d.userId === userId && d.status === "ready" &&
+      d.rawResources === entry.beforeRaw && backup?.appName === "Travel Prospect CRM" && backup.storageScope === "account-resources" && backup.ownerUserId === userId &&
+      backup.version === 5 && backup.purpose === "before-resource-import" && backup.rawResources === entry.beforeRaw &&
+      JSON.stringify(backup.resources) === JSON.stringify(JSON.parse(entry.beforeRaw)) && JSON.stringify(backup.recoveryDiagnostic) === JSON.stringify(d);
+  } catch { return false; }
+}
+
 export function validRecoveryStage(entry: Record<string, unknown>, userId: string) {
   if (entry.kind !== "recovery") return true;
   if (entry.stagedRaw !== entry.candidateRaw || typeof entry.diagnosticJson !== "string") return false;
@@ -45,7 +59,7 @@ export function assessResourceRecovery(userId: string, rawResources: string | nu
     if (entry.kind === "initialization" && (index !== 0 || entry.beforeRaw !== null || entry.candidateRaw !== "[]")) journalIntegrity = "corrupt";
     if (typeof entry.importId !== "string" || !entry.importId || ids.has(entry.importId) ||
       typeof entry.createdAt !== "string" || !Number.isFinite(Date.parse(entry.createdAt)) ||
-      !["edit", "import", "migration", "recovery", "initialization"].includes(String(entry.kind)) || before === "corrupt" || candidate === "corrupt" || !validRecoveryStage(entry, userId)) journalIntegrity = "corrupt";
+      !["edit", "import", "migration", "recovery", "initialization"].includes(String(entry.kind)) || before === "corrupt" || candidate === "corrupt" || !validRecoveryStage(entry, userId) || !validReplacementStage(entry, userId)) journalIntegrity = "corrupt";
     ids.add(String(entry.importId));
     return { operationId: typeof entry.importId === "string" ? entry.importId : null, before, candidate };
   });

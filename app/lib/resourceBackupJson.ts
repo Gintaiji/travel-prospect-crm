@@ -1,10 +1,11 @@
 import { assertResources } from "./resourceAccess";
 import type { Resource } from "./types";
 import type { SessionCapture, UserSessionStore } from "./userSessionStore";
-import { coordinateResourceWrite, exportResourceRecoveryDiagnostic, type ResourceLockManager } from "./resourceWriteCoordinator";
+import { coordinateResourceWrite, exportResourceRecoveryDiagnostic, ResourceRecoveryRequiredError, type ResourceLockManager } from "./resourceWriteCoordinator";
 import { recoverableResourceCopies } from "./resourceRecoveryAssessment";
 
 export const MANUAL_RESOURCE_RECOVERY_ENABLED: boolean = false;
+export const RESOURCE_JSON_REPLACEMENT_ENABLED: boolean = false;
 export type ResourceRecoveryPreview = Readonly<{
   userId: string; diagnosticJson: string;
   copies: readonly { operationId: string; side: "beforeRaw" | "candidateRaw"; resources: readonly Resource[] }[];
@@ -51,6 +52,7 @@ export type ResourceImportPreview = Readonly<{
   destinationCount: number | null;
   categories: readonly string[];
   resources: readonly Resource[];
+  currentResources: readonly Resource[] | null;
   safetyJson: string;
   replacementAllowed: boolean;
 }>;
@@ -66,7 +68,8 @@ export function createResourceBackupJson(dependencies: {
   recoveryEnabled?: boolean;
 }) {
   type Operation = Awaited<ReturnType<UserSessionStore["beginOperation"]>>;
-  const previews = new WeakMap<ResourceImportPreview, { operation: Operation; before: string | null; candidate: string }>();
+  const previews = new WeakMap<ResourceImportPreview, { operation: Operation; before: string | null; candidate: string; diagnosticJson: string; safetyJson: string; backupVerified: boolean }>();
+  const replacementAllowed = () => (dependencies.replacementPolicy ?? (RESOURCE_JSON_REPLACEMENT_ENABLED ? "coordinated" : "blocked")) === "coordinated";
   const recoveries = new WeakMap<ResourceRecoveryPreview, { operation: Operation; json: string; backupVerified: boolean; copies: ReturnType<typeof recoverableResourceCopies> }>();
   function recoveryEnabled() {
     enabled();
@@ -89,26 +92,35 @@ export function createResourceBackupJson(dependencies: {
     enabled();
     const parsed = parseResourceBackup(json);
     const op = await dependencies.store.beginOperation(capture);
+    if (parsed.ownerUserId === null) throw new Error("Chargement refusé : sauvegarde sans propriétaire vérifié pour ce compte.");
     if (parsed.ownerUserId !== null && parsed.ownerUserId !== op.userId) throw new Error("Cette sauvegarde appartient à un autre compte. Chargement refusé.");
-    const { raw: before, result } = await op.business.loadResourceSnapshot();
+    const diagnosticJson = await exportResourceRecoveryDiagnostic(dependencies.store.scopedStorage, op.owner, dependencies.resourceLocks, () => {
+      op.assertCurrent();
+      const status = op.business.getResourceStatus();
+      if (status.status !== "available") throw new Error(status.status === "fresh-account" ? "Compte neuf sans données : initialisation explicite nécessaire." : "Migration nécessaire");
+    });
     op.assertCurrent();
-    if (result.status === "migration-required") throw new Error("Migration nécessaire");
-    if (result.status === "fresh-account") throw new Error("Compte neuf sans données : initialisation explicite nécessaire.");
+    const diagnostic = JSON.parse(diagnosticJson);
+    if (diagnostic.status !== "ready") throw new ResourceRecoveryRequiredError("destination non vérifiée avant aperçu");
+    const before: string | null = diagnostic.rawResources;
+    const currentResources: Resource[] | null = before === null ? null : JSON.parse(before);
+    if (currentResources !== null) assertResources(currentResources);
     const candidate = JSON.stringify(parsed.resources);
     const safetyJson = JSON.stringify({
-      ...resourceEnvelope(op.userId, result.status === "available" ? result.data : []),
+      ...resourceEnvelope(op.userId, currentResources ?? []),
       // Absence is explicit; this recovery artifact is not accepted as a normal resource export.
-      ...(result.status === "absent" ? { storageScope: "account-resource-safety", resources: null } : {}),
-      rawResources: before, purpose: "before-resource-import",
+      ...(before === null ? { storageScope: "account-resource-safety", resources: null } : {}),
+      rawResources: before, purpose: "before-resource-import", recoveryDiagnostic: diagnostic,
     }, null, 2);
     // The displayed preview is detached from the immutable string used for the copy.
     const output: ResourceImportPreview = Object.freeze({
       userId: op.userId, sourceOwnerUserId: parsed.ownerUserId, sourceCount: parsed.resources.length,
-      destinationCount: result.status === "available" ? result.data.length : null,
+      destinationCount: currentResources === null ? null : currentResources.length,
       categories: Object.freeze(parsed.categories), resources: Object.freeze(JSON.parse(candidate)) as Resource[], safetyJson,
-      replacementAllowed: dependencies.replacementPolicy === "coordinated",
+      currentResources: currentResources === null ? null : Object.freeze(JSON.parse(before!)) as Resource[],
+      replacementAllowed: replacementAllowed(),
     });
-    previews.set(output, { operation: op, before, candidate });
+    previews.set(output, { operation: op, before, candidate, diagnosticJson, safetyJson, backupVerified: false });
     return output;
   }
 
@@ -123,16 +135,21 @@ export function createResourceBackupJson(dependencies: {
     enabled();
     const captured = previews.get(preview);
     if (!captured || confirmation.ownerUserId !== preview.userId || !confirmation.ownershipCertain ||
-      (preview.sourceOwnerUserId === null && !confirmation.legacyOwnershipVerified)) throw new Error("Propriétaire incertain : chargement refusé.");
+      preview.sourceOwnerUserId !== captured.operation.userId) throw new Error("Propriétaire incertain : chargement refusé.");
     if (!confirmation.previewReviewed || !confirmation.safetyBackupSaved) throw new Error("Aperçu et sauvegarde préalable obligatoires.");
-    if (captured.before !== null && dependencies.replacementPolicy !== "coordinated") {
+    if (captured.before !== null && !replacementAllowed()) {
       throw new Error("Destination existante : remplacement bloqué par la politique d’activation.");
     }
     if (captured.before !== null && !confirmation.replaceExisting) throw new Error("Destination existante : remplacement non autorisé.");
+    if (captured.before !== null && !captured.backupVerified) throw new Error("Sauvegarde préalable complète non relue ou différente de cet aperçu.");
     const { operation: op, before, candidate } = captured;
+    op.assertCurrent();
+    previews.delete(preview); // One attempt; failure requires a fresh snapshot and backup.
     await coordinateResourceWrite({
       scoped: dependencies.store.scopedStorage, owner: op.owner, expectedRaw: before, candidateRaw: candidate,
       kind: "import", locks: dependencies.resourceLocks, sourceOwnerUserId: preview.sourceOwnerUserId,
+      ...(before === null ? {} : { replacement: { diagnosticJson: captured.diagnosticJson, safetyJson: captured.safetyJson,
+        verifiedSafetyJson: captured.safetyJson, confirmedOwnerUserId: confirmation.ownerUserId } }),
       preflight: () => {
         op.assertCurrent();
         if (op.business.getResourceStatus().status !== "available") throw new Error("Migration nécessaire");
@@ -140,6 +157,14 @@ export function createResourceBackupJson(dependencies: {
     });
     op.assertCurrent(); previews.delete(preview);
     return { userId: op.userId, resourcesCount: JSON.parse(candidate).length as number };
+  }
+  function verifyImportSafetyBackup(preview: ResourceImportPreview, savedJson: string) {
+    enabled();
+    const captured = previews.get(preview);
+    if (!captured) throw new Error("Aperçu d’import inconnu ou consommé.");
+    captured.operation.assertCurrent(); captured.backupVerified = false;
+    if (savedJson !== captured.safetyJson) throw new Error("Sauvegarde préalable différente de l’état actuel de cet aperçu.");
+    captured.backupVerified = true;
   }
   async function exportRecoveryDiagnostic(capture: SessionCapture) {
     enabled();
@@ -203,5 +228,5 @@ export function createResourceBackupJson(dependencies: {
     captured.operation.assertCurrent();
     return { userId: captured.operation.userId, resourcesCount: JSON.parse(copy.raw).length as number };
   }
-  return { exportResources, preview, apply, exportRecoveryDiagnostic, inspectRecoveryBackup, previewRecovery, verifyRecoverySafetyBackup, applyRecovery };
+  return { exportResources, preview, apply, verifyImportSafetyBackup, exportRecoveryDiagnostic, inspectRecoveryBackup, previewRecovery, verifyRecoverySafetyBackup, applyRecovery };
 }
