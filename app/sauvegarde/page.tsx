@@ -2,7 +2,7 @@
 
 import { CLOUD_SYNC_SUSPENDED, CLOUD_SYNC_SUSPENSION_MESSAGE } from "../lib/cloudSyncSuspension";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AppVersionChecker from "../components/AppVersionChecker";
 import LocalDataMigration from "../components/LocalDataMigration";
 import ResourceJsonBackupPanel from "../components/ResourceJsonBackupPanel";
@@ -205,6 +205,11 @@ function formatCloudBackupType(backupType: CloudBackupHistoryEntry["backupType"]
   return backupType === "auto" ? "automatique" : "manuelle";
 }
 
+async function readBackupSession() {
+  const supabase = createBrowserSupabaseClient();
+  return supabase ? supabase.auth.getSession() : null;
+}
+
 export default function BackupPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
@@ -273,7 +278,7 @@ export default function BackupPage() {
     setLastReadAt(new Date().toLocaleString("fr-FR"));
   }
 
-  async function refreshCloudSyncState() {
+  const refreshCloudSyncState = useCallback(async () => {
     try {
       const nextCloudSyncStatus = await getCloudSyncStatus();
 
@@ -289,9 +294,9 @@ export default function BackupPage() {
       setCloudDataMessage("Connecte-toi pour connaître les données cloud.");
       setCloudSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
     }
-  }
+  }, []);
 
-  async function refreshCloudDataOverview() {
+  const refreshCloudDataOverview = useCallback(async () => {
     setLocalDataSummary(getLocalDataSummary());
 
     try {
@@ -312,9 +317,9 @@ export default function BackupPage() {
         "Connecte-toi pour comparer les données locales et cloud.",
       );
     }
-  }
+  }, []);
 
-  async function refreshCloudBackupHistory() {
+  const refreshCloudBackupHistory = useCallback(async () => {
     try {
       const backupHistory = await getCloudBackupHistory();
 
@@ -330,12 +335,10 @@ export default function BackupPage() {
         "Connecte-toi pour voir les anciennes sauvegardes cloud.",
       );
     }
-  }
+  }, []);
 
-  async function refreshSession() {
-    const supabase = createBrowserSupabaseClient();
-
-    if (!supabase) {
+  const refreshSession = useCallback(() => readBackupSession().then(async result => {
+    if (!result || result.error || !result.data.session?.user) {
       setSessionMessage("Aucun utilisateur connecté.");
       setLastSyncAt(null);
       setCloudSyncStatus(null);
@@ -348,21 +351,7 @@ export default function BackupPage() {
       return;
     }
 
-    const { data, error } = await supabase.auth.getSession();
-
-    if (error || !data.session?.user) {
-      setSessionMessage("Aucun utilisateur connecté.");
-      setLastSyncAt(null);
-      setCloudSyncStatus(null);
-      setCloudSyncStatusMessage("Connecte-toi pour connaître l'état cloud.");
-      setCloudFreshnessStatus(null);
-      setCloudBackupHistory([]);
-      setCloudBackupHistoryMessage(
-        "Connecte-toi pour voir les anciennes sauvegardes cloud.",
-      );
-      return;
-    }
-
+    const { data } = result;
     setSessionMessage(
       data.session.user.email
         ? `Utilisateur connecté : ${data.session.user.email}`
@@ -372,7 +361,7 @@ export default function BackupPage() {
     await refreshCloudSyncState();
     await refreshCloudDataOverview();
     await refreshCloudBackupHistory();
-  }
+  }), [refreshCloudSyncState, refreshCloudDataOverview, refreshCloudBackupHistory]);
 
   useEffect(() => {
     const loadStoredData = window.setTimeout(() => {
@@ -406,8 +395,8 @@ export default function BackupPage() {
   }, []);
 
   useEffect(() => {
-    refreshSession();
-  }, []);
+    void refreshSession();
+  }, [refreshSession]);
 
   const totalConversationCount = getTotalConversationCount(prospects);
   const customSettingsLabel = hasCustomSettings(settings) ? "Oui" : "Non";

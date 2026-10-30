@@ -22,6 +22,9 @@ export function createHookHarness() {
       if (changed(slots[position]?.deps, deps)) slots[position] = { value: factory(), deps };
       return slots[position].value;
     },
+    useCallback(callback, deps) {
+      return react.useMemo(() => callback, deps);
+    },
     useEffect(effect, deps) {
       const position = index++;
       if (changed(slots[position]?.deps, deps)) {
