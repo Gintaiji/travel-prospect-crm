@@ -12,6 +12,7 @@ function fixture(enabled, fail = false) {
   const preview = { userId: owner, diagnosticJson: '{"fictional":"safety"}', copies: [{ operationId: "import-1", side: "beforeRaw", resources: [{ id: "r", title: "Fictional" }] }] };
   const api = {
     async previewRecovery() { return preview; },
+    async inspectRecoverySpace() { return { status: "sufficient-estimate", availableBytes: 1000000, requiredAdditionalBytes: 1000, reserveBytes: 65536 }; },
     verifyRecoverySafetyBackup(_p, json) { if (json !== preview.diagnosticJson) throw new Error("different"); savedVerified = true; },
     async applyRecovery(p, selection, confirmation) {
       assert.equal(p, preview); assert.equal(selection, preview.copies[0]); assert.equal(savedVerified, true);
@@ -39,7 +40,7 @@ for (const fail of [false, true]) {
   button(s.render(), "Préparer un aperçu de récupération").props.onClick(); await settle();
   let tree = s.render(); assert.match(text(tree), /Fictional/);
   assert.equal(button(tree, "Récupérer les ressources de ce compte").props.disabled, true);
-  const input = findNodes(tree, n => n.type === "input" && n.props.type === "file")[0];
+  const input = findNodes(tree, n => n.type === "input" && n.props.type === "file")[1];
   input.props.onChange({ target: { files: [{ text: async () => "bad" }], value: "file" } }); await settle();
   tree = s.render(); assert.match(text(tree), /non vérifiée/); assert.equal(button(tree, "Récupérer les ressources de ce compte").props.disabled, true);
   input.props.onChange({ target: { files: [{ text: async () => s.preview.diagnosticJson }], value: "file" } }); await settle();

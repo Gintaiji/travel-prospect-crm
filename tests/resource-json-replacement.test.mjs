@@ -25,7 +25,7 @@ async function fixture() {
   const store = { scopedStorage: scoped, beginOperation: async () => { op.assertCurrent(); return op; } };
   const backupModule = load("app/lib/resourceBackupJson.ts"), coordinator = load("app/lib/resourceWriteCoordinator.ts");
   assert.equal(backupModule.RESOURCE_JSON_REPLACEMENT_ENABLED, false);
-  const create = overrides => backupModule.createResourceBackupJson({ enabled: true, store, replacementPolicy: "coordinated", recoveryEnabled: true, ...overrides });
+  const create = overrides => backupModule.createResourceBackupJson({ enabled: true, recoverySpace: () => ({ availableBytes: 4 * 1024 * 1024, usedBytes: 0, source: "fictional" }), store, replacementPolicy: "coordinated", recoveryEnabled: true, ...overrides });
   const api = create();
   return { load, data, owner, scoped, api, coordinator, create, writes: () => writes,
     async prepared(source = json(), customApi = api) { const p = await customApi.preview(source, {}); customApi.verifyImportSafetyBackup(p, p.safetyJson); return p; },

@@ -1,4 +1,5 @@
 import { archiveReceipt, resourceDigest, validFlatEntry, parseResourceArchive } from "./resourceArchiveIntegrity";
+import { assessRecoverySpace, isResourceQuotaError, readBrowserRecoverySpace, ResourceQuotaError, ResourceRecoverySpaceError, type ResourceSpaceEstimate } from "./resourceRecoverySpace";
 import type { AccountStorageName, ValidatedStorageOwner } from "./accountScopedStorage";
 import { assessResourceRecovery, recoverableResourceCopies, validRecoveryStage, validReplacementStage } from "./resourceRecoveryAssessment";
 
@@ -123,6 +124,9 @@ export async function coordinateResourceWrite(options: {
   replacement?: { diagnosticJson: string; safetyJson: string; verifiedSafetyJson: string; confirmedOwnerUserId: string };
   /** Explicit fixture/activation injection; recovery is refused by default here too. */
   manualRecoveryEnabled?: boolean;
+  /** Read-only preparation follows the same lock, conflict and integrity checks. */
+  inspectRecoveryOnly?: boolean;
+  recoverySpace?: () => ResourceSpaceEstimate;
   recovery?: { diagnosticJson: string; verifiedBackupJson: string; operationId: string; side: "beforeRaw" | "candidateRaw"; confirmedOwnerUserId: string; previewReviewed: boolean };
   locks?: ResourceLockManager;
   sourceOwnerUserId?: string | null;
@@ -131,6 +135,7 @@ export async function coordinateResourceWrite(options: {
   work?: () => Promise<void> | void;
 }) {
   const { scoped, owner, expectedRaw, candidateRaw } = options;
+  if (options.inspectRecoveryOnly && options.kind !== "recovery") throw new Error("Inspection réservée à la récupération.");
   if (options.kind === "initialization" && (!options.initialization?.enabled || !options.initialization.confirmed ||
     options.initialization.ownerUserId !== owner.userId || expectedRaw !== null || candidateRaw !== "[]")) throw new Error("Initialisation refusée : activation et confirmation du propriétaire obligatoires.");
   if (options.kind === "recovery" && options.manualRecoveryEnabled !== true) throw new Error("Récupération manuelle désactivée dans le coordinateur.");
@@ -184,9 +189,25 @@ export async function coordinateResourceWrite(options: {
       };
       if (!Array.isArray(entries)) fail("journal illisible");
       const journal = old === null ? JSON.stringify([entry]) : old.slice(0, old.lastIndexOf("]")) + (entries.length ? "," : "") + JSON.stringify(entry) + old.slice(old.lastIndexOf("]"));
+      const pending = JSON.stringify({ userId: owner.userId, importId, createdAt, kind: options.kind, status: "pending" });
+      const verified = JSON.stringify({ userId: owner.userId, importId, createdAt, kind: options.kind, status: "verified", verifiedAt: new Date().toISOString() });
+      if (options.kind === "recovery") {
+        let estimate: ResourceSpaceEstimate;
+        try { estimate = (options.recoverySpace ?? readBrowserRecoverySpace)(); }
+        catch { estimate = { availableBytes: null, usedBytes: null, source: "unavailable" }; }
+        const prefix = `travel-prospect-crm:account:v1:${owner.userId}:`;
+        const space = assessRecoverySpace(estimate, [
+          { key: prefix + "resource-import-journal", before: old, after: journal },
+          { key: prefix + "resource-import-state", before: scoped.read(owner, "resource-import-state"), after: pending },
+          { key: prefix + "resources", before: expectedRaw, after: candidateRaw! },
+          { key: prefix + "resource-import-state", before: pending, after: verified },
+        ]);
+        scoped.read(owner, "resources"); // The injected estimator cannot revoke a session unnoticed.
+        if (options.inspectRecoveryOnly) return space;
+        if (space.status !== "sufficient-estimate") throw new ResourceRecoverySpaceError(space);
+      }
       scoped.write(owner, "resource-import-journal", journal, permit);
       if (scoped.read(owner, "resource-import-journal") !== journal) fail("copie du journal non vérifiée");
-      const pending = JSON.stringify({ userId: owner.userId, importId, createdAt, kind: options.kind, status: "pending" });
       scoped.write(owner, "resource-import-state", pending, permit);
       if (scoped.read(owner, "resource-import-state") !== pending) fail("état de préparation non vérifié");
       if (scoped.read(owner, "resources") !== expectedRaw) fail("destination modifiée pendant la préparation");
@@ -194,12 +215,14 @@ export async function coordinateResourceWrite(options: {
       if (scoped.read(owner, "resources") !== candidateRaw) fail("copie Ressources non vérifiée");
       await options.work?.();
       if (scoped.read(owner, "resources") !== candidateRaw) fail("vérification finale Ressources échouée");
-      const verified = JSON.stringify({ userId: owner.userId, importId, createdAt, kind: options.kind, status: "verified", verifiedAt: new Date().toISOString() });
       scoped.write(owner, "resource-import-state", verified, permit);
       if (scoped.read(owner, "resource-import-state") !== verified) fail("état final non vérifié");
       if (scoped.read(owner, "resource-import-journal") !== journal || scoped.read(owner, "resources") !== candidateRaw) fail("vérification finale des données ou du journal échouée");
       assertResourceRecoveryClear(scoped, owner);
     } catch (error) {
+      // Preserve quota identity even if an incomplete journal also requires recovery.
+      if (isResourceQuotaError(error)) throw new ResourceQuotaError();
+      if (error instanceof ResourceRecoverySpaceError) throw error;
       try { assertResourceRecoveryClear(scoped, owner); }
       catch (recovery) { if (recovery instanceof ResourceRecoveryRequiredError) throw recovery; }
       throw error;

@@ -24,7 +24,7 @@ async function fixture() {
   const owner = await scoped.validateOwner(A);
   const op = { owner, userId: A, assertCurrent() { scoped.read(owner, "migration-state"); } };
   const store = { scopedStorage: scoped, beginOperation: async () => { op.assertCurrent(); return op; } };
-  const create = overrides => load("app/lib/resourceBackupJson.ts").createResourceBackupJson({ enabled: true, recoveryEnabled: true, store, ...overrides });
+  const create = overrides => load("app/lib/resourceBackupJson.ts").createResourceBackupJson({ enabled: true, recoveryEnabled: true, recoverySpace: () => ({ availableBytes: 4 * 1024 * 1024, usedBytes: 0, source: "fictional" }), store, ...overrides });
   const api = create();
   return { load, data, entry, scoped, owner, coordinator, api, create,
     switchAccount() { session = { userId: B, revision: 2 }; },

@@ -2,7 +2,8 @@ import { archiveReceipt, parseResourceArchive, resourceDigest } from "./resource
 import { assertResources } from "./resourceAccess";
 import type { Resource } from "./types";
 import type { SessionCapture, UserSessionStore } from "./userSessionStore";
-import { coordinateResourceWrite, exportResourceRecoveryDiagnostic, ResourceRecoveryRequiredError, type ResourceLockManager } from "./resourceWriteCoordinator";
+import { coordinateResourceRead, coordinateResourceWrite, exportResourceRecoveryDiagnostic, ResourceRecoveryRequiredError, type ResourceLockManager } from "./resourceWriteCoordinator";
+import type { ResourceSpaceEstimate } from "./resourceRecoverySpace";
 import { recoverableResourceCopies } from "./resourceRecoveryAssessment";
 
 export const MANUAL_RESOURCE_RECOVERY_ENABLED: boolean = false;
@@ -47,6 +48,12 @@ export function parseResourceBackup(json: string) {
       throw new Error("Format ou empreinte de sauvegarde Ressources invalide.");
     }
   }
+  if (value.copyVersion !== undefined) {
+    if (value.copyVersion !== 1 || value.purpose !== "resource-recovery-copy" || typeof value.rawResources !== "string" ||
+      value.resourceFingerprint !== resourceDigest(value.rawResources) || JSON.stringify(value.resources) !== JSON.stringify(parseResourceArchive(value.rawResources))) {
+      throw new Error("Copie de récupération : format ou empreinte SHA-256 invalide.");
+    }
+  }
   // Keep the full parsed historical payload for compatibility/preview; import only resources.
   return { payload: value, ownerUserId, resources: value.resources as Resource[],
     categories: ["prospects", "resources", "settings", "streetMarketingSurvey", "customMessageTemplates"].filter(name => Object.hasOwn(value, name)) };
@@ -73,11 +80,13 @@ export function createResourceBackupJson(dependencies: {
   replacementPolicy?: "blocked" | "coordinated";
   /** Injection reserved for fictional fixtures; production uses the false source switch. */
   recoveryEnabled?: boolean;
+  recoverySpace?: () => ResourceSpaceEstimate;
 }) {
   type Operation = Awaited<ReturnType<UserSessionStore["beginOperation"]>>;
   const previews = new WeakMap<ResourceImportPreview, { operation: Operation; before: string | null; candidate: string; diagnosticJson: string; safetyJson: string; backupVerified: boolean }>();
   const replacementAllowed = () => (dependencies.replacementPolicy ?? (RESOURCE_JSON_REPLACEMENT_ENABLED ? "coordinated" : "blocked")) === "coordinated";
-  const recoveries = new WeakMap<ResourceRecoveryPreview, { operation: Operation; json: string; backupVerified: boolean; copies: ReturnType<typeof recoverableResourceCopies> }>();
+  const recoveries = new WeakMap<ResourceRecoveryPreview, { operation: Operation; json: string; backupVerified: boolean; copies: ReturnType<typeof recoverableResourceCopies>;
+    exports: Map<string, { json: string; verified: boolean }> }>();
   function recoveryEnabled() {
     enabled();
     if (!(dependencies.recoveryEnabled ?? MANUAL_RESOURCE_RECOVERY_ENABLED)) throw new Error("Récupération manuelle désactivée.");
@@ -201,7 +210,7 @@ export function createResourceBackupJson(dependencies: {
     const result: ResourceRecoveryPreview = Object.freeze({ userId: operation.userId, diagnosticJson: json,
       copies: Object.freeze(copies.map(copy => Object.freeze({ operationId: copy.operationId, side: copy.side,
         resources: Object.freeze(JSON.parse(copy.raw)) as Resource[] }))) });
-    recoveries.set(result, { operation, json, copies, backupVerified: false });
+    recoveries.set(result, { operation, json, copies, backupVerified: false, exports: new Map() });
     return result;
   }
   function verifyRecoverySafetyBackup(preview: ResourceRecoveryPreview, savedJson: string) {
@@ -213,6 +222,74 @@ export function createResourceBackupJson(dependencies: {
     // Reloaded file must contain exactly the snapshot, journal and diagnostic being replaced.
     if (savedJson !== captured.json) throw new Error("Sauvegarde préalable différente du diagnostic de cet aperçu.");
     captured.backupVerified = true;
+  }
+  type Selection = { operationId: string; side: "beforeRaw" | "candidateRaw" };
+  const selectionKey = (selection: Selection) => JSON.stringify([selection.operationId, selection.side]);
+
+  /** Revalidate the exact diagnostic and all source integrity under the existing account lock. */
+  async function withRecoverySnapshot<T>(preview: ResourceRecoveryPreview, read: (captured: NonNullable<ReturnType<typeof recoveries.get>>) => T) {
+    recoveryEnabled();
+    const captured = recoveries.get(preview);
+    if (!captured) throw new Error("Aperçu de récupération inconnu ou consommé.");
+    const op = captured.operation;
+    return coordinateResourceRead({ scoped: dependencies.store.scopedStorage, owner: op.owner, locks: dependencies.resourceLocks, read: () => {
+      op.assertCurrent();
+      const d = JSON.parse(captured.json);
+      for (const [name, field] of [["resources", "rawResources"], ["resource-import-journal", "rawJournal"], ["resource-import-state", "rawState"], ["migration-state", "rawMigrationState"]] as const) {
+        if (dependencies.store.scopedStorage.read(op.owner, name) !== d[field]) throw new Error("Conflit de récupération : état modifié depuis l’aperçu.");
+      }
+      recoverableResourceCopies(op.userId, d.rawResources, d.rawJournal, d.rawState);
+      return read(captured);
+    } });
+  }
+
+  async function exportRecoveryCopy(preview: ResourceRecoveryPreview, selection: Selection) {
+    return withRecoverySnapshot(preview, captured => {
+      const copy = captured.copies.find(c => c.operationId === selection.operationId && c.side === selection.side);
+      if (!copy) throw new Error("Copie absente de l’aperçu.");
+      const d = JSON.parse(captured.json);
+      const entry = (parseResourceArchive(d.rawJournal) as Record<string, unknown>[]).find(e => e.importId === selection.operationId);
+      const fingerprint = resourceDigest(copy.raw);
+      if (entry?.archiveVersion !== 2 || (entry.fingerprints as Record<string, unknown>)?.[copy.side] !== fingerprint) {
+        throw new Error("Export certifié refusé : copie sans empreinte SHA-256 persistée et vérifiable. Conserver et exporter le diagnostic historique pour expertise.");
+      }
+      const json = JSON.stringify({ ...resourceEnvelope(captured.operation.userId, JSON.parse(copy.raw)), purpose: "resource-recovery-copy", copyVersion: 1,
+        source: { operationId: copy.operationId, side: copy.side, archiveVersion: 2 }, rawResources: copy.raw, resourceFingerprint: fingerprint }, null, 2);
+      // Round-trip before download does not prove that the external file has been saved.
+      parseResourceBackup(json);
+      captured.exports.set(selectionKey(selection), { json, verified: false });
+      return json;
+    });
+  }
+
+  async function verifyRecoveryCopyExport(preview: ResourceRecoveryPreview, selection: Selection, savedJson: string) {
+    const captured = recoveries.get(preview);
+    const exported = captured?.exports.get(selectionKey(selection));
+    if (exported) exported.verified = false;
+    return withRecoverySnapshot(preview, captured => {
+      if (!exported || exported.json !== savedJson) throw new Error("Export non vérifié : relire le fichier exact téléchargé pour cette copie.");
+      const parsed = parseResourceBackup(savedJson);
+      if (parsed.ownerUserId !== captured.operation.userId) throw new Error("Propriétaire de l’export incorrect.");
+      exported.verified = true;
+      const verifiedCopies = captured.copies.filter(c => captured.exports.get(selectionKey(c))?.verified).length;
+      return { verifiedCopies, totalCopies: captured.copies.length, allVerified: verifiedCopies === captured.copies.length };
+    });
+  }
+
+  async function inspectRecoverySpace(preview: ResourceRecoveryPreview, selection: Selection) {
+    recoveryEnabled();
+    const captured = recoveries.get(preview);
+    if (!captured) throw new Error("Aperçu de récupération inconnu ou consommé.");
+    const copy = captured.copies.find(c => c.operationId === selection.operationId && c.side === selection.side);
+    if (!copy) throw new Error("Copie absente de l’aperçu.");
+    const result = await coordinateResourceWrite({ scoped: dependencies.store.scopedStorage, owner: captured.operation.owner,
+      expectedRaw: JSON.parse(captured.json).rawResources, candidateRaw: copy.raw, kind: "recovery", manualRecoveryEnabled: true, inspectRecoveryOnly: true,
+      recoverySpace: dependencies.recoverySpace, locks: dependencies.resourceLocks,
+      recovery: { diagnosticJson: captured.json, verifiedBackupJson: captured.json, operationId: copy.operationId, side: copy.side,
+        confirmedOwnerUserId: captured.operation.userId, previewReviewed: true } });
+    captured.operation.assertCurrent();
+    if (!result) throw new Error("Estimation de récupération indisponible.");
+    return result;
   }
   async function applyRecovery(preview: ResourceRecoveryPreview, selection: { operationId: string; side: "beforeRaw" | "candidateRaw" }, confirmation: {
     ownerUserId: string; previewReviewed: boolean; recoverExplicitly: boolean;
@@ -229,6 +306,7 @@ export function createResourceBackupJson(dependencies: {
     recoveries.delete(preview);
     await coordinateResourceWrite({ scoped: dependencies.store.scopedStorage, owner: captured.operation.owner,
       expectedRaw: JSON.parse(captured.json).rawResources, candidateRaw: copy.raw, kind: "recovery", manualRecoveryEnabled: true, locks: dependencies.resourceLocks,
+      recoverySpace: dependencies.recoverySpace,
       recovery: { diagnosticJson: captured.json, verifiedBackupJson: captured.json, operationId: copy.operationId, side: copy.side,
         confirmedOwnerUserId: confirmation.ownerUserId, previewReviewed: confirmation.previewReviewed },
       preflight: () => captured.operation.assertCurrent(),
@@ -236,5 +314,6 @@ export function createResourceBackupJson(dependencies: {
     captured.operation.assertCurrent();
     return { userId: captured.operation.userId, resourcesCount: JSON.parse(copy.raw).length as number };
   }
-  return { exportResources, preview, apply, verifyImportSafetyBackup, exportRecoveryDiagnostic, inspectRecoveryBackup, previewRecovery, verifyRecoverySafetyBackup, applyRecovery };
+  return { exportResources, preview, apply, verifyImportSafetyBackup, exportRecoveryDiagnostic, inspectRecoveryBackup, previewRecovery, verifyRecoverySafetyBackup,
+    exportRecoveryCopy, verifyRecoveryCopyExport, inspectRecoverySpace, applyRecovery };
 }

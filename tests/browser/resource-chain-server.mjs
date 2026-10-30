@@ -12,7 +12,7 @@ const allowed = new Set([
   "app/components/ResourceAccountInitialization", "app/lib/resourceAccountInitialization",
   "app/hooks/usePreparedResources", "app/lib/accountScopedStorage", "app/lib/accountBusinessStorage",
   "app/lib/resourceAccess", "app/lib/resourceStorage", "app/lib/resourceValidation", "app/lib/resourceWriteCoordinator",
-  "app/lib/resourceArchiveIntegrity", "app/lib/resourceRecoveryAssessment", "app/lib/resourceBackupJson", "app/lib/legacyDataMigration", "app/lib/types",
+  "app/lib/resourceRecoverySpace", "app/lib/resourceArchiveIntegrity", "app/lib/resourceRecoveryAssessment", "app/lib/resourceBackupJson", "app/lib/legacyDataMigration", "app/lib/types",
   "app/lib/localChangeTracker", "app/lib/userSessionStore", "app/lib/cloudSyncSuspension", "app/lib/resourceIsolationSettings",
 ]);
 // This server is never imported by Next. No environment files or real SDK are loaded.
@@ -42,6 +42,7 @@ export async function startResourceChainServer({ jsonReplacement = false } = {})
         }
       }
       source = ts.transpileModule(source, { fileName: file, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+      if (id === "app/lib/resourceRecoverySpace") source += "\nexports.readBrowserRecoverySpace = () => globalThis.chainRecipe.recoverySpace();";
       if (id === "app/lib/userSessionStore") source += "\nexports.getUserSessionStore = () => globalThis.chainRecipe.store;";
     }
     modules.set(id, source);

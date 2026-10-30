@@ -89,8 +89,9 @@ test.describe("audit final : croissance et quota", () => {
     const recoveryFile = await download(page, recovery.getByRole("button", { name: "Enregistrer la sauvegarde préalable complète et le diagnostic" }), info, "quota-recovery-safety.json");
     await recovery.getByLabel("Relire le fichier enregistré", { exact: false }).setInputFiles(recoveryFile); await expect(recovery).toContainText("relue et identique");
     await recovery.getByLabel("Recopier le propriétaire").fill(A); await recovery.getByLabel("J’ai vérifié le contenu de cette copie.").check();
-    await recovery.getByLabel("Je demande explicitement", { exact: false }).check(); await recovery.getByRole("button", { name: "Récupérer les ressources de ce compte", exact: true }).click();
-    await expect(recovery).toContainText("Échec :"); expect(await call(page, "snapshot")).toEqual(after);
+    await recovery.getByLabel("Je demande explicitement", { exact: false }).check();
+    await expect(recovery.getByRole("button", { name: "Récupérer les ressources de ce compte", exact: true })).toBeDisabled();
+    await expect(recovery).toContainText("Récupération par écriture bloquée"); expect(await call(page, "snapshot")).toEqual(after);
     await evidence(info, "quota-after-journal.json", { previous: snapshotMetrics(before, A), current: snapshotMetrics(after, A), usage: await call(page, "storageUsage"),
       previousDataPreserved: true, recoveryAtSameQuota: "refused-with-copies-preserved", events: await page.evaluate(() => window.chainRecipe.events.filter(event => event.action.startsWith("quota"))) });
   });

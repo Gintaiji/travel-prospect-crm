@@ -10,7 +10,7 @@ export async function startResourceHarness() {
   const prefix = `/resource-test/${token}/`;
   const root = path.resolve("app/lib");
   const allowed = new Set(["accountScopedStorage", "accountBusinessStorage", "resourceWriteCoordinator",
-    "resourceAccess", "resourceValidation", "resourceArchiveIntegrity", "resourceRecoveryAssessment", "resourceBackupJson", "userSessionStore", "resourceIsolationSettings", "cloudSyncSuspension"]);
+    "resourceAccess", "resourceValidation", "resourceRecoverySpace", "resourceArchiveIntegrity", "resourceRecoveryAssessment", "resourceBackupJson", "userSessionStore", "resourceIsolationSettings", "cloudSyncSuspension"]);
   const modules = new Map();
   function include(name) {
     if (modules.has(name)) return;

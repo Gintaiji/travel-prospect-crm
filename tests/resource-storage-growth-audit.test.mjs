@@ -61,5 +61,5 @@ assert.equal(rows.at(-1).journal.embeddedJournalDepth, 0); // Finite historical 
 budget = [...data].reduce((sum, [k, v]) => sum + (k.length + v.length) * 2, 0);
 const p = await api.preview(JSON.stringify({ appName: "Travel Prospect CRM", version: 5, storageScope: "account-resources", ownerUserId: A, resources: [] }), {});
 api.verifyImportSafetyBackup(p, p.safetyJson); const before = [...data];
-await assert.rejects(api.apply(p, confirmation), /quota/); assert.deepEqual([...data], before);
+await assert.rejects(api.apply(p, confirmation), /quota/i); assert.deepEqual([...data], before);
 console.log("PASS: exact storage metrics, bounded iterative archive analysis, sequential real-module replacements, measured quota refusal and unchanged data/copies.");

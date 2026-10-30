@@ -75,13 +75,22 @@ export function assessResourceRecovery(userId: string, rawResources: string | nu
   const resourcesIntegrity = integrity(rawResources);
   const journalBytes = rawJournal === null ? 0 : rawJournal.length * 2;
   const stateBytes = rawState === null ? 0 : rawState.length * 2;
+  const snapshotStrings = entries.flatMap(entry => record(entry) && entry.userId === userId
+    ? [entry.beforeRaw, entry.candidateRaw].filter((raw): raw is string => typeof raw === "string") : []);
+  const copyStorage = {
+    references: snapshotStrings.length,
+    rawBytes: snapshotStrings.reduce((sum, raw) => sum + raw.length * 2, 0),
+    uniqueRawBytes: [...new Set(snapshotStrings)].reduce((sum, raw) => sum + raw.length * 2, 0),
+    encodedSnapshotBytes: snapshotStrings.reduce((sum, raw) => sum + JSON.stringify(raw).length * 2, 0),
+    includedInJournal: true,
+  };
   const options = ["Conserver et exporter le diagnostic avant toute décision."];
   if (resourcesIntegrity === "valid") options.push("Examiner la conservation des données actuelles après comparaison manuelle.");
   if (trusted && copies.at(-1)?.before === "valid") options.push("Examiner un retour à la copie avant opération, sans l’exécuter.");
   if (trusted && copies.at(-1)?.candidate === "valid") options.push("Examiner le candidat de l’opération, sans le valider ni le recopier.");
   options.push("Faire vérifier une sauvegarde JSON externe du même compte avant toute restauration ; aucun fichier externe n’a été inspecté.");
   return {
-    resourcesIntegrity, journalIntegrity, stateIntegrity,
+    resourcesIntegrity, journalIntegrity, stateIntegrity, copyStorage,
     corruptionDetected: [resourcesIntegrity, journalIntegrity, stateIntegrity].includes("corrupt"),
     operation: trusted ? { id: latest.importId, ownerUserId: userId, kind: latest.kind, createdAt: latest.createdAt,
       status: record(state) && state.importId === latest.importId ? state.status : "incomplete",

@@ -60,6 +60,7 @@ const backup = createResourceBackupJson({ enabled: true, store, replacementPolic
 const access = createResourceAccess({ isolated: true, sessionStore: store, legacy: { load() { throw Error("Legacy fallback"); }, save() { throw Error("Legacy write"); } } });
 const key = (id, name) => `travel-prospect-crm:account:v1:${id}:${name}`;
 const resource = id => ({ id, title: id, type: "Site", url: `https://example.invalid/${id}`, notes: "FICTITIOUS", isFavorite: false, createdAt: "2026-10-29", updatedAt: "2026-10-29" });
+const quotaPreviews = new Map(), quotaLocks = new Map();
 globalThis.chainRecipe = {
   store, A, B, events,
   flags: { isolated: require("app/lib/resourceIsolationSettings").ACCOUNT_SCOPED_RESOURCES_ENABLED, recovery: require("app/lib/resourceBackupJson").MANUAL_RESOURCE_RECOVERY_ENABLED, jsonReplacement: require("app/lib/resourceBackupJson").RESOURCE_JSON_REPLACEMENT_ENABLED, cloudSuspended: require("app/lib/cloudSyncSuspension").CLOUD_SYNC_SUSPENDED },
@@ -80,8 +81,40 @@ globalThis.chainRecipe = {
   snapshot: () => Object.fromEntries(Object.keys(nativeStorage).sort().map(k => [k.slice(prefix.length), nativeStorage.getItem(k)])),
   physicalKeys: () => Object.keys(nativeStorage),
   storageUsage: () => ({ estimatedUtf16KeyValueBytes: nativeUsageBytes(), quotaBytes }),
+  recoverySpace: () => ({ usedBytes: nativeUsageBytes(), availableBytes: Math.max(0, (quotaBytes ?? 4 * 1024 * 1024) - nativeUsageBytes()), source: "fictional measured quota budget" }),
   setQuota(bytes) { if (bytes !== null && (!Number.isSafeInteger(bytes) || bytes < 0)) throw Error("Invalid fictional quota"); quotaBytes = bytes; },
   quotaAfterJournal() { quotaAfterJournal = true; },
+  async quotaPreview(name) { const p = await backup.previewRecovery(capture()); quotaPreviews.set(name, p); backup.verifyRecoverySafetyBackup(p, p.diagnosticJson); return p; },
+  quotaExport(name, index = 0) { const p = quotaPreviews.get(name); return backup.exportRecoveryCopy(p, p.copies[index]); },
+  quotaVerify(name, json, index = 0) { const p = quotaPreviews.get(name); return backup.verifyRecoveryCopyExport(p, p.copies[index], json); },
+  quotaSpace(name) { const p = quotaPreviews.get(name); return backup.inspectRecoverySpace(p, p.copies[0]); },
+  quotaApply(name) { const p = quotaPreviews.get(name); return backup.applyRecovery(p, p.copies[0], { ownerUserId: p.userId, previewReviewed: true, recoverExplicitly: true }); },
+  async holdQuotaLock(name) {
+    let entered, release;
+    const ready = new Promise(resolve => { entered = resolve; });
+    const held = navigator.locks.request(`travel-prospect-crm:resource-write:v1:${A}`, async () => { entered(); await new Promise(resolve => { release = resolve; }); });
+    await ready; quotaLocks.set(name, { held, release });
+  },
+  async releaseQuotaLock(name) { const lock = quotaLocks.get(name); lock.release(); await lock.held; },
+  corruptQuotaCopy() {
+    const journalKey = prefix + key(A, "resource-import-journal"), entries = JSON.parse(nativeStorage.getItem(journalKey));
+    entries.at(-1).beforeRaw = JSON.stringify([resource("corrupt-but-valid-json")]);
+    nativeStorage.setItem(journalKey, JSON.stringify(entries));
+  },
+  saturateNativeQuota() {
+    // Dedicated disposable profile, dedicated fictional key; never clear/delete existing values.
+    const fillerKey = prefix + "fictional-quota-filler";
+    let filler = "", refusals = 0;
+    for (let step = 1024 * 1024; step >= 1; step = Math.floor(step / 2)) {
+      while (true) {
+        const next = filler + "x".repeat(step);
+        if (next.length > 16 * 1024 * 1024) throw Error("Native quota not reached within the bounded fictional fill");
+        try { nativeStorage.setItem(fillerKey, next); filler = next; }
+        catch (error) { if (error.name !== "QuotaExceededError") throw error; refusals++; break; }
+      }
+    }
+    return { refusals, errorName: "QuotaExceededError", fillerCharacters: filler.length, usageBytes: nativeUsageBytes() };
+  },
   session: () => store.getSnapshot(),
   async exportJson() { return backup.exportResources(capture()); },
   async initialize() { return createResourceAccountInitialization({ enabled: true, store }).initialize(capture(), { ownerUserId: capture().userId, emptySpaceConfirmed: true }); },
