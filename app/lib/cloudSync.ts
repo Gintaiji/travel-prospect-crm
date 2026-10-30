@@ -846,6 +846,7 @@ export async function uploadLocalDataToCloud(
 }
 
 export async function restoreCloudDataToLocal(): Promise<RestoreCloudSummary> {
+  assertCloudWritesAllowed();
   const { supabase, userId } = await getConnectedUserId();
 
   const { data: prospectRows, error: prospectsError } = await supabase

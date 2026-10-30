@@ -22,7 +22,7 @@ const plain = value => JSON.parse(JSON.stringify(value));
 
 for (const isolated of [false, true]) {
   const h = createHookHarness();
-  let stateIndex = 0, downloadedBlob;
+  let stateIndex = 0, downloadedBlob, cloudRestores = 0, confirmations = 0;
   const writes = new Map();
   const values = [fixture.prospects, fixture.resources, fixture.settings, fixture.streetMarketingSurvey, fixture.customMessageTemplates];
   const source = fs.readFileSync("app/sauvegarde/page.tsx", "utf8");
@@ -33,6 +33,7 @@ for (const isolated of [false, true]) {
     "react/jsx-runtime": jsx,
     "next/link": { default: "a" },
     "../lib/cloudSyncSuspension": { CLOUD_SYNC_SUSPENDED: true, CLOUD_SYNC_SUSPENSION_MESSAGE: "suspended" },
+    "../lib/cloudSync": { restoreCloudDataToLocal() { cloudRestores++; throw Error("Cloud restore must stay blocked"); } },
     "../lib/resourceIsolationSettings": { ACCOUNT_SCOPED_RESOURCES_ENABLED: isolated },
     "../lib/resourceBackupJson": resourceBackupJson,
     "../lib/backupReminderStorage": { saveLastBackupDate() {} },
@@ -50,11 +51,21 @@ for (const isolated of [false, true]) {
     exports, Blob, require(name) { assert.ok(name in dependencies, `Unexpected dependency ${name}`); return dependencies[name]; },
     URL: { createObjectURL(blob) { downloadedBlob = blob; return "blob:test"; }, revokeObjectURL() {} },
     document: { createElement: () => ({ click() {} }) },
-    window: { confirm: () => true },
+    window: { confirm: () => { confirmations++; return true; } },
     FileReader: class { readAsText(file) { this.result = file.content; this.onload(); } },
   });
   const render = () => { stateIndex = 0; return h.render(() => exports.default()); };
   let tree = render();
+  const cloudButtons = findNodes(tree, node => node.type === "button" && text(node) === "Charger depuis le cloud");
+  assert.ok(cloudButtons.length > 0);
+  for (const button of cloudButtons) {
+    assert.equal(button.props.disabled, true);
+    await button.props.onClick(); // Deliberate UI-handler bypass; still no confirmation or restore.
+  }
+  assert.equal(cloudRestores, 0);
+  assert.equal(confirmations, 0);
+  assert.equal(writes.size, 0);
+  assert.ok(text(tree).includes("Restauration depuis le cloud indisponible"));
   const exportButton = findNodes(tree, node => node.type === "button" && text(node) === (isolated ? "Exporter l’historique partagé (non isolé)" : "Sauvegarder mes données"))[0];
   exportButton.props.onClick();
   const exported = JSON.parse(await downloadedBlob.text());

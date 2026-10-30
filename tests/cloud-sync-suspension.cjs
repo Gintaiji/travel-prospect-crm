@@ -30,12 +30,12 @@ deps["./supabaseClient"] = {
   createBrowserSupabaseClient() {
     clientCalls++;
     return {
-      auth: { getUser: async () => ({ data: { user: { id: "test-account" } } }) },
+      auth: { getUser: async () => ({ data: { user: { id: account } } }) },
       from(table) {
         assert.equal(table, "crm_backup_history");
         const query = {
           select() { return query; },
-          eq(column, value) { assert.equal(column, "user_id"); assert.equal(value, "test-account"); return query; },
+          eq(column, value) { assert.equal(column, "user_id"); assert.equal(value, account); return query; },
           order() { return query; },
           async limit(n) { assert.equal(n, 20); return { data: [], error: null }; },
         };
@@ -44,8 +44,27 @@ deps["./supabaseClient"] = {
     };
   },
 };
+let account = "test-account";
 (async () => {
   const cloud = load("app/lib/cloudSync.ts", deps);
+  // The direct API is also the bypass path: no UI or account lookup is needed
+  // to reject it. Any local save/tracking call must fail this test.
+  let localEffects = 0;
+  const forbiddenLocalEffect = () => { localEffects++; throw Error("Unexpected local effect"); };
+  for (const [module, names] of Object.entries({
+    "./prospectStorage": ["saveProspects"], "./resourceStorage": ["saveResources"],
+    "./settingsStorage": ["saveSettings"], "./messageTemplateStorage": ["saveCustomMessageTemplates"],
+    "./streetMarketingSurveyStorage": ["saveStreetMarketingSurvey"],
+    "./localChangeTracker": ["pauseLocalChangeTracking", "resumeLocalChangeTracking"],
+  })) for (const name of names) deps[module][name] = forbiddenLocalEffect;
+  for (const user of ["account-A", "account-B", "account-A"]) {
+    account = user;
+    await assert.rejects(cloud.restoreCloudDataToLocal(), { message: suspension.CLOUD_SYNC_SUSPENSION_MESSAGE });
+    await assert.rejects(cloud.restoreCloudBackupHistoryToLocal("old-fictional-backup"), { message: suspension.CLOUD_SYNC_SUSPENSION_MESSAGE });
+    assert.equal(clientCalls, 0);
+    assert.equal(localEffects, 0);
+  }
+  account = "test-account";
   for (const options of [{}, { backupType: "manual" }, { backupType: "auto" }]) {
     await assert.rejects(cloud.uploadLocalDataToCloud(options), { message: suspension.CLOUD_SYNC_SUSPENSION_MESSAGE });
   }

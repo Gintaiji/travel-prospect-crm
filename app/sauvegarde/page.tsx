@@ -567,6 +567,10 @@ export default function BackupPage() {
   }
 
   async function restoreFromCloud() {
+    if (CLOUD_SYNC_SUSPENDED) {
+      setSyncMessage(CLOUD_SYNC_SUSPENSION_MESSAGE);
+      return;
+    }
     const shouldRestore = window.confirm(
       "Charger les données cloud sur cet appareil ? Les données présentes sur cet appareil seront remplacées.",
     );
@@ -1064,11 +1068,15 @@ export default function BackupPage() {
                 className="min-h-11 rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-60"
                 type="button"
                 onClick={restoreFromCloud}
-                disabled={isSyncing}
+                disabled={CLOUD_SYNC_SUSPENDED || isSyncing}
               >
                 Charger depuis le cloud
               </button>
             </div>
+
+            {CLOUD_SYNC_SUSPENDED && <p role="status" className="mt-4 text-sm text-amber-100">
+              Restauration depuis le cloud indisponible pendant la suspension de la synchronisation. Les sauvegardes et restaurations JSON locales restent disponibles selon leurs protections habituelles.
+            </p>}
 
             {connectionMessage ? (
               <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm font-medium text-white">
@@ -1132,7 +1140,7 @@ export default function BackupPage() {
                     className="min-h-11 rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
                     type="button"
                     onClick={restoreFromCloud}
-                    disabled={isSyncing}
+                    disabled={CLOUD_SYNC_SUSPENDED || isSyncing}
                   >
                     Charger depuis le cloud
                   </button>
