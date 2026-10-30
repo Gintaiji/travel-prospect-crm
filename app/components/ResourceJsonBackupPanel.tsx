@@ -16,7 +16,7 @@ function download(json: string, filename: string) {
 export default function ResourceJsonBackupPanel() {
   const session = useUserSession();
   if (!ACCOUNT_SCOPED_RESOURCES_ENABLED) return null;
-  return <section className="rounded-2xl border border-amber-300/30 p-4">
+  return <section className="resource-backup-panel rounded-2xl border border-amber-300/30 p-4">
     <h2 className="text-xl font-bold">Sauvegarde JSON des ressources isolées</h2>
     <p className="mt-2 text-sm">Ce parcours concerne uniquement les ressources du compte confirmé. Les quatre autres catégories restent historiques et ne seront pas chargées ici.</p>
     <AccountSessionBoundary fallback={<p role="status" className="mt-3 text-amber-100">{session.error ?? "Une session confirmée est nécessaire."}</p>}>

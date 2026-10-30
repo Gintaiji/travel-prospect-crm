@@ -16,7 +16,10 @@ const test = base.extend({
       blocked.push(route.request().url()); return route.abort();
     });
     await context.addInitScript(() => { window.pilotInitialKeys = localStorage.length; });
-    const page = await context.newPage(); page.on("pageerror", e => errors.push(e.message)); page.on("dialog", d => d.accept());
+    let cancelDialog = false;
+    const page = await context.newPage(); page.on("pageerror", e => errors.push(e.message)); page.on("dialog", d => {
+      const cancel = cancelDialog; cancelDialog = false; return cancel ? d.dismiss() : d.accept();
+    });
     try {
       await page.goto(server.url);
       await expect(page.locator("[data-resource-pilot]")).toBeVisible();
@@ -29,8 +32,17 @@ const test = base.extend({
         const configuredWidth = page.viewportSize().width;
         screens.push({ name, ...layout, configuredWidth, horizontalOverflow: layout.document > configuredWidth + 1 });
         await info.attach(name, { path: file, contentType: "image/png" });
+        if (name === "05-diagnostic-et-copie") {
+          const sizing = await page.locator("#backup").evaluate(root => [...root.querySelectorAll(".grid, select, pre, label")].map(el => {
+            const css = getComputedStyle(el), rect = el.getBoundingClientRect();
+            return { tag: el.tagName, class: el.className, width: rect.width, scrollWidth: el.scrollWidth, minWidth: css.minWidth, columns: css.gridTemplateColumns, position: css.position, zIndex: css.zIndex };
+          }));
+          await info.attach("recovery-sizing.json", { contentType: "application/json", body: Buffer.from(JSON.stringify(sizing, null, 2)) });
+        }
+        expect(layout.document, `Horizontal overflow at ${name}`).toBeLessThanOrEqual(configuredWidth + 1);
+        expect(layout.viewport, `Expanded mobile layout viewport at ${name}`).toBeLessThanOrEqual(configuredWidth + 1);
       };
-      await provide({ page, shot });
+      await provide({ page, shot, cancelNextDialog: () => { cancelDialog = true; } });
       expect(blocked).toEqual([]); expect(errors).toEqual([]);
       expect((await call(page, "physicalKeys")).every(k => k.startsWith("tpc-chain:e2e-"))).toBe(true);
     } finally {
@@ -88,7 +100,7 @@ async function replacement(page, info, title) {
 const recovery = page => page.locator("section").filter({ has: page.getByRole("heading", { name: "Récupération manuelle des ressources", exact: true }) }).last();
 
 test("pilote : parcours React utilisateur A/B, remplacement, récupération et expiration", async ({ pilot }, info) => {
-  const { page, shot } = pilot; await migrate(page, info); await shot("01-migration-A");
+  const { page, shot, cancelNextDialog } = pilot; await migrate(page, info); await shot("01-migration-A");
   await add(page, "A-created");
   let card = page.locator("#resource-page article").filter({ hasText: "A-created" }); await card.getByRole("button", { name: "Modifier", exact: true }).click();
   await card.getByLabel("Titre", { exact: true }).fill("A-edited"); await card.getByRole("button", { name: "Enregistrer", exact: true }).click();
@@ -126,6 +138,15 @@ test("pilote : parcours React utilisateur A/B, remplacement, récupération et e
   const safety = await download(page, panel.getByRole("button", { name: "Enregistrer la sauvegarde préalable complète et le diagnostic" }), info, "avant-recuperation.json");
   await panel.getByLabel("Relire le fichier enregistré", { exact: false }).setInputFiles(safety); await expect(panel).toContainText("relue et identique");
   await panel.getByLabel("Recopier le propriétaire").fill(A);
+  const viewport = page.viewportSize();
+  if (viewport.width <= 390) await page.setViewportSize({ width: viewport.width, height: 420 });
+  await panel.getByLabel("Recopier le propriétaire").focus();
+  await page.keyboard.press("Tab");
+  const firstConfirmation = panel.getByLabel("J’ai vérifié le contenu de cette copie.");
+  await expect(firstConfirmation).toBeFocused();
+  await page.keyboard.press("Space"); await expect(firstConfirmation).toBeChecked();
+  await expect(panel.getByRole("button", { name: "Récupérer les ressources de ce compte", exact: true })).toBeDisabled();
+  await page.keyboard.press("Space"); await expect(firstConfirmation).not.toBeChecked();
   for (const label of ["J’ai vérifié le contenu de cette copie.", "Je demande explicitement"]) {
     const checkbox = panel.getByLabel(label, { exact: false });
     try { await checkbox.check({ timeout: 10000 }); }
@@ -138,7 +159,11 @@ test("pilote : parcours React utilisateur A/B, remplacement, récupération et e
       throw error;
     }
   }
-  await panel.getByRole("button", { name: "Récupérer les ressources de ce compte", exact: true }).click(); await expect(panel).toContainText("relue(s) et vérifiée(s)");
+  await shot("05b-confirmations-hauteur-reduite");
+  const recoverButton = panel.getByRole("button", { name: "Récupérer les ressources de ce compte", exact: true });
+  cancelNextDialog(); await recoverButton.click(); expect(await call(page, "snapshot")).toEqual(failed);
+  await recoverButton.click(); await expect(panel).toContainText("relue(s) et vérifiée(s)");
+  await page.setViewportSize(viewport);
   const restored = await call(page, "snapshot"); expect(restored[key(A, "resources")]).toBe(verified[key(A, "resources")]); expect(restored[key(B, "resources")]).toBe(exactB);
   expect(JSON.parse(restored[key(A, "resource-import-journal")]).slice(0, -1)).toEqual(JSON.parse(failed[key(A, "resource-import-journal")]));
   await nav(page, "Ressources"); await page.locator("#resource-page").getByRole("button", { name: "Recharger les ressources" }).click();

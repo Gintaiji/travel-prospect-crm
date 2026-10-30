@@ -49,3 +49,84 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(88%) sepia(78%) saturate(450%) hue-rotate(95deg)
     brightness(110%) contrast(105%);
 }
+
+/* Keep recovery controls inside the available column, including native selects
+   with long operation IDs. The document remains vertically scrollable. */
+.resource-backup-panel,
+.resource-backup-panel *,
+.resource-recovery-panel,
+.resource-recovery-panel * {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.resource-backup-panel .grid,
+.resource-recovery-panel {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.resource-backup-panel label {
+  display: block;
+}
+
+.resource-backup-panel :is(input:not([type="checkbox"]), select) {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid #64748b;
+  border-radius: 0.5rem;
+  background: #020617;
+  color: #f8fafc;
+  color-scheme: dark;
+  font-size: 1rem;
+}
+
+.resource-backup-panel button {
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #64748b;
+  border-radius: 0.5rem;
+  white-space: normal;
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.resource-backup-panel button:disabled {
+  opacity: 0.5;
+}
+
+.resource-backup-panel label:has(> input[type="checkbox"]) {
+  min-height: 44px;
+  padding-block: 0.5rem;
+  cursor: pointer;
+}
+
+.resource-backup-panel input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  accent-color: #34d399;
+}
+
+.resource-backup-panel :is(button, input, select, pre) {
+  scroll-margin-block: 1rem;
+}
+
+.resource-backup-panel :is(button, input, select, pre):focus-visible {
+  outline: 2px solid #34d399;
+  outline-offset: 2px;
+}
+
+.resource-backup-panel pre {
+  max-height: min(16rem, 40dvh);
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.resource-recovery-panel {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}

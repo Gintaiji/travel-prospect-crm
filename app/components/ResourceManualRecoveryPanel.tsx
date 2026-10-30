@@ -65,7 +65,7 @@ export default function ResourceManualRecoveryPanel() {
       if (current()) setMessage(`Échec : ${error instanceof Error ? error.message : "récupération non vérifiée"}. Conserver les fichiers et refaire un diagnostic avant toute nouvelle intervention.`);
     } finally { if (current()) { setBusy(false); setPreview(null); setVerified(false); } }
   }
-  return <section className="grid gap-3 rounded-xl border border-amber-300/30 p-3">
+  return <section className="resource-recovery-panel grid gap-3 rounded-xl border border-amber-300/30 p-3">
     <h3 className="font-bold">Récupération manuelle des ressources</h3>
     <p>localStorage ne fournit pas de transaction entre les clés. Une interruption peut nécessiter une nouvelle intervention manuelle ; aucune reprise automatique.</p>
     <button type="button" disabled={busy} onClick={() => void prepare()}>Préparer un aperçu de récupération</button>
@@ -75,7 +75,8 @@ export default function ResourceManualRecoveryPanel() {
           {preview.copies.map((copy, index) => <option key={`${copy.operationId}:${copy.side}`} value={index}>{copy.operationId} — {copy.side === "beforeRaw" ? "avant opération" : "candidat"} — {copy.resources.length} ressource(s)</option>)}
         </select>
       </label>
-      <pre className="max-h-64 overflow-auto whitespace-pre-wrap">{JSON.stringify(preview.copies[selected].resources, null, 2)}</pre>
+      <p>Copie sélectionnée : {preview.copies[selected].operationId} — {preview.copies[selected].side === "beforeRaw" ? "avant opération" : "candidat"} — {preview.copies[selected].resources.length} ressource(s)</p>
+      <pre tabIndex={0} role="region" aria-label="Contenu de la copie sélectionnée" className="max-h-64 overflow-auto whitespace-pre-wrap">{JSON.stringify(preview.copies[selected].resources, null, 2)}</pre>
       <p>Journal : {JSON.parse(preview.diagnosticJson).assessment?.journalStorage?.journalBytes ?? "inconnu"} octets estimés UTF-16. Copies incluses dans le journal : {JSON.parse(preview.diagnosticJson).assessment?.copyStorage?.rawBytes ?? "inconnu"} octets bruts, dont {JSON.parse(preview.diagnosticJson).assessment?.copyStorage?.uniqueRawBytes ?? "inconnu"} octets uniques. Ne pas additionner ces copies au journal.</p>
       <p>Contrôle d’espace : {space ? `${space.availableBytes ?? "inconnu"} octets disponibles estimés ; croissance maximale prévue ${space.requiredAdditionalBytes} octets, réserve ${space.reserveBytes} octets.` : "à effectuer"} Cette estimation ne garantit pas le quota réel du navigateur.</p>
       {space?.status !== "sufficient-estimate" && <p role="status">Récupération par écriture bloquée : espace insuffisant ou inconnu. L’export sans écriture reste disponible.</p>}
