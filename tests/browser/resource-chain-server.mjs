@@ -16,7 +16,8 @@ const allowed = new Set([
   "app/lib/localChangeTracker", "app/lib/userSessionStore", "app/lib/cloudSyncSuspension", "app/lib/resourceIsolationSettings",
 ]);
 // This server is never imported by Next. No environment files or real SDK are loaded.
-export async function startResourceChainServer({ jsonReplacement = false } = {}) {
+export async function startResourceChainServer({ jsonReplacement = false, pilot = false } = {}) {
+  if (process.env.NODE_ENV === "production") throw new Error("Standalone resource recipe/pilot forbidden in production");
   const modules = new Map();
   function include(id) {
     if (modules.has(id)) return;
@@ -53,23 +54,35 @@ export async function startResourceChainServer({ jsonReplacement = false } = {})
   for (const id of allowed) include(id);
   include("react-dom/client");
   const registry = [...modules].map(([id, code]) => `${JSON.stringify(id)}:function(module,exports,require){${code}\n}`).join(",\n");
-  const entry = fs.readFileSync("tests/browser/resource-chain-harness.mjs", "utf8");
+  const entry = (pilot ? fs.readFileSync("tests/pilot/resource-pilot-shell.mjs", "utf8") + "\n" : "") + fs.readFileSync("tests/browser/resource-chain-harness.mjs", "utf8");
   const bundle = `(()=>{const process={env:{NODE_ENV:"development"}}; const registry={${registry}};const cache={};
     function load(id){if(!registry[id])throw Error('Forbidden module '+id);if(!cache[id]){const m={exports:{}};cache[id]=m;
       registry[id](m,m.exports,name=>{if(!name.startsWith('.'))return load(name);const parts=id.split('/');parts.pop();for(const p of name.split('/')){if(p==='..')parts.pop();else if(p!=='.')parts.push(p);}return load(parts.join('/'));});}return cache[id].exports;}
     const require=load;${entry}\n})();`;
   const prefix = `/resource-chain/${randomUUID()}/`;
+  const assets = new Map();
+  if (pilot) {
+    const cssRoot = ".next/static/chunks";
+    const sheets = fs.readdirSync(cssRoot).filter(name => name.endsWith(".css"));
+    if (!sheets.length) throw new Error("Run npm run build before the styled local pilot");
+    assets.set(prefix + "pilot.css", { type: "text/css; charset=utf-8", data: sheets.map(name => fs.readFileSync(path.join(cssRoot, name), "utf8").replaceAll("../media/", prefix + "media/")).join("\n") });
+    for (const name of fs.readdirSync(".next/static/media").filter(name => name.endsWith(".woff2"))) {
+      assets.set(prefix + "media/" + name, { type: "font/woff2", data: fs.readFileSync(path.join(".next/static/media", name)) });
+    }
+  }
   const server = http.createServer((request, response) => {
+    if (request.method !== "GET" || request.headers.host !== `127.0.0.1:${server.address().port}`) { response.writeHead(403); response.end("Loopback recipe only"); return; }
     const url = new URL(request.url, "http://127.0.0.1");
     response.setHeader("Cache-Control", "no-store");
-    response.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'");
+    response.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'");
     if (url.pathname === prefix) {
       response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      response.end('<!doctype html><html lang="fr"><meta charset="utf-8"><title>Recette CRM fictive</title><h1>Recette locale — comptes fictifs uniquement</h1><div id="root"></div><script src="bundle.js"></script></html>');
+      response.end(`<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Recette CRM fictive</title>${pilot ? '<link rel="stylesheet" href="pilot.css">' : ""}<body${pilot ? ' style="background:#020617;color:#f8fafc"' : ""}>${pilot ? "" : "<h1>Recette locale — comptes fictifs uniquement</h1>"}<div id="root"></div><script src="bundle.js"></script></body></html>`);
     } else if (url.pathname === prefix + "bundle.js") { response.writeHead(200, { "Content-Type": "text/javascript" }); response.end(bundle); }
+    else if (assets.has(url.pathname)) { const asset = assets.get(url.pathname); response.writeHead(200, { "Content-Type": asset.type }); response.end(asset.data); }
     else { response.writeHead(404); response.end("Not a recipe route"); }
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
-  return { origin, url: origin + prefix, close: () => new Promise(resolve => server.close(resolve)) };
+  return { origin, url: origin + prefix + (pilot ? `?namespace=e2e-${randomUUID()}` : ""), close: () => new Promise(resolve => server.close(resolve)) };
 }

@@ -9,6 +9,7 @@ const A = "11111111-1111-4111-8111-111111111111", B = "22222222-2222-4222-8222-2
 const namespace = new URL(location.href).searchParams.get("namespace");
 if (!/^e2e-[a-z0-9-]+$/.test(namespace ?? "")) throw Error("Dedicated namespace required");
 const prefix = `tpc-chain:${namespace}:`, nativeStorage = window.localStorage;
+if (globalThis.ResourcePilotShell && Object.keys(nativeStorage).some(k => !k.startsWith(prefix))) throw Error("Pilot refuses a profile containing unrelated storage");
 const events = [], listeners = new Set();
 let fault = null, clockOffset = 0, quotaBytes = null, quotaAfterJournal = false;
 const nativeUsageBytes = () => Object.keys(nativeStorage).reduce((sum, name) => sum + (name.length + nativeStorage.getItem(name).length) * 2, 0);
@@ -136,10 +137,19 @@ const Page = require("app/ressources/page").default;
 const Migration = require("app/components/LocalDataMigration").default;
 const Backup = require("app/components/ResourceJsonBackupPanel").default;
 const { IsolatedProspectResources } = require("app/components/PreparedResourceViews");
-createRoot(document.getElementById("root")).render(React.createElement(UserSessionProvider, null,
+const pilotShell = globalThis.ResourcePilotShell ?? React.Fragment;
+if (globalThis.ResourcePilotShell) {
+  if (nativeStorage.length === 0) globalThis.chainRecipe.seed(false);
+  else if (Object.keys(nativeStorage).some(k => !k.startsWith(prefix))) throw Error("Pilot refuses a profile containing unrelated storage");
+  document.addEventListener("click", event => {
+    const link = event.target.closest?.("a");
+    if (link?.getAttribute("href") === "/sauvegarde#local-migration-title") { event.preventDefault(); document.getElementById("migration").scrollIntoView(); }
+  });
+}
+createRoot(document.getElementById("root")).render(React.createElement(pilotShell, null, React.createElement(UserSessionProvider, null,
   React.createElement("div", { id: "migration" }, React.createElement(Migration)),
   React.createElement("div", { id: "resource-page" }, React.createElement(Page)),
   React.createElement("div", { id: "backup" }, React.createElement(Backup)),
   React.createElement("div", { id: "prospect-resources" }, React.createElement(IsolatedProspectResources, { message: "FICTIONAL" })),
-));
+)));
 document.documentElement.dataset.chainReady = "true";

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-const dir = "test-results/resource-final-v2/node-repetitions";
+const dir = path.join(process.env.CRM_RESOURCE_AUDIT_ROOT ?? "test-results/resource-final-v2", "node-repetitions");
 fs.mkdirSync(dir, { recursive: true });
 const results = [];
 for (let round = 1; round <= 30; round++) {

@@ -47,5 +47,6 @@ for (const noteCharacters of [0, 1024, 65536]) {
   measurements.push({ noteCharacters, budgetBytes: budget, initialBytes, successfulReplacements: rows.length, refused, rows });
   console.log(`Retention audit: ${noteCharacters} note characters, ${rows.length} successes, refusal ${refused?.round ?? "none"}`);
 }
-fs.mkdirSync("test-results/resource-final-v2", { recursive: true });
-fs.writeFileSync("test-results/resource-final-v2/retention.json", JSON.stringify(measurements, null, 2));
+const dir = process.env.CRM_RESOURCE_AUDIT_ROOT ?? "test-results/resource-final-v2";
+fs.mkdirSync(dir, { recursive: true });
+fs.writeFileSync(`${dir}/retention.json`, JSON.stringify(measurements, null, 2));

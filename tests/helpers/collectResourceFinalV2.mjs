@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 
-const root = path.resolve("test-results/resource-final-v2");
+const root = path.resolve(process.env.CRM_RESOURCE_AUDIT_ROOT ?? "test-results/resource-final-v2");
 const read = relative => JSON.parse(fs.readFileSync(path.join(root, relative), "utf8"));
 const before = read("source-before.json");
 const digest = file => createHash("sha256").update(fs.readFileSync(file)).digest("hex");
