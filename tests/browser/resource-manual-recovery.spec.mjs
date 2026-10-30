@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { test, expect, call, job, key, A, B } from "./resource-isolation.spec.mjs";
 
 async function finished(page, name) {
@@ -45,7 +46,7 @@ test("récupération interrompue puis rafraîchissement : nouvelle intervention 
   await one.reload(); await expect(one.locator("#session")).toHaveText(`connected:${A}`);
   const diagnostic = await call(one, "diagnostic"); expect(diagnostic.status).toBe("recovery-required");
   expect(JSON.parse(diagnostic.rawJournal)).toHaveLength(2);
-  expect(JSON.parse(diagnostic.rawJournal)[1].diagnosticJson).toBe(first.diagnosticJson);
+  expect(JSON.parse(diagnostic.rawJournal)[1].receipts.diagnostic.sha256).toBe(createHash("sha256").update(first.diagnosticJson).digest("hex"));
   const before = await call(two, "snapshot"); await call(one, "load", "blocked"); expect(await call(two, "snapshot")).toEqual(before);
   await prepare(one, "fresh"); await call(one, "startRecovery", "retry", "fresh");
   expect((await finished(one, "retry")).status).toBe("fulfilled");

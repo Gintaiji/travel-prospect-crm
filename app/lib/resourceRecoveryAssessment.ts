@@ -1,9 +1,11 @@
+import { archiveReceipt, validFlatEntry, parseResourceArchive, resourceDigest } from "./resourceArchiveIntegrity";
 import { assertResources } from "./resourceValidation";
 import type { Resource } from "./types";
 
 export const RESOURCE_JOURNAL_WARNING_BYTES = 1024 * 1024;
 
 export function validReplacementStage(entry: Record<string, unknown>, userId: string) {
+  if (entry.archiveVersion !== undefined) return validFlatEntry(entry, userId);
   if (entry.replacement === undefined) return true;
   const stage = entry.replacement as Record<string, unknown> | null;
   if (entry.kind !== "import" || entry.sourceOwnerUserId !== userId || typeof entry.beforeRaw !== "string" || !stage || stage.stagedRaw !== entry.candidateRaw ||
@@ -13,11 +15,12 @@ export function validReplacementStage(entry: Record<string, unknown>, userId: st
     return d?.appName === "Travel Prospect CRM" && d.storageScope === "resource-recovery-diagnostic" && d.userId === userId && d.status === "ready" &&
       d.rawResources === entry.beforeRaw && backup?.appName === "Travel Prospect CRM" && backup.storageScope === "account-resources" && backup.ownerUserId === userId &&
       backup.version === 5 && backup.purpose === "before-resource-import" && backup.rawResources === entry.beforeRaw &&
-      JSON.stringify(backup.resources) === JSON.stringify(JSON.parse(entry.beforeRaw)) && JSON.stringify(backup.recoveryDiagnostic) === JSON.stringify(d);
+      JSON.stringify(backup.resources) === JSON.stringify(JSON.parse(entry.beforeRaw)) && (backup.archiveVersion === 2 ? backup.resourceFingerprint === resourceDigest(entry.beforeRaw as string) && JSON.stringify(backup.recoveryReceipt) === JSON.stringify(archiveReceipt(userId, stage.diagnosticJson as string)) : backup.archiveVersion === undefined && JSON.stringify(backup.recoveryDiagnostic) === JSON.stringify(d));
   } catch { return false; }
 }
 
 export function validRecoveryStage(entry: Record<string, unknown>, userId: string) {
+  if (entry.archiveVersion !== undefined) return validFlatEntry(entry, userId);
   if (entry.kind !== "recovery") return true;
   if (entry.stagedRaw !== entry.candidateRaw || typeof entry.diagnosticJson !== "string") return false;
   try {
@@ -43,7 +46,7 @@ export function assessResourceRecovery(userId: string, rawResources: string | nu
   };
   let journal: unknown = null, state: unknown = null;
   let journalIntegrity = rawJournal === null ? "absent" : "valid";
-  try { journal = rawJournal === null ? null : JSON.parse(rawJournal); }
+  try { journal = rawJournal === null ? null : parseResourceArchive(rawJournal); }
   catch { journalIntegrity = "corrupt"; }
   try { state = rawState === null ? null : JSON.parse(rawState); } catch { /* reported separately */ }
   const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);

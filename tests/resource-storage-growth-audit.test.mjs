@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { journalMetrics, snapshotMetrics } from "./helpers/resourceStorageMetrics.mjs";
 import { createTsLoader } from "./helpers/loadTs.mjs";
@@ -35,7 +37,7 @@ const store = { scopedStorage: scoped, beginOperation: async () => ({ userId: A,
 const api = load("app/lib/resourceBackupJson.ts").createResourceBackupJson({ enabled: true, store, replacementPolicy: "coordinated" });
 const confirmation = { ownerUserId: A, ownershipCertain: true, legacyOwnershipVerified: false, previewReviewed: true, safetyBackupSaved: true, replaceExisting: true };
 const rows = []; let refused = false;
-for (let n = 0; n < 8; n++) {
+for (let n = 0; n < 20; n++) {
   const p = await api.preview(JSON.stringify({ appName: "Travel Prospect CRM", version: 5, storageScope: "account-resources", ownerUserId: A, resources: [resource(`r${n}`)] }), {});
   api.verifyImportSafetyBackup(p, p.safetyJson); const before = [...data];
   try { await api.apply(p, confirmation); }
@@ -45,8 +47,16 @@ for (let n = 0; n < 8; n++) {
   const m = snapshotMetrics(Object.fromEntries(data), A); rows.push(m);
   assert.equal(data.get(key(B, "resources")), "B untouched"); assert.equal(data.get("travel-prospect-crm-resources"), "legacy untouched");
 }
-assert.ok(rows.length >= 3); assert.equal(refused, true);
-assert.ok(rows.at(-1).journal.embeddedJournalDepth >= 2); // Finite historical nesting, not a cyclic JS object.
+assert.equal(rows.length, 20);
+fs.mkdirSync("test-results/resource-flat-archive", { recursive: true });
+fs.writeFileSync("test-results/resource-flat-archive/unit-growth.json", JSON.stringify(rows, null, 2));
+const integrity = load("app/lib/resourceArchiveIntegrity.ts");
+assert.throws(() => integrity.parseResourceArchive(" ".repeat(integrity.RESOURCE_ARCHIVE_MAX_CHARACTERS + 1)), /volumineuse/);
+assert.throws(() => integrity.parseResourceArchive("{"));
+for (let i = 1; i < rows.length; i++) assert.ok(rows[i].journal.utf16ValueBytes - rows[i - 1].journal.utf16ValueBytes < 2600);
+for (const input of ["", "abc", "???", "x".repeat(1000)]) assert.equal(integrity.resourceDigest(input), createHash("sha256").update(input).digest("hex"));
+for (const entry of JSON.parse(data.get(key(A, "resource-import-journal")))) { assert.equal(integrity.validFlatEntry(entry, A), true); entry.beforeRaw = "[]"; assert.equal(integrity.validFlatEntry(entry, A), false); } assert.equal(refused, false);
+assert.equal(rows.at(-1).journal.embeddedJournalDepth, 0); // Finite historical nesting, not a cyclic JS object.
 // A zero-headroom budget must fail before any journal/state/resource change.
 budget = [...data].reduce((sum, [k, v]) => sum + (k.length + v.length) * 2, 0);
 const p = await api.preview(JSON.stringify({ appName: "Travel Prospect CRM", version: 5, storageScope: "account-resources", ownerUserId: A, resources: [] }), {});

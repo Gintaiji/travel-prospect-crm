@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { createTsLoader } from "./helpers/loadTs.mjs";
 
@@ -36,7 +37,7 @@ async function fixture() {
   const s = await fixture(), before = [...s.data], p = await s.api.preview(json(), {});
   assert.equal(s.writes(), 0); assert.equal(p.currentResources[0].id, "old"); assert.equal(p.resources[0].id, "incoming");
   assert.equal(JSON.parse(p.safetyJson).rawResources, s.data.get(key(A, "resources")));
-  assert.equal(JSON.parse(p.safetyJson).recoveryDiagnostic.userId, A);
+  assert.equal(JSON.parse(p.safetyJson).recoveryReceipt.ownerUserId, A);
   await assert.rejects(s.api.apply(p, confirmation), /non relue/);
   assert.throws(() => s.api.verifyImportSafetyBackup(p, "{}"), /différente/);
   s.api.verifyImportSafetyBackup(p, p.safetyJson);
@@ -47,7 +48,7 @@ async function fixture() {
   assert.equal(JSON.parse(s.data.get(key(A, "resources")))[0].title, "incoming");
   const entries = JSON.parse(s.data.get(key(A, "resource-import-journal")));
   assert.equal(entries[0].beforeRaw, before.find(([k]) => k === key(A, "resources"))[1]);
-  assert.equal(entries[0].replacement.safetyJson, p.safetyJson); assert.equal(entries[0].replacement.stagedRaw, s.data.get(key(A, "resources")));
+  assert.equal(entries[0].receipts.safety.sha256, createHash("sha256").update(p.safetyJson).digest("hex")); assert.equal(entries[0].candidateRaw, s.data.get(key(A, "resources")));
   assert.equal((await s.diagnostic()).status, "ready");
   for (const [k, v] of before) if (k !== key(A, "resources")) assert.equal(s.data.get(k), v);
   await assert.rejects(s.api.apply(p, confirmation));
@@ -96,7 +97,7 @@ for (const stopAt of [1, 2, 3, 4]) for (const afterPersist of [false, true]) {
   await assert.rejects(s.api.apply(p, confirmation)); s.onWrite(() => {});
   if (s.data.has(key(A, "resource-import-journal"))) {
     const first = JSON.parse(s.data.get(key(A, "resource-import-journal")))[0];
-    assert.equal(first.beforeRaw, old); assert.equal(first.replacement.safetyJson, p.safetyJson);
+    assert.equal(first.beforeRaw, old); assert.equal(first.receipts.safety.sha256, createHash("sha256").update(p.safetyJson).digest("hex"));
   } else assert.equal(s.data.get(key(A, "resources")), old);
   const d = await s.diagnostic();
   assert.equal(d.status, (stopAt === 1 && !afterPersist) || (stopAt === 4 && afterPersist) ? "ready" : "recovery-required");
@@ -111,7 +112,7 @@ for (const stopAt of [1, 2, 3, 4]) for (const afterPersist of [false, true]) {
   const selection = recovery.copies.find(copy => copy.side === "beforeRaw");
   await s.api.applyRecovery(recovery, selection, { ownerUserId: A, previewReviewed: true, recoverExplicitly: true });
   assert.equal(s.data.get(key(A, "resources")), old);
-  assert.equal(JSON.parse(s.data.get(key(A, "resource-import-journal")))[0].replacement.safetyJson, p.safetyJson);
+  assert.equal(JSON.parse(s.data.get(key(A, "resource-import-journal")))[0].receipts.safety.sha256, createHash("sha256").update(p.safetyJson).digest("hex"));
   assert.equal((await s.diagnostic()).status, "ready");
 }
 {
@@ -128,11 +129,35 @@ for (const mode of ["alter-resources", "alter-marker", "read-after-copy"]) {
   });
   await assert.rejects(s.api.apply(p, confirmation));
 }
-for (const field of ["sourceOwnerUserId", "safetyJson", "stagedRaw"]) {
+// Historical nested archives are read without recursive decoding or conversion.
+{
+  const s = await fixture(), beforeRaw = s.data.get(key(A, "resources"));
+  const d = { appName: "Travel Prospect CRM", storageScope: "resource-recovery-diagnostic", userId: A, status: "ready", rawResources: beforeRaw, rawJournal: "[]" };
+  const diagnosticJson = JSON.stringify(d);
+  const safetyJson = JSON.stringify({ appName: "Travel Prospect CRM", version: 5, storageScope: "account-resources", ownerUserId: A,
+    purpose: "before-resource-import", rawResources: beforeRaw, resources: JSON.parse(beforeRaw), recoveryDiagnostic: d });
+  const historical = JSON.stringify([{ importId: "historical", userId: A, kind: "import", sourceOwnerUserId: A, createdAt: "2026-10-29",
+    beforeRaw, candidateRaw: beforeRaw, replacement: { stagedRaw: beforeRaw, diagnosticJson, safetyJson } }], null, 2);
+  s.data.set(key(A, "resource-import-journal"), historical);
+  s.data.set(key(A, "resource-import-state"), JSON.stringify({ userId: A, importId: "historical", status: "verified", createdAt: "2026-10-29", verifiedAt: "2026-10-29" }));
+  assert.equal((await s.diagnostic()).status, "ready");
+  const p = await s.prepared();
+  assert.equal(p.safetyJson.includes("rawJournal"), false);
+  await s.api.apply(p, confirmation);
+  const appended = s.data.get(key(A, "resource-import-journal"));
+  assert.ok(appended.startsWith(historical.slice(0, -1))); // Exact old whitespace and bytes.
+  assert.deepEqual(JSON.parse(appended)[0], JSON.parse(historical)[0]);
+  assert.equal(JSON.parse(appended)[1].replacement, undefined);
+  const corrupt = JSON.parse(appended); corrupt[0].replacement.safetyJson = "{";
+  s.data.set(key(A, "resource-import-journal"), JSON.stringify(corrupt));
+  const unchanged = [...s.data];
+  await assert.rejects(s.api.preview(json(), {})); assert.deepEqual([...s.data], unchanged);
+}
+for (const field of ["sourceOwnerUserId", "safetyJson", "stagedRaw", "archiveVersion", "fingerprints", "receipts"]) {
   const s = await fixture(), p = await s.prepared(); await s.api.apply(p, confirmation);
   const journal = JSON.parse(s.data.get(key(A, "resource-import-journal")));
   if (field === "sourceOwnerUserId") journal[0].sourceOwnerUserId = B;
-  else journal[0].replacement[field] = "invalid";
+  else journal[0][field] = "invalid";
   s.data.set(key(A, "resource-import-journal"), JSON.stringify(journal));
   assert.equal((await s.diagnostic()).status, "recovery-required");
   await assert.rejects(s.api.preview(json(), {}));

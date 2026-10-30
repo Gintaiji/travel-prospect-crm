@@ -12,7 +12,7 @@ export function journalMetrics(raw, { maxLayers = 16, maxDecodedBytes = 64 * 102
     const entries = JSON.parse(cursor);
     if (!Array.isArray(entries)) throw Error("Journal must be an array");
     if (layers.length === 0) rootEntries = entries;
-    const latest = [...entries].reverse().find(entry => entry.replacement || entry.kind === "recovery");
+    const latest = [...entries].reverse().find(entry => entry.replacement || (entry.kind === "recovery" && entry.archiveVersion === undefined));
     let previous = null, duplicatedPreviousJournal = false;
     if (latest?.replacement) {
       const diagnostic = JSON.parse(latest.replacement.diagnosticJson);

@@ -12,12 +12,12 @@ async function evidence(info, name, payload) {
 }
 test.describe("audit final : croissance et quota", () => {
   test.use({ replacementEnabled: true });
-  test("mesure bornée de remplacements successifs jusqu’au quota natif", async ({ chain }, info) => {
+  test("vingt remplacements successifs sans croissance recursive", async ({ chain }, info) => {
     const { page, initial } = chain; await migrate(page, info);
     const rows = [{ round: 0, status: "migration-verified", ...snapshotMetrics(await call(page, "snapshot"), A), usage: await call(page, "storageUsage") }];
-    let terminal = "eight-attempt-bound", successes = 0;
+    let terminal = "twenty-attempt-bound", successes = 0;
     try {
-      for (let round = 1; round <= 8; round++) {
+      for (let round = 1; round <= 20; round++) {
         const started = performance.now();
         const p = await prepare(page, info, `round-${round}`, `round-${round}-safety.json`);
         const safetyUtf8Bytes = fs.statSync(p.file).size;
@@ -45,7 +45,9 @@ test.describe("audit final : croissance et quota", () => {
         }
         successes++; expect(JSON.parse(after[key(A, "resources")])[0].id).toBe(`round-${round}`);
       }
-      expect(successes).toBeGreaterThanOrEqual(3);
+      expect(successes).toBe(20);
+      expect(rows.every(row => row.journal.embeddedJournalDepth === 0)).toBe(true);
+      for (let i = 2; i < rows.length; i++) expect(rows[i].journal.utf16ValueBytes - rows[i - 1].journal.utf16ValueBytes).toBeLessThan(3000);
     } finally {
       const successfulRows = rows.filter(row => row.status === "verified");
       await evidence(info, "growth-measurements.json", { browser: await page.context().browser().version(), terminal, successes,
@@ -77,7 +79,7 @@ test.describe("audit final : croissance et quota", () => {
     await expect(page.locator("#backup")).toContainText("Récupération nécessaire");
     const after = await call(page, "snapshot"); expect(after[key(A, "resources")]).toBe(before[key(A, "resources")]); expect(after[key(B, "resources")]).toBe(before[key(B, "resources")]);
     const entries = JSON.parse(after[key(A, "resource-import-journal")]); expect(entries).toHaveLength(2);
-    expect(entries[1].beforeRaw).toBe(before[key(A, "resources")]); expect(entries[1].replacement.safetyJson).toBe(fs.readFileSync(safety, "utf8"));
+    expect(entries[1].beforeRaw).toBe(before[key(A, "resources")]); expect(entries[1].receipts.safety.sha256).toBe(createHash("sha256").update(fs.readFileSync(safety, "utf8")).digest("hex"));
     expect(JSON.parse(after[key(A, "resource-import-state")]).status).toBe("pending");
     const diagnosticFile = await download(page, page.getByRole("button", { name: "Exporter un diagnostic local sans modifier les données" }), info, "quota-after-diagnostic.json");
     expect(JSON.parse(fs.readFileSync(diagnosticFile, "utf8")).status).toBe("recovery-required");

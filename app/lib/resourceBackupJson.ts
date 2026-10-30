@@ -1,3 +1,4 @@
+import { archiveReceipt, parseResourceArchive, resourceDigest } from "./resourceArchiveIntegrity";
 import { assertResources } from "./resourceAccess";
 import type { Resource } from "./types";
 import type { SessionCapture, UserSessionStore } from "./userSessionStore";
@@ -24,7 +25,7 @@ export function isHistoricalBackup(value: unknown): boolean {
 }
 
 export function parseResourceBackup(json: string) {
-  const value: unknown = JSON.parse(json);
+  const value: unknown = parseResourceArchive(json);
   if (!record(value) || value.appName !== "Travel Prospect CRM") throw new Error("Sauvegarde JSON inconnue.");
   let ownerUserId: string | null = null;
   if (value.storageScope === "account-resources") {
@@ -40,6 +41,12 @@ export function parseResourceBackup(json: string) {
   }
   if (!Array.isArray(value.resources)) throw new Error("Ressources absentes de la sauvegarde.");
   assertResources(value.resources as Resource[]);
+  if (value.archiveVersion !== undefined) {
+    if (value.archiveVersion !== 2 || value.purpose !== "before-resource-import" || typeof value.rawResources !== "string" ||
+      value.resourceFingerprint !== resourceDigest(value.rawResources) || JSON.stringify(value.resources) !== JSON.stringify(parseResourceArchive(value.rawResources))) {
+      throw new Error("Format ou empreinte de sauvegarde Ressources invalide.");
+    }
+  }
   // Keep the full parsed historical payload for compatibility/preview; import only resources.
   return { payload: value, ownerUserId, resources: value.resources as Resource[],
     categories: ["prospects", "resources", "settings", "streetMarketingSurvey", "customMessageTemplates"].filter(name => Object.hasOwn(value, name)) };
@@ -110,7 +117,8 @@ export function createResourceBackupJson(dependencies: {
       ...resourceEnvelope(op.userId, currentResources ?? []),
       // Absence is explicit; this recovery artifact is not accepted as a normal resource export.
       ...(before === null ? { storageScope: "account-resource-safety", resources: null } : {}),
-      rawResources: before, purpose: "before-resource-import", recoveryDiagnostic: diagnostic,
+      resourceFingerprint: before === null ? null : resourceDigest(before), rawResources: before, purpose: "before-resource-import", archiveVersion: 2,
+      recoveryReceipt: archiveReceipt(op.userId, diagnosticJson),
     }, null, 2);
     // The displayed preview is detached from the immutable string used for the copy.
     const output: ResourceImportPreview = Object.freeze({

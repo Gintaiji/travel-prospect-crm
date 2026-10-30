@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { createTsLoader } from "./helpers/loadTs.mjs";
 
@@ -50,7 +51,7 @@ const select = preview => ({ operationId: preview.copies[0].operationId, side: p
   assert.equal(result.resourcesCount, 1); assert.equal(s.data.get(key(A, "resources")), raw("old"));
   const journal = JSON.parse(s.data.get(key(A, "resource-import-journal")));
   assert.equal(journal.length, 2); assert.deepEqual(journal[0], s.entry);
-  assert.equal(journal[1].diagnosticJson, p.diagnosticJson); assert.equal(journal[1].stagedRaw, raw("old"));
+  assert.equal(journal[1].receipts.diagnostic.sha256, createHash("sha256").update(p.diagnosticJson).digest("hex")); assert.equal(journal[1].candidateRaw, raw("old"));
   assert.equal(JSON.parse(s.data.get(key(A, "resource-import-state"))).status, "verified");
   assert.equal((await s.inspect()).status, "ready");
   assert.equal(s.data.get(key(B, "resources")), "account B untouched"); assert.equal(s.data.get("travel-prospect-crm-resources"), "legacy untouched");
@@ -112,7 +113,7 @@ for (const afterPersist of [false, true]) for (const stopAt of [1, 2, 3, 4]) {
   s.onWrite(() => {});
   const journal = JSON.parse(s.data.get(key(A, "resource-import-journal")));
   assert.deepEqual(journal[0], s.entry);
-  if (journal.length > 1) assert.equal(journal[1].diagnosticJson, p.diagnosticJson);
+  if (journal.length > 1) assert.equal(journal[1].receipts.diagnostic.sha256, createHash("sha256").update(p.diagnosticJson).digest("hex"));
   if (!(afterPersist && stopAt === 4)) {
     assert.equal((await s.inspect()).status, "recovery-required");
     // New manual diagnosis can prepare another attempt; no automatic retry.

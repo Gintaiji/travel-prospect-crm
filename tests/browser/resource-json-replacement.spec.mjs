@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { expect } from "@playwright/test";
 import fs from "node:fs";
 import { test, call, key, A, B, download, migrate } from "./resource-chain.spec.mjs";
@@ -15,7 +16,7 @@ async function prepare(page, info, id, name = "safety.json", checkBadFile = fals
   await expect(page.locator("#backup")).toContainText("Ressources actuelles"); await expect(page.locator("#backup")).toContainText("Ressources à charger");
   const file = await download(page, page.getByRole("button", { name: "Télécharger la sauvegarde préalable de la destination" }), info, name);
   const backup = JSON.parse(fs.readFileSync(file, "utf8"));
-  expect(backup.rawResources).toBe(before[key(A, "resources")]); expect(backup.recoveryDiagnostic.rawJournal).toBe(before[key(A, "resource-import-journal")]);
+  expect(backup.rawResources).toBe(before[key(A, "resources")]); expect(backup.recoveryDiagnostic).toBeUndefined(); expect(backup.recoveryReceipt.ownerUserId).toBe(A); expect(backup.recoveryReceipt.sha256).toMatch(/^[a-f0-9]{64}$/);
   if (checkBadFile) {
     await page.getByLabel("Relire la sauvegarde préalable complète enregistrée", { exact: true }).setInputFiles({ name: "bad.json", mimeType: "application/json", buffer: Buffer.from("{}") });
     await expect(page.locator("#backup")).toContainText("Sauvegarde préalable non vérifiée"); await expect(button).toBeDisabled();
@@ -42,7 +43,7 @@ test.describe("remplacement JSON activé uniquement dans le bundle de recette", 
     expect(after[key(B, "resources")]).toBe(initial[key(B, "resources")]); expect(after["travel-prospect-crm-resources"]).toBe(initial["travel-prospect-crm-resources"]);
     let journal = JSON.parse(after[key(A, "resource-import-journal")]);
     expect(journal[0]).toEqual(JSON.parse(before[key(A, "resource-import-journal")])[0]);
-    expect(journal.at(-1).beforeRaw).toBe(before[key(A, "resources")]); expect(journal.at(-1).replacement.safetyJson).toBe(fs.readFileSync(file, "utf8"));
+    expect(journal.at(-1).beforeRaw).toBe(before[key(A, "resources")]); expect(journal.at(-1).receipts.safety.sha256).toBe(createHash("sha256").update(fs.readFileSync(file, "utf8")).digest("hex"));
     const empty = await prepare(page, info, null, "A-before-empty.json");
     await expect(page.locator("#backup")).toContainText("Liste volontairement vide");
     await empty.button.click(); await expect(page.locator("#backup")).toContainText("0 ressource(s) copiée(s) et vérifiée(s)");

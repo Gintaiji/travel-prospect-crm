@@ -1,3 +1,4 @@
+import { archiveReceipt, resourceDigest, validFlatEntry, parseResourceArchive } from "./resourceArchiveIntegrity";
 import type { AccountStorageName, ValidatedStorageOwner } from "./accountScopedStorage";
 import { assessResourceRecovery, recoverableResourceCopies, validRecoveryStage, validReplacementStage } from "./resourceRecoveryAssessment";
 
@@ -33,7 +34,7 @@ export function assertResourceRecoveryClear(scoped: Scoped, owner: ValidatedStor
   const stateRaw = scoped.read(owner, "resource-import-state");
   if (journalRaw === null && stateRaw === null) return;
   let entries: unknown, state: unknown;
-  try { entries = journalRaw === null ? null : JSON.parse(journalRaw); state = stateRaw === null ? null : JSON.parse(stateRaw); }
+  try { entries = journalRaw === null ? null : parseResourceArchive(journalRaw); state = stateRaw === null ? null : JSON.parse(stateRaw); }
   catch { fail("journal ou état illisible"); }
   if (!Array.isArray(entries) || !entries.length || !object(state)) fail("journal et état incomplets");
   const ids = new Set<string>();
@@ -43,6 +44,7 @@ export function assertResourceRecoveryClear(scoped: Scoped, owner: ValidatedStor
       (entry.candidateRaw !== null && typeof entry.candidateRaw !== "string")) fail("journal incohérent ou propriétaire incorrect");
     if (typeof entry.createdAt !== "string" || !Number.isFinite(Date.parse(entry.createdAt))) fail("date du journal invalide");
     if (entry.kind === "initialization" && (ids.size !== 0 || entry.beforeRaw !== null || entry.candidateRaw !== "[]")) fail("journal d’initialisation invalide");
+    if (!validFlatEntry(entry, owner.userId)) fail("empreinte ou format de copie invalide");
     if (!validRecoveryStage(entry, owner.userId)) fail("préparation de récupération invalide");
     if (!validReplacementStage(entry, owner.userId)) fail("préparation de remplacement invalide");
     for (const raw of [entry.beforeRaw, entry.candidateRaw]) {
@@ -170,11 +172,18 @@ export async function coordinateResourceWrite(options: {
       const old = scoped.read(owner, "resource-import-journal");
       const entries = old === null ? [] : JSON.parse(old) as unknown[];
       const importId = crypto.randomUUID(), createdAt = new Date().toISOString();
-      const journal = JSON.stringify([...entries, { importId, userId: owner.userId, createdAt, kind: options.kind,
-        sourceOwnerUserId: options.sourceOwnerUserId ?? null, beforeRaw: expectedRaw, candidateRaw,
-        ...(options.replacement ? { replacement: { stagedRaw: candidateRaw, diagnosticJson: options.replacement.diagnosticJson, safetyJson: options.replacement.safetyJson } } : {}),
-        ...(options.kind === "recovery" ? { stagedRaw: candidateRaw, diagnosticJson: options.recovery!.diagnosticJson,
-          recoveredFrom: { operationId: options.recovery!.operationId, side: options.recovery!.side } } : {}) }]);
+      // Append without reserializing historical entries; preserve their exact bytes.
+      const entry = { importId, userId: owner.userId, createdAt, kind: options.kind,
+        archiveVersion: 2, sourceOwnerUserId: options.sourceOwnerUserId ?? null, beforeRaw: expectedRaw, candidateRaw,
+        fingerprints: { beforeRaw: expectedRaw === null ? null : resourceDigest(expectedRaw), candidateRaw: candidateRaw === null ? null : resourceDigest(candidateRaw) },
+        receipts: {
+          ...(options.replacement ? { diagnostic: archiveReceipt(owner.userId, options.replacement.diagnosticJson), safety: archiveReceipt(owner.userId, options.replacement.safetyJson) } : {}),
+          ...(options.kind === "recovery" ? { diagnostic: archiveReceipt(owner.userId, options.recovery!.diagnosticJson) } : {}),
+        },
+        ...(options.kind === "recovery" ? { recoveredFrom: { operationId: options.recovery!.operationId, side: options.recovery!.side } } : {}),
+      };
+      if (!Array.isArray(entries)) fail("journal illisible");
+      const journal = old === null ? JSON.stringify([entry]) : old.slice(0, old.lastIndexOf("]")) + (entries.length ? "," : "") + JSON.stringify(entry) + old.slice(old.lastIndexOf("]"));
       scoped.write(owner, "resource-import-journal", journal, permit);
       if (scoped.read(owner, "resource-import-journal") !== journal) fail("copie du journal non vérifiée");
       const pending = JSON.stringify({ userId: owner.userId, importId, createdAt, kind: options.kind, status: "pending" });

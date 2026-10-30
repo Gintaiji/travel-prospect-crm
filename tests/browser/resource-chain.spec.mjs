@@ -138,7 +138,7 @@ test("chaîne React réelle : migration, CRUD, A/logout/B/A, JSON, interruption 
   expect(after["travel-prospect-crm-resources"]).toBe(initial["travel-prospect-crm-resources"]);
   expect(after["travel-prospect-crm-prospects"]).toBe(initial["travel-prospect-crm-prospects"]);
   const journal = JSON.parse(after[key(A, "resource-import-journal")]);
-  expect(journal.at(-1).kind).toBe("recovery"); expect(journal.at(-1).diagnosticJson).toBe(fs.readFileSync(safety, "utf8"));
+  expect(journal.at(-1).kind).toBe("recovery"); expect(journal.at(-1).receipts.diagnostic.sha256).toBe(createHash("sha256").update(fs.readFileSync(safety, "utf8")).digest("hex"));
   expect(journal[0].kind).toBe("migration"); expect(JSON.parse(after[key(A, "resource-import-state")]).status).toBe("verified");
   await page.screenshot({ path: info.outputPath("chain-recovered.png"), fullPage: true });
 });
