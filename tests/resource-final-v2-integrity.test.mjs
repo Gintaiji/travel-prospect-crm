@@ -32,8 +32,8 @@ try {
   const result = await api.applyRecovery(preview, preview.copies[0], { ownerUserId: A, previewReviewed: true, recoverExplicitly: true });
   outcome = { status: "fulfilled", result };
 } catch (error) { outcome = { status: "rejected", message: error.message }; }
-fs.mkdirSync("test-results/resource-final-v2", { recursive: true });
-fs.writeFileSync("test-results/resource-final-v2/legacy-integrity-unit.json", JSON.stringify({ requirement: "refuse recovery without verifiable persisted SHA-256", exportRefused,
+fs.mkdirSync("test-results/resource-restoration-integrity", { recursive: true });
+fs.writeFileSync("test-results/resource-restoration-integrity/legacy-integrity-unit.json", JSON.stringify({ requirement: "refuse recovery without verifiable persisted SHA-256", exportRefused,
   outcome, writes, before: Object.fromEntries(before), after: Object.fromEntries(data), priorJournalEntryPreserved: JSON.stringify(JSON.parse(data.get(key(A, "resource-import-journal")))[0]) === JSON.stringify(legacy) }, null, 2));
 assert.equal(exportRefused, true, "Export must refuse a legacy copy without persisted SHA-256");
 assert.equal(outcome.status, "rejected", "D9 CRITICAL: recovery must refuse a copy without verifiable persisted integrity");

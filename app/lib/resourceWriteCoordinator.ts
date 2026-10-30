@@ -1,4 +1,4 @@
-import { archiveReceipt, resourceDigest, validFlatEntry, parseResourceArchive } from "./resourceArchiveIntegrity";
+import { archiveReceipt, resourceDigest, validFlatEntry, parseResourceArchive, verifiedResourceCopyFingerprint } from "./resourceArchiveIntegrity";
 import { assessRecoverySpace, isResourceQuotaError, readBrowserRecoverySpace, ResourceQuotaError, ResourceRecoverySpaceError, type ResourceSpaceEstimate } from "./resourceRecoverySpace";
 import type { AccountStorageName, ValidatedStorageOwner } from "./accountScopedStorage";
 import { assessResourceRecovery, recoverableResourceCopies, validRecoveryStage, validReplacementStage } from "./resourceRecoveryAssessment";
@@ -145,6 +145,7 @@ export async function coordinateResourceWrite(options: {
   if (candidateRaw !== null && !Array.isArray(JSON.parse(candidateRaw))) throw new Error("Le candidat Ressources doit être une liste JSON.");
   return (options.locks ?? browserLocks()).request(resourceWriteLockName(owner.userId), { mode: "exclusive" }, async () => {
     scoped.read(owner, "resources"); // Owner/session validated again after lock wait.
+    let recheckRecoveryIntegrity: (() => void) | undefined;
     if (options.kind === "recovery") {
       const recovery = options.recovery;
       if (!recovery || recovery.verifiedBackupJson !== recovery.diagnosticJson || !recovery.previewReviewed || recovery.confirmedOwnerUserId !== owner.userId) fail("sauvegarde préalable ou confirmation manquante");
@@ -155,6 +156,14 @@ export async function coordinateResourceWrite(options: {
       }
       const copies = recoverableResourceCopies(owner.userId, diagnostic.rawResources, diagnostic.rawJournal, diagnostic.rawState);
       if (!copies.some(copy => copy.operationId === recovery.operationId && copy.side === recovery.side && copy.raw === candidateRaw)) fail("copie absente ou non vérifiée");
+      const entry = (parseResourceArchive(diagnostic.rawJournal) as Record<string, unknown>[]).find(e => e.importId === recovery.operationId);
+      recheckRecoveryIntegrity = () => {
+        for (const [name, field] of [["resources", "rawResources"], ["resource-import-journal", "rawJournal"], ["resource-import-state", "rawState"], ["migration-state", "rawMigrationState"]] as const) {
+          if (scoped.read(owner, name) !== diagnostic[field]) throw new Error("Conflit de récupération : état modifié depuis l’aperçu.");
+        }
+        verifiedResourceCopyFingerprint(entry, owner.userId, recovery.side, candidateRaw!);
+      };
+      recheckRecoveryIntegrity();
     } else {
       if (options.recovery) throw new Error("Options de récupération interdites pour une écriture normale.");
       assertResourceRecoveryClear(scoped, owner);
@@ -206,6 +215,7 @@ export async function coordinateResourceWrite(options: {
         if (options.inspectRecoveryOnly) return space;
         if (space.status !== "sufficient-estimate") throw new ResourceRecoverySpaceError(space);
       }
+      recheckRecoveryIntegrity?.(); // Same Web Lock, persisted source/session checked immediately before any write.
       scoped.write(owner, "resource-import-journal", journal, permit);
       if (scoped.read(owner, "resource-import-journal") !== journal) fail("copie du journal non vérifiée");
       scoped.write(owner, "resource-import-state", pending, permit);

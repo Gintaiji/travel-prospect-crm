@@ -10,6 +10,10 @@ async function fixture() {
   const load = createTsLoader();
   const coordinator = load("app/lib/resourceWriteCoordinator.ts");
   const entry = { importId: "interrupted", userId: A, kind: "import", createdAt: "2026-10-29", beforeRaw: raw("old"), candidateRaw: raw("new") };
+  // Modern healthy fixture: hashes are persisted at creation, not added during recovery.
+  Object.assign(entry, { archiveVersion: 2, receipts: {}, fingerprints: {
+    beforeRaw: createHash("sha256").update(entry.beforeRaw).digest("hex"), candidateRaw: createHash("sha256").update(entry.candidateRaw).digest("hex"),
+  } });
   const data = new Map([[key(A, "resources"), raw("new")], [key(A, "resource-import-journal"), JSON.stringify([entry])],
     [key(A, "resource-import-state"), JSON.stringify({ userId: A, importId: "interrupted", status: "pending", createdAt: "2026-10-29" })],
     [key(B, "resources"), "account B untouched"], ["travel-prospect-crm-resources", "legacy untouched"]]);
@@ -137,5 +141,57 @@ for (const mode of ["alter-data", "alter-journal", "alter-marker", "read-after-d
   const s = await fixture(); await assert.rejects(s.create({ recoveryEnabled: undefined }).previewRecovery({}), /désactivée/);
   await assert.rejects(s.create({ enabled: false }).previewRecovery({}), /désactivées/); assert.equal(s.writes(), 0);
   await assert.rejects(s.coordinator.coordinateResourceWrite({ scoped: s.scoped, owner: s.owner, kind: "recovery", expectedRaw: raw("new"), candidateRaw: raw("old") }), /désactivée/);
+}
+// Reject damaged persisted SHA / owner at the coordinator too, even with a supplied diagnostic backup.
+for (const mode of ["bad-sha", "missing-sha", "wrong-owner", "wrong-source"]) {
+  const s = await fixture(), entry = JSON.parse(s.data.get(key(A, "resource-import-journal")))[0];
+  if (mode === "bad-sha") entry.fingerprints.beforeRaw = "0".repeat(64);
+  if (mode === "missing-sha") delete entry.fingerprints.beforeRaw;
+  if (mode === "wrong-owner") entry.userId = B;
+  if (mode === "wrong-source") entry.sourceOwnerUserId = B;
+  s.put("resource-import-journal", JSON.stringify([entry])); const before = [...s.data];
+  const diagnosticJson = JSON.stringify(await s.inspect());
+  await assert.rejects(s.coordinator.coordinateResourceWrite({ scoped: s.scoped, owner: s.owner, kind: "recovery", manualRecoveryEnabled: true,
+    expectedRaw: raw("new"), candidateRaw: raw("old"),
+    recovery: { diagnosticJson, verifiedBackupJson: diagnosticJson, operationId: entry.importId, side: "beforeRaw", confirmedOwnerUserId: A, previewReviewed: true },
+    recoverySpace: () => ({ availableBytes: 4 * 1024 * 1024, usedBytes: 0, source: "fictional" }),
+  }));
+  await assert.rejects(s.api.previewRecovery({}));
+  assert.equal(s.writes(), 0); assert.deepEqual([...s.data], before);
+}
+// Last-moment source alteration during the space check must not be overwritten by a prepared journal.
+{
+  const s = await fixture(); let altered;
+  const api = s.create({ recoverySpace() {
+    const entry = JSON.parse(s.data.get(key(A, "resource-import-journal")))[0];
+    entry.fingerprints.beforeRaw = "0".repeat(64);
+    s.put("resource-import-journal", JSON.stringify([entry])); altered = [...s.data];
+    return { availableBytes: 4 * 1024 * 1024, usedBytes: 0, source: "fictional concurrent alteration" };
+  } });
+  const p = await s.prepared(api);
+  await assert.rejects(api.applyRecovery(p, select(p), confirmation), /empreinte ou format de copie invalide/);
+  assert.equal(s.writes(), 0); assert.deepEqual([...s.data], altered);
+}
+// Keep legacy evidence readable, refuse its restoration, and still restore a modern verified copy.
+{
+  const s = await fixture();
+  const legacy = { importId: "legacy-evidence", userId: A, sourceOwnerUserId: A, kind: "edit", createdAt: "2026-10-29", beforeRaw: raw("historical"), candidateRaw: raw("old") };
+  s.put("resource-import-journal", JSON.stringify([legacy, s.entry], null, 2)); const before = [...s.data];
+  const p = await s.prepared();
+  await assert.rejects(s.api.exportRecoveryCopy(p, select(p)), /sans empreinte SHA-256/);
+  await assert.rejects(s.api.inspectRecoverySpace(p, select(p)), /sans empreinte SHA-256/);
+  await assert.rejects(s.api.applyRecovery(p, select(p), confirmation), /sans empreinte SHA-256/);
+  assert.equal(s.writes(), 0); assert.deepEqual([...s.data], before);
+  const fresh = await s.prepared(), modern = fresh.copies.find(c => c.operationId === s.entry.importId && c.side === "beforeRaw");
+  const json = JSON.parse(await s.api.exportRecoveryCopy(fresh, modern));
+  assert.equal(json.resourceFingerprint, createHash("sha256").update(raw("old")).digest("hex"));
+  await s.api.applyRecovery(fresh, modern, confirmation);
+  assert.equal(s.data.get(key(A, "resources")), raw("old"));
+  const historicalRaw = before.find(([k]) => k === key(A, "resource-import-journal"))[1];
+  const appended = s.data.get(key(A, "resource-import-journal"));
+  assert.ok(appended.startsWith(historicalRaw.slice(0, -1)));
+  assert.deepEqual(JSON.parse(appended)[0], legacy);
+  assert.equal(JSON.parse(appended)[0].fingerprints, undefined);
+  assert.equal((await s.inspect()).status, "ready");
 }
 console.log("PASS: manual recovery healthy copies, verified safety file, confirmations, strict ownership/integrity, native lock concurrency, stale sessions, interruptions/quota, exact readback, retained evidence and disabled defaults.");

@@ -64,3 +64,17 @@ export function validFlatEntry(entry: Record<string, unknown>, userId: string) {
     return !!r && Object.keys(r).length === 4 && r.version === 2 && r.ownerUserId === userId && /^[a-f0-9]{64}$/.test(r.sha256) && Number.isSafeInteger(r.utf16Bytes) && r.utf16Bytes >= 0;
   }) && (entry.kind !== "recovery" || (!!entry.recoveredFrom && typeof (entry.recoveredFrom as Record<string, unknown>).operationId === "string" && ["beforeRaw", "candidateRaw"].includes(String((entry.recoveredFrom as Record<string, unknown>).side))));
 }
+
+/** Shared export/restore policy. Reading legacy evidence never makes it admissible for restoration. */
+export function verifiedResourceCopyFingerprint(entry: Record<string, unknown> | undefined, userId: string, side: "beforeRaw" | "candidateRaw", raw: string): string {
+  if (!entry || entry.userId !== userId || (entry.sourceOwnerUserId != null && entry.sourceOwnerUserId !== userId)) {
+    throw new Error("Copie refusée : propriétaire différent ou non confirmé pour ce compte.");
+  }
+  if (entry.archiveVersion !== 2) {
+    throw new Error("Copie historique sans empreinte SHA-256 persistée et vérifiable : restauration et export certifié refusés. Journaux et copies conservés pour diagnostic.");
+  }
+  if (!["beforeRaw", "candidateRaw"].includes(side) || entry[side] !== raw || !validFlatEntry(entry, userId)) {
+    throw new Error("Copie refusée : intégrité SHA-256 persistée invalide. Journaux et copies conservés pour diagnostic.");
+  }
+  return (entry.fingerprints as Record<string, string>)[side];
+}

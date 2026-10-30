@@ -1,4 +1,4 @@
-import { archiveReceipt, parseResourceArchive, resourceDigest } from "./resourceArchiveIntegrity";
+import { archiveReceipt, parseResourceArchive, resourceDigest, verifiedResourceCopyFingerprint } from "./resourceArchiveIntegrity";
 import { assertResources } from "./resourceAccess";
 import type { Resource } from "./types";
 import type { SessionCapture, UserSessionStore } from "./userSessionStore";
@@ -249,10 +249,7 @@ export function createResourceBackupJson(dependencies: {
       if (!copy) throw new Error("Copie absente de l’aperçu.");
       const d = JSON.parse(captured.json);
       const entry = (parseResourceArchive(d.rawJournal) as Record<string, unknown>[]).find(e => e.importId === selection.operationId);
-      const fingerprint = resourceDigest(copy.raw);
-      if (entry?.archiveVersion !== 2 || (entry.fingerprints as Record<string, unknown>)?.[copy.side] !== fingerprint) {
-        throw new Error("Export certifié refusé : copie sans empreinte SHA-256 persistée et vérifiable. Conserver et exporter le diagnostic historique pour expertise.");
-      }
+      const fingerprint = verifiedResourceCopyFingerprint(entry, captured.operation.userId, copy.side, copy.raw);
       const json = JSON.stringify({ ...resourceEnvelope(captured.operation.userId, JSON.parse(copy.raw)), purpose: "resource-recovery-copy", copyVersion: 1,
         source: { operationId: copy.operationId, side: copy.side, archiveVersion: 2 }, rawResources: copy.raw, resourceFingerprint: fingerprint }, null, 2);
       // Round-trip before download does not prove that the external file has been saved.
