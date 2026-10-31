@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 type BrowserSpeechRecognitionAlternative = {
   transcript: string;
@@ -78,16 +78,19 @@ function getSpeechRecognitionErrorMessage(error: string) {
   return "Erreur de reconnaissance vocale. Reessaie dans quelques instants.";
 }
 
-export function useSpeechRecognition() {
+const subscribeToSpeechSupport = () => () => {};
+const getSpeechSupport = () => Boolean(getSpeechRecognitionConstructor());
+const getServerSpeechSupport = () => false;
+
+export function useSpeechRecognition(onTranscript?: (transcript: string) => void) {
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
-  const [isSupported, setIsSupported] = useState(false);
+  const lastTranscriptRef = useRef("");
+  const isSupported = useSyncExternalStore(subscribeToSpeechSupport, getSpeechSupport, getServerSpeechSupport);
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setIsSupported(Boolean(getSpeechRecognitionConstructor()));
-
     return () => {
       recognitionRef.current?.abort();
       recognitionRef.current = null;
@@ -108,7 +111,6 @@ export function useSpeechRecognition() {
 
     if (!SpeechRecognitionConstructor) {
       setError("Reconnaissance vocale non disponible sur ce navigateur.");
-      setIsSupported(false);
       setIsListening(false);
       return;
     }
@@ -148,6 +150,10 @@ export function useSpeechRecognition() {
 
       if (finalTranscript) {
         setTranscript(finalTranscript);
+        if (lastTranscriptRef.current !== finalTranscript) {
+          lastTranscriptRef.current = finalTranscript;
+          onTranscript?.(finalTranscript);
+        }
       }
     };
 
@@ -159,7 +165,7 @@ export function useSpeechRecognition() {
       setError("Impossible de d\u00e9marrer la reconnaissance vocale.");
       setIsListening(false);
     }
-  }, []);
+  }, [onTranscript]);
 
   return {
     isSupported,

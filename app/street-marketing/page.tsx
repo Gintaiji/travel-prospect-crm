@@ -93,7 +93,10 @@ export default function StreetMarketingPage() {
   );
   const [isEditingSurvey, setIsEditingSurvey] = useState(false);
   const [quickContactForm, setQuickContactForm] =
-    useState<QuickContactFormState>(initialQuickContactFormState);
+    useState<QuickContactFormState>(() => ({
+      ...initialQuickContactFormState,
+      answers: DEFAULT_STREET_MARKETING_SURVEY.questions.map(() => ""),
+    }));
   const [preparedContact, setPreparedContact] =
     useState<QuickContactFormState | null>(null);
   const [quickContactMessage, setQuickContactMessage] = useState("");
@@ -108,35 +111,43 @@ export default function StreetMarketingPage() {
     DEFAULT_STREET_MARKETING_SURVEY;
 
   useEffect(() => {
-    const storedSurveyStorage = loadStreetMarketingSurvey();
+    const loadStoredSurvey = window.setTimeout(() => {
+      const storedSurveyStorage = loadStreetMarketingSurvey();
 
-    setSurveyStorage(storedSurveyStorage);
-    const storedActiveSurvey =
-      storedSurveyStorage.surveys.find(
-        (survey) => survey.id === storedSurveyStorage.activeSurveyId,
-      ) ?? storedSurveyStorage.surveys[0];
-    setDraftSurveyName(storedActiveSurvey.name);
-    setDraftQuestions(storedActiveSurvey.questions);
+      setSurveyStorage(storedSurveyStorage);
+      const storedActiveSurvey =
+        storedSurveyStorage.surveys.find(
+          (survey) => survey.id === storedSurveyStorage.activeSurveyId,
+        ) ?? storedSurveyStorage.surveys[0];
+      setDraftSurveyName(storedActiveSurvey.name);
+      setDraftQuestions(storedActiveSurvey.questions);
+    }, 0);
+    return () => window.clearTimeout(loadStoredSurvey);
   }, []);
 
   useEffect(() => {
-    const loadedProspects = loadProspects()
-      .filter(isStreetMarketingProspect)
-      .sort((firstProspect, secondProspect) =>
-        secondProspect.createdAt.localeCompare(firstProspect.createdAt),
-      );
+    const loadStoredProspects = window.setTimeout(() => {
+      const loadedProspects = loadProspects()
+        .filter(isStreetMarketingProspect)
+        .sort((firstProspect, secondProspect) =>
+          secondProspect.createdAt.localeCompare(firstProspect.createdAt),
+        );
 
-    setStreetMarketingProspects(loadedProspects);
+      setStreetMarketingProspects(loadedProspects);
+    }, 0);
+    return () => window.clearTimeout(loadStoredProspects);
   }, [quickContactMessage]);
 
-  useEffect(() => {
+  const [previousQuestions, setPreviousQuestions] = useState(activeSurvey.questions);
+  if (previousQuestions !== activeSurvey.questions) {
+    setPreviousQuestions(activeSurvey.questions);
     setQuickContactForm((currentForm) => ({
       ...currentForm,
       answers: activeSurvey.questions.map(
         (_, index) => currentForm.answers[index] ?? "",
       ),
     }));
-  }, [activeSurvey.questions]);
+  }
 
   function startSurveyEdit() {
     setDraftSurveyName(activeSurvey.name);

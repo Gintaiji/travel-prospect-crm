@@ -328,14 +328,6 @@ export default function TodayPage() {
     }));
   }
 
-  function openFollowUpTreatmentForm(prospect: Prospect) {
-    setActiveTreatmentProspectId(prospect.id);
-    setFollowUpTreatmentForm({
-      ...initialFollowUpTreatmentForm,
-      nextActionDate: prospect.nextActionDate,
-    });
-  }
-
   function saveFollowUpTreatment(prospectId: string) {
     const today = getTodayDateString();
     const now = new Date().toISOString();

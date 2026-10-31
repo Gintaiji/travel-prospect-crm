@@ -1612,12 +1612,11 @@ export default function AssistantPage() {
   const {
     isSupported: isSpeechRecognitionSupported,
     isListening,
-    transcript,
     error: speechRecognitionError,
     startListening,
     stopListening,
     resetError: resetSpeechRecognitionError,
-  } = useSpeechRecognition();
+  } = useSpeechRecognition(setCommandText);
 
   useEffect(() => {
     const loadStoredProspects = window.setTimeout(() => {
@@ -1628,12 +1627,6 @@ export default function AssistantPage() {
 
     return () => window.clearTimeout(loadStoredProspects);
   }, []);
-
-  useEffect(() => {
-    if (transcript) {
-      setCommandText(transcript);
-    }
-  }, [transcript]);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

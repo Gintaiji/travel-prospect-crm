@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createBrowserSupabaseClient } from "../lib/supabaseClient";
 
 type SessionStatus = {
@@ -9,6 +9,11 @@ type SessionStatus = {
   isConnected: boolean;
   email: string | null;
 };
+
+async function readConnexionSession() {
+  const supabase = createBrowserSupabaseClient();
+  return supabase ? supabase.auth.getSession() : null;
+}
 
 export default function ConnexionPage() {
   const [email, setEmail] = useState("");
@@ -21,10 +26,8 @@ export default function ConnexionPage() {
     email: null,
   });
 
-  async function refreshSession() {
-    const supabase = createBrowserSupabaseClient();
-
-    if (!supabase) {
+  const refreshSession = useCallback(() => readConnexionSession().then(result => {
+    if (!result) {
       setSessionStatus({
         isLoading: false,
         isConnected: false,
@@ -33,7 +36,7 @@ export default function ConnexionPage() {
       return;
     }
 
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = result;
 
     if (error) {
       setSessionStatus({
@@ -50,11 +53,11 @@ export default function ConnexionPage() {
       isConnected: Boolean(data.session?.user),
       email: data.session?.user.email ?? null,
     });
-  }
+  }), []);
 
   useEffect(() => {
-    refreshSession();
-  }, []);
+    void refreshSession();
+  }, [refreshSession]);
 
   function getTrimmedCredentials() {
     const trimmedEmail = email.trim();
@@ -256,7 +259,7 @@ export default function ConnexionPage() {
             href="/sauvegarde#cloud-synchronisation"
             className="inline-flex min-h-11 w-fit items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20"
           >
-            Voir l'état cloud
+            Voir l&apos;état cloud
           </Link>
         </div>
       </section>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createProspectId,
   loadProspects,
@@ -1088,6 +1088,24 @@ export default function ProspectsPage () {
     return () => window.clearTimeout(loadStoredProspects);
   }, []);
 
+  const openNewProspectForm = useCallback((isQuickAdd = false) => {
+    setIsQuickAddMode(isQuickAdd);
+    setIsFormVisible(true);
+    setIsQuickAddFormVisible(false);
+    setFormState((currentFormState) => ({
+      ...currentFormState,
+      country: currentFormState.country.trim() ? currentFormState.country : appSettings.defaultCountry,
+      region: currentFormState.region.trim() ? currentFormState.region : appSettings.defaultRegion,
+      city: currentFormState.city.trim() ? currentFormState.city : appSettings.defaultCity,
+    }));
+    window.setTimeout(() => {
+      newProspectFormRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 0);
+  }, [appSettings.defaultCountry, appSettings.defaultRegion, appSettings.defaultCity]);
+
   useEffect(() => {
     if (!hasLoadedProspects || hasHandledInitialUrlRef.current) {
       return;
@@ -1100,10 +1118,12 @@ export default function ProspectsPage () {
     const requestedAction = searchParams.get("action")?.trim();
     const prospectIdToFocus = searchParams.get("focus")?.trim();
 
-    if (requestedMode === "qualification") {
-      setProspectDisplayMode("qualification");
-      setProspectActionMode("standard");
-    }
+    const applyRequestedMode = window.setTimeout(() => {
+      if (requestedMode === "qualification") {
+        setProspectDisplayMode("qualification");
+        setProspectActionMode("standard");
+      }
+    }, 0);
 
     if (requestedAction === "quick-add") {
       const openRequestedQuickAddForm = window.setTimeout(() => {
@@ -1117,6 +1137,7 @@ export default function ProspectsPage () {
       }, 150);
 
       return () => {
+        window.clearTimeout(applyRequestedMode);
         window.clearTimeout(openRequestedQuickAddForm);
         window.clearTimeout(scrollToQuickAddForm);
       };
@@ -1134,6 +1155,7 @@ export default function ProspectsPage () {
       }, 150);
 
       return () => {
+        window.clearTimeout(applyRequestedMode);
         window.clearTimeout(openFullAddForm);
         window.clearTimeout(scrollToFullAddForm);
       };
@@ -1144,9 +1166,13 @@ export default function ProspectsPage () {
         setFocusedProspectId(prospectIdToFocus);
       }, 0);
 
-      return () => window.clearTimeout(applyUrlFocus);
+      return () => {
+        window.clearTimeout(applyRequestedMode);
+        window.clearTimeout(applyUrlFocus);
+      };
     }
-  }, [hasLoadedProspects]);
+    return () => window.clearTimeout(applyRequestedMode);
+  }, [hasLoadedProspects, openNewProspectForm]);
 
   function updateFormField<Field extends keyof ProspectFormState>(
     field: Field,
@@ -1262,18 +1288,6 @@ export default function ProspectsPage () {
     };
   }
 
-  function openNewProspectForm(isQuickAdd = false) {
-    setIsQuickAddMode(isQuickAdd);
-    setIsFormVisible(true);
-    setIsQuickAddFormVisible(false);
-    setFormState((currentFormState) => getFormStateWithDefaultLocation(currentFormState));
-    window.setTimeout(() => {
-      newProspectFormRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 0);
-  }
 
   function toggleNewProspectForm() {
     setIsFormVisible((currentValue) => {
